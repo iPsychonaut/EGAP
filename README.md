@@ -209,3 +209,7 @@ This module is dedicated to logging messages. It aids in recording progress, res
 - MAIN TODO: Add versions for each Prerequisite/Third-Party program as well as python version that maintains functionality.
 - MAIN TODO: Integration of Kelsey's Slot Lab 'different organism' SPAdes assembly Racon polishing pipeline. This includes getting abyss-sealer working.
 - FASTQC TODO: If warning is in Overrepresented sequences AND?/OR? Adapter Content then there is likely a Failed Primers Trimming Error.
+
+
+## License
+EGAP is distributed under the BSD 3-Clause License.
