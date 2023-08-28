@@ -12,7 +12,7 @@ The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flo
 The --genome_size is a number in Mega-Bytes/Bases that the expected genome is to be. 
 The --primer_type must be a string similar to 'TruSeq3-PE' to represent the Illumina primer type to use with trimmomatic.
 """
-import sys, subprocess, argparse, multiprocessing, math, os, platform, shutil
+import sys, subprocess, argparse, multiprocessing, math, os, platform, shutil, zipfile
 
 # Function to determine the current operating system and set the environment directory and command prefix
 def get_env_dir():
@@ -95,7 +95,7 @@ EGAP_ATTEMPTED_INSTALL = args.attempted_install
 # Check if already tried installing required Python libraries
 if EGAP_ATTEMPTED_INSTALL == '0':
     # Ensure all other libraries are installed
-    libraries = ['busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
+    libraries = ['gdown==4.7.1','busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
                  'biopython==1.81', 'tqdm==4.38.0', 'psutil==5.9.5', 'termcolor==2.3.0',
                  'beautifulsoup4==4.12.2', 'fastqc==0.11.8', 'quast==5.2.0', 'nanostat==1.6.0',
                  'flye==2.9.2', 'bbtools==37.62', 'metaeuk==6.a5d39d9', 'blast==2.14.1',
@@ -143,7 +143,7 @@ if EGAP_ATTEMPTED_INSTALL == '0':
 if EGAP_ATTEMPTED_INSTALL == '1':
     print(f'UNLOGGED:\tSkipping Python Libraries installation')
 
-import psutil
+import psutil, gdown
 from threading import Thread
 from check_tools import check_for_jars, check_prereqs_installed
 from log_print import log_print, generate_log_file
@@ -151,6 +151,30 @@ from EGAP_ONT import process_ONT
 from EGAP_illumina import process_illumina
 from EGAP_pilon_polish import final_pilon_polish
 from EGAP_qc import assess_with_fastqc, assess_with_quast, assess_with_busco
+
+# Function to download a file from Google Drive
+def download_from_gdrive(file_id, output_path):
+    """
+    Download a file from Google Drive.
+    
+    Parameters:
+    - file_id: The ID of the file on Google Drive.
+    - output_path: The path where the file should be saved.
+    """
+    url = f'https://drive.google.com/uc?id={file_id}'
+    gdown.download(url, output_path, quiet=False)
+
+# Function to unzip a zip file.
+def unzip_file(zip_path, extract_to):
+    """
+    Unzip a zip file.
+    
+    Parameters:
+    - zip_path: The path to the zip file.
+    - extract_to: The directory where the contents should be extracted.
+    """
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(extract_to)
 
 # Main function to run the Entheome Pipeline developed by Ian
 def PILON_POLISH_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, ILLU_PRIMER_TYPE, PERCENT_RESOURCES, busco_db_dict, log_file):
@@ -177,14 +201,14 @@ def PILON_POLISH_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, IL
     
     # Calculate the number of threads as based on PERCENT_RESOURCES of available CPUs & RAM
     cpu_threads = int(math.floor(num_cpus * PERCENT_RESOURCES))
-    ont_cpus = int(round(cpu_threads/2, 1))
+    ont_cpus = int(math.floor(cpu_threads/2))
     illu_cpus = cpu_threads - ont_cpus
 
     ram_gb = int(mem_info.total / (1024.0 ** 3) * PERCENT_RESOURCES)
-    ont_ram_gb = int(round(ram_gb/2, 1))
+    ont_ram_gb = int(math.floor(ram_gb/2))
     illu_ram_gb = ram_gb - ont_cpus
     
-    ont_percent_resources = float(round(PERCENT_RESOURCES/2,1))
+    ont_percent_resources = float(round(PERCENT_RESOURCES/2, 1))
     illu_percent_resources = PERCENT_RESOURCES - ont_percent_resources
     
     # Set the boolean checks for each folder to False
@@ -201,7 +225,7 @@ def PILON_POLISH_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, IL
             fq_paired_list, fastqc_output_dirs, data_type = process_illumina(folder_name, ILLU_PRIMER_TYPE, illu_percent_resources, log_file)
             
             # Quality Control Check A FastQC on Trimmed Illumina Reads
-            r_fastqc_cpus = int(round(illu_cpus/2, 0))
+            r_fastqc_cpus = int(math.floor(illu_cpus/2))
             f_fastqc_cpus = cpu_threads - r_fastqc_cpus
             
             if data_type == 'PE':
@@ -402,6 +426,16 @@ def SPADES_HYBRID_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, I
 
 ## Debuging Main Space & Example
 if __name__ == "__main__":    
+    # File ID extracted from the Google Drive link for the Databases
+    file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
+    output_path = 'file.zip'  # Output filename
+
+    # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
+    download_from_gdrive(file_id, output_path)
+    unzip_path = '~/EGAP/'
+    unzip_file(output_path, unzip_path)
+    os.remove(output_path)
+
     # Generate Main Logfile
     debug_log = f'{BASE_FOLDER}EGAP_log.tsv'
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
