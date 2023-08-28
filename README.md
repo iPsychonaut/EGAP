@@ -25,7 +25,7 @@ git clone https://github.com/iPsychonaut/EGAP.git ~/EGAP
 ## Usage
 It is recommended that you create a dedicated conda environment for the pipeline.
 ```bash
-conda create -y --name egap_env python=3.10 && conda activate egap_env
+conda create -y --name egap_env python=3.9 && conda activate egap_env
 ```
 
 Command Line Example:
@@ -48,6 +48,7 @@ python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --geno
 
 ## Dependencies
 Necessary Python LIbraries for this module include:
+- mamba v1.5.0
 - biopython v1.81
 - tqdm v4.38.0
 - psutil v5.9.5
