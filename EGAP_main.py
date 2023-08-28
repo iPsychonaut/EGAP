@@ -94,6 +94,19 @@ EGAP_ATTEMPTED_INSTALL = args.attempted_install
 
 # Check if already tried installing required Python libraries
 if EGAP_ATTEMPTED_INSTALL == '0':
+    # File ID extracted from the Google Drive link for the Databases
+    file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
+    output_path = 'file.zip'  # Output filename
+
+    # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
+    print(f"UNLOGGED:\tAttempting to download EGAP_Databases.zip from Google Drive...")
+    download_from_gdrive(file_id, output_path)
+    unzip_path = '~/EGAP/'
+    unzip_file(output_path, unzip_path)
+    os.remove(output_path)
+    
+    # Make sure mamba is installed
+    print(f"UNLOGGED:\tAttempting to install: mamba...")
     mamba_cmd = ['conda', 'install', '-y', 'mamba==1.5.0']
     print(f"UNLOGGED CMD:\t{' '.join(mamba_cmd)}")
     mamba_result = subprocess.check_call(mamba_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -101,6 +114,7 @@ if EGAP_ATTEMPTED_INSTALL == '0':
         print(f'UNLOGGED PASS:\tSuccessfully installed: mamba')
     else:
         print(f'UNLOGGED ERROR:\tUnable to install: mamba')
+    
     # Ensure all other libraries are installed
     libraries = ['gdown==4.7.1','busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
                  'biopython==1.81', 'tqdm==4.38.0', 'psutil==5.9.5', 'termcolor==2.3.0',
@@ -434,16 +448,6 @@ def SPADES_HYBRID_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, I
 
 ## Debuging Main Space & Example
 if __name__ == "__main__":    
-    # File ID extracted from the Google Drive link for the Databases
-    file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
-    output_path = 'file.zip'  # Output filename
-
-    # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
-    download_from_gdrive(file_id, output_path)
-    unzip_path = '~/EGAP/'
-    unzip_file(output_path, unzip_path)
-    os.remove(output_path)
-
     # Generate Main Logfile
     debug_log = f'{BASE_FOLDER}EGAP_log.tsv'
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
