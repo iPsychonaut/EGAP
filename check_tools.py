@@ -276,7 +276,7 @@ if __name__ == "__main__":
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
 
     # Check Python Libraries
-    libraries = ['busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
+    libraries = ['gdown==4.7.1','busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
                  'biopython==1.81', 'tqdm==4.38.0', 'psutil==5.9.5', 'termcolor==2.3.0',
                  'beautifulsoup4==4.12.2', 'fastqc==0.11.8', 'quast==5.2.0', 'nanostat==1.6.0',
                  'flye==2.9.2', 'bbtools==37.62', 'metaeuk==6.a5d39d9', 'blast==2.14.1',
