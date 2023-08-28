@@ -5,7 +5,7 @@ Created on Fri Jun 16 11:27:53 2023
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 
 Command Line Example:
-    python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --genome_size INTEGER --primer_type STRING --org_data same/different --resource_use INTEGER
+    python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --genome_size INTEGER --primer_type STRING --org_data [same/different] --resource_use INTEGER --attempted_install [0/1]
 
 The --input_dir must have sub-folders with names containing either 'illumina' (sub-folder with raw PE150 .fq.gz files and their matching MD5.txt file) AND a folder with 'ont' (sub-folder with raw pass .fastq.gz files)
 The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
@@ -94,6 +94,13 @@ EGAP_ATTEMPTED_INSTALL = args.attempted_install
 
 # Check if already tried installing required Python libraries
 if EGAP_ATTEMPTED_INSTALL == '0':
+    mamba_cmd = ['conda', 'install', '-y', 'mamba==1.5.0']
+    print(f"UNLOGGED CMD:\t{' '.join(mamba_cmd)}")
+    mamba_result = subprocess.check_call(mamba_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if mamba_result == 0:
+        print(f'UNLOGGED PASS:\tSuccessfully installed: mamba')
+    else:
+        print(f'UNLOGGED ERROR:\tUnable to install: mamba')
     # Ensure all other libraries are installed
     libraries = ['gdown==4.7.1','busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
                  'biopython==1.81', 'tqdm==4.38.0', 'psutil==5.9.5', 'termcolor==2.3.0',
@@ -103,19 +110,20 @@ if EGAP_ATTEMPTED_INSTALL == '0':
                  'arcs==1.2.5', 'tigmint==1.2.10', 'abyss==2.3.7', 'racon==1.5.0', 'spades==3.15.3']
     print(f'UNLOGGED:\tAttempting to install the following Python Libraries: {libraries}')
     try:
-        # for library in libraries:
+        for library in libraries:
         # Run a subprocess calling conda install for each missing library
-        install_cmd = ['conda', 'install', '-y',
-                       '-c', 'bioconda',
-                       '-c', 'agbiome',
-                       '-c', 'prkrekel',
-                       *libraries]
-                       # library]
-        print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
-        exit_code = subprocess.check_call(install_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if exit_code == 0:
-            print(f'UNLOGGED PASS:\tSuccessfully installed: {libraries}')
-            # print(f'UNLOGGED PASS:\tSuccessfully installed: {library}')
+            install_cmd = ['mamba', 'install', '-y',
+                           '-c', 'bioconda',
+                           '-c', 'agbiome',
+                           '-c', 'prkrekel',
+                            library]
+                           # *libraries]
+
+            print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
+            exit_code = subprocess.check_call(install_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if exit_code == 0:
+                # print(f'UNLOGGED PASS:\tSuccessfully installed: {libraries}')
+                print(f'UNLOGGED PASS:\tSuccessfully installed: {library}')
 
         # Additional commands for downloading databases/tools for QUAST
         additional_commands = ['quast-download-gridss', 'quast-download-silva', 'quast-download-busco']
@@ -137,8 +145,8 @@ if EGAP_ATTEMPTED_INSTALL == '0':
         os.execv(sys.executable, ['python'] + sys.argv + ['--attempted_install', '1'])
     except:
         # Print an error if something goes wrong during the installation
-        print(f"UNLOGGED ERROR:\t Unable to Install {libraries}")
-        # print(f"UNLOGGED ERROR:\t Unable to Install {library}")
+        # print(f"UNLOGGED ERROR:\t Unable to Install {libraries}")
+        print(f"UNLOGGED ERROR:\t Unable to Install {library}")
         
 if EGAP_ATTEMPTED_INSTALL == '1':
     print(f'UNLOGGED:\tSkipping Python Libraries installation')
