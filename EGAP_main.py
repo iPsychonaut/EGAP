@@ -12,7 +12,7 @@ The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flo
 The --genome_size is a number in Mega-Bytes/Bases that the expected genome is to be. 
 The --primer_type must be a string similar to 'TruSeq3-PE' to represent the Illumina primer type to use with trimmomatic.
 """
-import psutil, sys, subprocess, argparse, multiprocessing, math, os, platform, shutil
+import sys, subprocess, argparse, multiprocessing, math, os, platform, shutil
 
 # Function to determine the current operating system and set the environment directory and command prefix
 def get_env_dir():
@@ -95,48 +95,57 @@ EGAP_ATTEMPTED_INSTALL = args.attempted_install
 # Check if already tried installing required Python libraries
 if EGAP_ATTEMPTED_INSTALL == '0':
     # Ensure all other libraries are installed
-    libraries = ['pandas', 'biopython', 'tqdm', 'psutil', 'termcolor',
-                 'beautifulsoup4', 'fastqc', 'quast', 'nanoq', 'nanostat',
-                 'flye', 'bbtools', 'metaeuk']
+    libraries = ['busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
+                 'biopython==1.81', 'tqdm==4.38.0', 'psutil==5.9.5', 'termcolor==2.3.0',
+                 'beautifulsoup4==4.12.2', 'fastqc==0.11.8', 'quast==5.2.0', 'nanostat==1.6.0',
+                 'flye==2.9.2', 'bbtools==37.62', 'metaeuk==6.a5d39d9', 'blast==2.14.1',
+                 'bwa==0.7.17', 'minimap2==2.26', 'pysam==0.21.0', 'samtools==1.17',
+                 'arcs==1.2.5', 'tigmint==1.2.10', 'abyss==2.3.7', 'racon==1.5.0', 'spades==3.15.3']
     print(f'UNLOGGED:\tAttempting to install the following Python Libraries: {libraries}')
     try:
+        # for library in libraries:
         # Run a subprocess calling conda install for each missing library
         install_cmd = ['conda', 'install', '-y',
                        '-c', 'bioconda',
                        '-c', 'agbiome',
+                       '-c', 'prkrekel',
                        *libraries]
+                       # library]
         print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
         exit_code = subprocess.check_call(install_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if exit_code == 0:
             print(f'UNLOGGED PASS:\tSuccessfully installed: {libraries}')
-            # Additional commands for downloading databases/tools for QUAST
-            additional_commands = ['quast-download-gridss', 'quast-download-silva', 'quast-download-busco']
-            for cmd in additional_commands:
-                try:
-                    print(f"UNLOGGED CMD:\t{cmd}")
-                    subprocess.check_call(cmd, shell=True,
-                                          stdout=subprocess.DEVNULL, 
-                                          stderr=subprocess.DEVNULL)
-                    print(f'UNLOGGED PASS:\tSuccessfully executed {cmd}')
-                except subprocess.CalledProcessError:
-                    print(f"UNLOGGED ERROR:\tFailed to execute {cmd}")
+            # print(f'UNLOGGED PASS:\tSuccessfully installed: {library}')
+
+        # Additional commands for downloading databases/tools for QUAST
+        additional_commands = ['quast-download-gridss', 'quast-download-silva', 'quast-download-busco']
+        for cmd in additional_commands:
+            try:
+                print(f"UNLOGGED CMD:\t{cmd}")
+                subprocess.check_call(cmd, shell=True,
+                                      stdout=subprocess.DEVNULL, 
+                                      stderr=subprocess.DEVNULL)
+                print(f'UNLOGGED PASS:\tSuccessfully executed {cmd}')
+            except subprocess.CalledProcessError:
+                print(f"UNLOGGED ERROR:\tFailed to execute {cmd}")
             
-            # Set the flag to indicate we've attempted installation
-            os.environ['EGAP_ATTEMPTED_INSTALL'] = '1'
-            
-            # Reset the script with loaded libraries
-            print('UNLOGGED PASS:\tRestarting EGAP')
-            os.execv(sys.executable, ['python'] + sys.argv + ['--attempted_install', '1'])
-        else:
-            print(f"UNLOGGED ERROR:\t Unable to Install {libraries}")
+        # Set the flag to indicate we've attempted installation
+        os.environ['EGAP_ATTEMPTED_INSTALL'] = '1'
+        
+        # Reset the script with loaded libraries
+        print('UNLOGGED PASS:\tRestarting EGAP')
+        os.execv(sys.executable, ['python'] + sys.argv + ['--attempted_install', '1'])
     except:
         # Print an error if something goes wrong during the installation
-        print(f"UNLOGGED ERROR:\t Unable to Install {libraries} library")
+        print(f"UNLOGGED ERROR:\t Unable to Install {libraries}")
+        # print(f"UNLOGGED ERROR:\t Unable to Install {library}")
+        
 if EGAP_ATTEMPTED_INSTALL == '1':
     print(f'UNLOGGED:\tSkipping Python Libraries installation')
 
+import psutil
 from threading import Thread
-from check_tools import libraries_check, check_for_jars, check_prereqs_installed
+from check_tools import check_for_jars, check_prereqs_installed
 from log_print import log_print, generate_log_file
 from EGAP_ONT import process_ONT
 from EGAP_illumina import process_illumina
@@ -398,19 +407,13 @@ if __name__ == "__main__":
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
     log_print('RUNNING EGAP PIPELINE', log_file)
 
-    # Check Python Libraries
-    libraries = ['pandas', 'biopython', 'tqdm', 'psutil', 'termcolor',
-                 'beautifulsoup4', 'fastqc', 'quast', 'nanoq', 'nanostat',
-                 'flye', 'bbtools', 'metaeuk']
-    libraries_check(libraries, log_file)
-
     # Check for specific Third-Party JAR Files with adjusted program_dict
     program_dict = {"trimmomatic": ("https://github.com/usadellab/Trimmomatic", "trimmomatic-*.jar"),
                     "pilon": ("https://github.com/broadinstitute/pilon", "pilon*.jar")}
     jar_paths_dict, _ = check_for_jars(program_dict, log_file)
 
     # Check Pipeline Third-Party Prerequisites
-    prerequisites = ["fastqc", "quast.py", "busco", "samtools", "bwa",
+    prerequisites = ["java", "fastqc", "quast.py", "busco", "samtools", "bwa",
                      "makeblastdb", "blastn", "racon", "nanoq", "NanoStat",
                      "spades.py", "tblastn", "flye", "minimap2", "metaeuk", "tqdm"]
     check_prereqs_installed(prerequisites, log_file)
