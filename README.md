@@ -17,15 +17,15 @@ This program is intended and tested for WSL/Linux based systems. It is recommend
 The program consists of eight (8) modules and two (2) database folders. It is recommended to save all these components in a base-level directory of the current operating system named 'EGAP'.
 
 ### Cloning the Repository
-To clone the entire EGAP repository to the desired location, use the following command:
+To clone the entire EGAP repository to the desired location and extract out the necessary databases for processing, use the following command:
 ```bash
-git clone https://github.com/iPsychonaut/EGAP.git ~/EGAP
+git clone https://github.com/iPsychonaut/EGAP.git ~/EGAP && cd ~/EGAP && unzip EGAP_Databases.zip -d ~/EGAP/
 ```
 
 ## Usage
 It is recommended that you create a dedicated conda environment for the pipeline.
 ```bash
-conda create -y --name egap_env && conda activate egap_env
+conda create -y --name egap_env python=3.10 && conda activate egap_env
 ```
 
 Command Line Example:
