@@ -48,47 +48,46 @@ python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --geno
 
 ## Dependencies
 Necessary Python LIbraries for this module include:
-- pandas
-- biopython
-- tqdm
-- psutil
-- termcolor
-- beautifulsoup4
-- fastqc
-- quast
-- nanoq
-- nanostat
-- flye
-- bbtools
-- metaeuk
-- sys
-- subprocess
-- argparse
-- multiprocessing
-- math
-- os
-- platform
-- shutil
-
-Necessary Third-Party programs for this module include:
-- busco
-- samtools
-- bwa
-- makeblastdb
-- blastn
-- racon (not used yet)
-- nanoq
-- NanoStat
-- spades.py (not used yet)
-- tblastn
-- flye
-- minimap2
-- metaeuk
-- tqdm
+- biopython v1.81
+- tqdm v4.38.0
+- psutil v5.9.5
+- termcolor v2.3.0
+- beautifulsoup4 v4.12.2
+- fastqc v0.11.8
+- quast v5.2.0
+- nanostat v1.6.0
+- flye v2.9.2
+- bbtools v37.62
+- metaeuk v6.a5d39d9
+- NanoStat v1.6.0
+- minimap2 v2.26
+- samtools v1.17
+- bwa v0.7.17
+- busco v5.5.0
+- blast v2.14.1
+  - makeblastdb
+  - blastn
+  - tblastn
+- python v3.10
+  - pandas
+  - sys
+  - subprocess
+  - argparse
+  - multiprocessing
+  - math
+  - os
+  - platform
+  - shutil
+ 
+Future Implementation Planned
+- abyss v2.3.7 (not used yet)
+- spades.py v3.15.3 (not used yet)
+- racon v1.5.0 (not used yet)
+- nanoq v0.10.0 (not used yet)
 
 Necessary JAR Files for this module include (* = version):
-- trimmomatic-*.jar
-- pilon*.jar
+- trimmomatic-*.jar v0.39
+- pilon*.jar v1.24
 
 Running the main pipeline (EGAP_main.py) will attempt to install all of these prerequisites and jar files. This can be turned off by adjusting the default_install variable in EGAP_main.py.
 
