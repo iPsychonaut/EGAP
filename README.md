@@ -19,7 +19,7 @@ The program consists of eight (8) modules and two (2) database folders. It is re
 ### Cloning the Repository
 To clone the entire EGAP repository to the desired location and extract out the necessary databases for processing, use the following command:
 ```bash
-git clone https://github.com/iPsychonaut/EGAP.git ~/EGAP && cd ~/EGAP && unzip EGAP_Databases.zip -d ~/EGAP/
+git clone https://github.com/iPsychonaut/EGAP.git ~/EGAP
 ```
 
 ## Usage
