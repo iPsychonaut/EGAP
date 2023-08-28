@@ -152,7 +152,7 @@ def libraries_check(libraries, log_file):
             # Run a subprocess calling conda install for each missing library
             # subprocess.check_call will raise an error if the installation fails
             # stdout=subprocess.DEVNULL will prevent the output from appearing on your console
-            missing_cmd = ['conda', 'install', '-y',
+            missing_cmd = ['mamba', 'install', '-y',
                            '-c', 'bioconda',
                            '-c', 'agbiome',
                            '-c', 'prkrekel',
@@ -274,9 +274,18 @@ if __name__ == "__main__":
     # Generate Main Logfile
     debug_log = 'check_tools_log.tsv'
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
-
+    
+    # Ensure mamba is installed
+    mamba_cmd = ['conda', 'install', '-y', 'mamba==1.5.0']
+    print(f"UNLOGGED CMD:\t{' '.join(mamba_cmd)}")
+    mamba_result = subprocess.check_call(mamba_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if mamba_result == 0:
+        print(f'UNLOGGED PASS:\tSuccessfully installed: mamba')
+    else:
+        print(f'UNLOGGED ERROR:\tUnable to install: mamba')
+    
     # Check Python Libraries
-    libraries = ['gdown==4.7.1','busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
+    libraries = ['gdown==4.7.1','busco==4.1.2','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
                  'biopython==1.81', 'tqdm==4.38.0', 'psutil==5.9.5', 'termcolor==2.3.0',
                  'beautifulsoup4==4.12.2', 'fastqc==0.11.8', 'quast==5.2.0', 'nanostat==1.6.0',
                  'flye==2.9.2', 'bbtools==37.62', 'metaeuk==6.a5d39d9', 'blast==2.14.1',
