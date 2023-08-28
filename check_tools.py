@@ -155,6 +155,7 @@ def libraries_check(libraries, log_file):
             missing_cmd = ['conda', 'install', '-y',
                            '-c', 'bioconda',
                            '-c', 'agbiome',
+                           '-c', 'prkrekel',
                            *missing]
             log_print(f'CMD:\t{" ".join(missing_cmd)}',log_file)
             subprocess.check_call(missing_cmd, stdout=subprocess.DEVNULL)
@@ -275,10 +276,12 @@ if __name__ == "__main__":
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
 
     # Check Python Libraries
-    libraries = ['pandas', 'biopython', 'tqdm', 'psutil',
-                 'termcolor', 'beautifulsoup4', 'fastqc',
-                 'quast', 'nanoq', 'nanostat', 'flye',
-                 'bbtools', 'metaeuk']
+    libraries = ['busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
+                 'biopython==1.81', 'tqdm==4.38.0', 'psutil==5.9.5', 'termcolor==2.3.0',
+                 'beautifulsoup4==4.12.2', 'fastqc==0.11.8', 'quast==5.2.0', 'nanostat==1.6.0',
+                 'flye==2.9.2', 'bbtools==37.62', 'metaeuk==6.a5d39d9', 'blast==2.14.1',
+                 'bwa==0.7.17', 'minimap2==2.26', 'pysam==0.21.0', 'samtools==1.17',
+                 'arcs==1.2.5', 'tigmint==1.2.10', 'abyss==2.3.7', 'racon==1.5.0', 'spades==3.15.3']
     libraries_check(libraries, log_file)
 
     # Check for specific Third-Party JAR Files with adjusted program_dict
@@ -287,7 +290,7 @@ if __name__ == "__main__":
     jar_paths_dict, _ = check_for_jars(program_dict, log_file)
 
     # Check Pipeline Third-Party Prerequisites
-    prerequisites = ["fastqc", "quast.py", "busco", "samtools", "bwa",
+    prerequisites = ["java", "fastqc", "quast.py", "busco", "samtools", "bwa",
                      "makeblastdb", "blastn", "racon", "nanoq", "NanoStat",
                      "spades.py", "tblastn", "flye", "minimap2"]
     check_prereqs_installed(prerequisites, log_file)
