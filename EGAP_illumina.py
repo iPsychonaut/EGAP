@@ -232,7 +232,7 @@ def trim_with_trimmomatic(folder_name, combined_files, data_type, ILLU_PRIMER_TY
         
         # Check if the final combined file exists
         if os.path.isfile(fwd_paired_out) and os.path.isfile(rev_paired_out):
-            log_print(f"PASS:\tSkipping MD5 check & concatenation: Combined files already exist {fwd_paired_out}, {rev_paired_out}", log_file)
+            log_print(f"PASS:\tSkipping Trimmomtaic trimming: Trimmed files already exist {fwd_paired_out}, {rev_paired_out}", log_file)
             fq_paired_list.append(fwd_paired_out)
             fq_paired_list.append(rev_paired_out)     
         else:
@@ -252,7 +252,7 @@ def trim_with_trimmomatic(folder_name, combined_files, data_type, ILLU_PRIMER_TY
             stdout, stderr = trimmomatic_result.communicate()
             return_code = trimmomatic_result.returncode
             if return_code != 0:
-                log_print(f"ERROR:\tTrimmomatic failed for:\t{file1_path}; {file2_path}; {stderr.decode('utf-8')}", log_file)
+                log_print(f"ERROR:\tTrimmomatic failed for:\t{fwd_file}; {rev_file}; {stderr.decode('utf-8')}", log_file)
             else:
                 log_print(f"PASS:\tGenerated all Trimmomatic output files successfully", log_file)
 
@@ -270,7 +270,7 @@ def trim_with_trimmomatic(folder_name, combined_files, data_type, ILLU_PRIMER_TY
 
         # Check if the final combined file exists
         if os.path.isfile(paired_out):
-            log_print(f"PASS:\tSkipping MD5 check & concatenation: Combined files already exist {paired_out}", log_file)
+            log_print(f"PASS:\tSkipping Trimmomtaic trimming: Trimmed files already exist {paired_out}", log_file)
             fq_paired_list.append(paired_out)  
         else:
             print(f'output: {paired_out}\n{unpaired_out}')        
@@ -286,9 +286,11 @@ def trim_with_trimmomatic(folder_name, combined_files, data_type, ILLU_PRIMER_TY
             log_print(f"CMD:\t{' '.join(trimmomatic_cmd)}", log_file)
             result = subprocess.run(trimmomatic_cmd, capture_output=True, text=True)
             log_print(result.stdout, log_file)
-            if result.stderr:
-                log_print(result.stderr, log_file)
-        
+            if return_code != 0:
+                log_print(f"ERROR:\tTrimmomatic failed for:\t{input_file}; {stderr.decode('utf-8')}", log_file)
+            else:
+                log_print(f"PASS:\tGenerated all Trimmomatic output files successfully", log_file)
+                
         # Return the paths to the trimmed files
         fq_paired_list = [paired_out]
         fastqc_output_dirs = [os.path.join(folder_name, 'fastqc_forward_paired'), os.path.join(folder_name, 'fastqc_reverse_paired')]
