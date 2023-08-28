@@ -95,11 +95,6 @@ def assemble_ont_flye(input_fastq, cpu_threads, log_file, GENOME_SIZE):
     final_assembly_path = move_file_up(assembly_file_path, log_file, move_bool = False)
     final_filtered_path = move_file_up(filtered_file_path, log_file, move_bool = False)
     
-    print(f'Assembly Path: {assembly_file_path}')
-    print(f'Filtered Assembly Path: {filtered_file_path}')
-    print(f'Final Assembly Path: {final_assembly_path}')
-    print(f'Final Filtered Assembly Path: {final_filtered_path}')
-    
     # Check if the assembly already exists
     if os.path.isfile(assembly_file_path):
         log_print(f"PASS:\tSkipping Flye Assembly: {assembly_file_path} already exists", log_file)    
