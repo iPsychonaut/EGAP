@@ -274,7 +274,14 @@ def clean_dirty_fasta(dirty_fasta, OUTPUT_DIR, current_organism_kingdom, log_fil
                     # Generate dataframe to store contig information
                     columns = ['contig_name', 'start_chunk', 'mid_chunk', 'end_chunk', 'start_percent_id', 'mid_percent_id', 'end_percent_id', 'start_percent_qcoverage', 'mid_percent_qcoverage', 'end_percent_qcoverage', 'start_alignment_length', 'mid_alignment_length', 'end_alignment_length']
                     df = pd.DataFrame(columns=columns)
-                    fasta_sequences = SeqIO.parse(open(cleaned_assembly),'fasta')
+                    try:
+                        fasta_sequences = SeqIO.parse(open(cleaned_assembly),'fasta')
+                    except FileNotFoundError:
+                        dirty_fasta = '/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_flye.fasta'
+                        fasta_dir = os.path.dirname(dirty_fasta)
+                        base_name = os.path.basename(dirty_fasta).replace('.fasta','')
+                        flye_output = f'{fasta_dir}/{base_name}_output/{base_name}.fasta'
+                        fasta_sequences = SeqIO.parse(open(flye_output),'fasta')
                     contig_number = 0
                     for fasta in tqdm(fasta_sequences, desc="Preparing contigs"):
                         name, sequence = fasta.id, str(fasta.seq)
