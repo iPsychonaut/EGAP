@@ -156,6 +156,7 @@ def libraries_check(libraries, log_file):
                            '-c', 'bioconda',
                            '-c', 'agbiome',
                            '-c', 'prkrekel',
+                           '-c', 'conda-forge',
                            *missing]
             log_print(f'CMD:\t{" ".join(missing_cmd)}',log_file)
             subprocess.check_call(missing_cmd, stdout=subprocess.DEVNULL)
@@ -276,7 +277,7 @@ if __name__ == "__main__":
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
     
     # Ensure mamba is installed
-    mamba_cmd = ['conda', 'install', '-y', 'mamba==1.5.0']
+    mamba_cmd = ['conda', 'install', '-y', 'conda-forge', 'mamba==1.5.0']
     print(f"UNLOGGED CMD:\t{' '.join(mamba_cmd)}")
     mamba_result = subprocess.check_call(mamba_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if mamba_result == 0:
