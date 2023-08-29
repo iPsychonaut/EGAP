@@ -5,7 +5,7 @@ Created on Fri Jun 16 11:27:53 2023
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 
 Command Line Example:
-    python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --genome_size INTEGER --primer_type STRING --org_data [same/different] --resource_use INTEGER --attempted_install [0/1]
+    python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --genome_size INTEGER --primer_type STRING --org_data [same/different] --resource_use INTEGER --attempt_install [0/1]
 
 The --input_dir must have sub-folders with names containing either 'illumina' (sub-folder with raw PE150 .fq.gz files and their matching MD5.txt file) AND a folder with 'ont' (sub-folder with raw pass .fastq.gz files)
 The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
@@ -78,9 +78,9 @@ parser.add_argument('--org_data', type=str, default=default_organism_data,
                     help='Indicate if the provided data are generated from the same organism or different organisms')
 parser.add_argument('--resource_use', type = int, default = default_percent_resources,
                     help = f'Percent of Resources to use. (default: {default_percent_resources})')
-parser.add_argument('--attempted_install', default=default_install,
+parser.add_argument('--attempt_install', default=default_install,
                     choices=['0', '1'], 
-                    help=f'Flag to indicate if the installation has been attempted (default: {default_install}).')
+                    help=f'Flag to indicate if the installation should be attempted 0 = No; 1 = Yes (default: {default_install}).')
 
 # Parse the arguments
 args = parser.parse_args()
@@ -90,10 +90,10 @@ GENOME_SIZE = args.genome_size
 ILLU_PRIMER_TYPE = args.primer_type
 ORGANISM_DATA = args.org_data
 PERCENT_RESOURCES = (args.resource_use/100)
-EGAP_ATTEMPTED_INSTALL = args.attempted_install
+EGAP_ATTEMPT_INSTALL = args.attempt_install
 
 # Check if already tried installing required Python libraries
-if EGAP_ATTEMPTED_INSTALL == '0':  
+if EGAP_ATTEMPT_INSTALL == '1':  
     # Make sure mamba is installed
     print(f"UNLOGGED:\tAttempting to install: mamba...")
     mamba_cmd = ['conda', 'install', '-y', '-c', 'conda-forge', 'mamba==1.5.0']
@@ -119,7 +119,7 @@ if EGAP_ATTEMPTED_INSTALL == '0':
                            '-c', 'bioconda',
                            '-c', 'agbiome',
                            '-c', 'prkrekel',
-                           '-c', '-conda-forge',
+                           '-c', 'conda-forge',
                            library]
     
             print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
@@ -140,16 +140,16 @@ if EGAP_ATTEMPTED_INSTALL == '0':
                 print(f"UNLOGGED ERROR:\tFailed to execute {cmd}")
             
         # Set the flag to indicate we've attempted installation
-        os.environ['EGAP_ATTEMPTED_INSTALL'] = '1'
+        os.environ['EGAP_ATTEMPT_INSTALL'] = '0'
         
         # Reset the script with loaded libraries
         print('UNLOGGED PASS:\tRestarting EGAP')
-        os.execv(sys.executable, ['python'] + sys.argv + ['--attempted_install', '1'])
+        os.execv(sys.executable, ['python'] + sys.argv + ['--attempt_install', '0'])
     except:
         # Print an error if something goes wrong during the installation
         print(f"UNLOGGED ERROR:\t Unable to Install {library}")
         
-if EGAP_ATTEMPTED_INSTALL == '1':
+if EGAP_ATTEMPT_INSTALL == '1':
     print(f'UNLOGGED:\tSkipping Python Libraries installation')
 
 import psutil, gdown
