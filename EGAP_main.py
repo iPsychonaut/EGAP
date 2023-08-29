@@ -113,17 +113,18 @@ if EGAP_ATTEMPTED_INSTALL == '0':
                  'arcs==1.2.5', 'tigmint==1.2.10', 'abyss==2.3.7', 'racon==1.5.0', 'spades==3.15.3']
     print(f'UNLOGGED:\tAttempting to install the following Python Libraries: {libraries}')
     try:
-        # Run a subprocess calling conda install for each missing library
-        install_cmd = ['mamba', 'install', '-y',
-                       '-c', 'bioconda',
-                       '-c', 'agbiome',
-                       '-c', 'prkrekel',
-                       *libraries]
-
-        print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
-        exit_code = subprocess.check_call(install_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if exit_code == 0:
-            print(f'UNLOGGED PASS:\tSuccessfully installed: {libraries}')
+        for library in libraries:
+            # Run a subprocess calling conda install for each missing library
+            install_cmd = ['mamba', 'install', '-y',
+                           '-c', 'bioconda',
+                           '-c', 'agbiome',
+                           '-c', 'prkrekel',
+                           library]
+    
+            print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
+            exit_code = subprocess.check_call(install_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if exit_code == 0:
+                print(f'UNLOGGED PASS:\tSuccessfully installed: {library}')
 
         # Additional commands for downloading databases/tools for QUAST
         additional_commands = ['quast-download-gridss', 'quast-download-silva', 'quast-download-busco']
@@ -145,7 +146,7 @@ if EGAP_ATTEMPTED_INSTALL == '0':
         os.execv(sys.executable, ['python'] + sys.argv + ['--attempted_install', '1'])
     except:
         # Print an error if something goes wrong during the installation
-        print(f"UNLOGGED ERROR:\t Unable to Install {libraries}")
+        print(f"UNLOGGED ERROR:\t Unable to Install {library}")
         
 if EGAP_ATTEMPTED_INSTALL == '1':
     print(f'UNLOGGED:\tSkipping Python Libraries installation')
