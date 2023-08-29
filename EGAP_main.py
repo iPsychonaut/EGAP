@@ -96,7 +96,7 @@ EGAP_ATTEMPTED_INSTALL = args.attempted_install
 if EGAP_ATTEMPTED_INSTALL == '0':  
     # Make sure mamba is installed
     print(f"UNLOGGED:\tAttempting to install: mamba...")
-    mamba_cmd = ['conda', 'install', '-y', 'mamba==1.5.0']
+    mamba_cmd = ['conda', 'install', '-y', '-c', 'conda-forge', 'mamba==1.5.0']
     print(f"UNLOGGED CMD:\t{' '.join(mamba_cmd)}")
     mamba_result = subprocess.check_call(mamba_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if mamba_result == 0:
@@ -119,6 +119,7 @@ if EGAP_ATTEMPTED_INSTALL == '0':
                            '-c', 'bioconda',
                            '-c', 'agbiome',
                            '-c', 'prkrekel',
+                           '-c', '-conda-forge',
                            library]
     
             print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
