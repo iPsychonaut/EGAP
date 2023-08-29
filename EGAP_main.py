@@ -67,9 +67,9 @@ default_install = '0' # 0 = Attempt to install; 1 = Skip install
 parser.add_argument('--input_dir', type=str, default=default_folder, # Ps_azurescens #Ps_caeruleorhiza # Ps_semilanceata # Ps_zapatecorum/PUBLICATION_REPLICATION
                     help='The root folder containing a folder with "illumina" in its name and one with "ont" in its name')
 parser.add_argument('--organism_kingdom',default = default_organism_kingdom,
+                    choices=['Archaea', 'Bacteria', 'Fauna', 'Flora', 'Funga', 'Protista'],
                     help = f'Kingdom the current organism data belongs to. (default: {default_organism_kingdom})')
 parser.add_argument('--genome_size', type = int, default = default_genome_size,
-                    choices=['Archaea', 'Bacteria', 'Fauna', 'Flora', 'Funga', 'Protista'],
                     help = f'Genome Size. (default: {default_genome_size})')
 parser.add_argument('--primer_type', default = default_primer,
                     help = f'Type of Illumina Primers used. (default: {default_primer})')
