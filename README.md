@@ -30,7 +30,7 @@ conda create -y --name egap_env python=3.9 && conda activate egap_env
 
 Command Line Example:
 ```bash
-python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --genome_size INTEGER --primer_type STRING --org_data same/different --resource_use INTEGER
+python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --genome_size INTEGER --primer_type STRING --org_data [same/different] --resource_use INTEGER --attempt_install [0/1]
 ```
 
 ### Command-Line Arguments
@@ -40,6 +40,7 @@ python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --geno
 - `--primer_type`: String representing the Illumina primer type to use with trimmomatic. Example: 'TruSeq3-PE'.
 - `--org_data`: Specifies whether the organism data is the same or different.
 - `--resource_use`: Integer value specifying resource usage.
+- `--attempt_install`: Flag to indicate if the installation should be attempted 0 = No (default); 1 = Yes.
 
 ## Main Functionalities
 - `get_env_dir`: Retrieves environment-related directories.
@@ -49,6 +50,7 @@ python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --geno
 ## Dependencies
 Necessary Python LIbraries for this module include:
 - mamba v1.5.0
+- gdown v4.7.1
 - biopython v1.81
 - tqdm v4.38.0
 - psutil v5.9.5
