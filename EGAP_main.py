@@ -93,18 +93,7 @@ PERCENT_RESOURCES = (args.resource_use/100)
 EGAP_ATTEMPTED_INSTALL = args.attempted_install
 
 # Check if already tried installing required Python libraries
-if EGAP_ATTEMPTED_INSTALL == '0':
-    # File ID extracted from the Google Drive link for the Databases
-    file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
-    output_path = 'file.zip'  # Output filename
-
-    # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
-    print(f"UNLOGGED:\tAttempting to download EGAP_Databases.zip from Google Drive...")
-    download_from_gdrive(file_id, output_path)
-    unzip_path = '~/EGAP/'
-    unzip_file(output_path, unzip_path)
-    os.remove(output_path)
-    
+if EGAP_ATTEMPTED_INSTALL == '0':  
     # Make sure mamba is installed
     print(f"UNLOGGED:\tAttempting to install: mamba...")
     mamba_cmd = ['conda', 'install', '-y', 'mamba==1.5.0']
@@ -124,20 +113,17 @@ if EGAP_ATTEMPTED_INSTALL == '0':
                  'arcs==1.2.5', 'tigmint==1.2.10', 'abyss==2.3.7', 'racon==1.5.0', 'spades==3.15.3']
     print(f'UNLOGGED:\tAttempting to install the following Python Libraries: {libraries}')
     try:
-        for library in libraries:
         # Run a subprocess calling conda install for each missing library
-            install_cmd = ['mamba', 'install', '-y',
-                           '-c', 'bioconda',
-                           '-c', 'agbiome',
-                           '-c', 'prkrekel',
-                            library]
-                           # *libraries]
+        install_cmd = ['mamba', 'install', '-y',
+                       '-c', 'bioconda',
+                       '-c', 'agbiome',
+                       '-c', 'prkrekel',
+                       *libraries]
 
-            print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
-            exit_code = subprocess.check_call(install_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            if exit_code == 0:
-                # print(f'UNLOGGED PASS:\tSuccessfully installed: {libraries}')
-                print(f'UNLOGGED PASS:\tSuccessfully installed: {library}')
+        print(f"UNLOGGED CMD:\t{' '.join(install_cmd)}")
+        exit_code = subprocess.check_call(install_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if exit_code == 0:
+            print(f'UNLOGGED PASS:\tSuccessfully installed: {libraries}')
 
         # Additional commands for downloading databases/tools for QUAST
         additional_commands = ['quast-download-gridss', 'quast-download-silva', 'quast-download-busco']
@@ -159,8 +145,7 @@ if EGAP_ATTEMPTED_INSTALL == '0':
         os.execv(sys.executable, ['python'] + sys.argv + ['--attempted_install', '1'])
     except:
         # Print an error if something goes wrong during the installation
-        # print(f"UNLOGGED ERROR:\t Unable to Install {libraries}")
-        print(f"UNLOGGED ERROR:\t Unable to Install {library}")
+        print(f"UNLOGGED ERROR:\t Unable to Install {libraries}")
         
 if EGAP_ATTEMPTED_INSTALL == '1':
     print(f'UNLOGGED:\tSkipping Python Libraries installation')
@@ -448,6 +433,17 @@ def SPADES_HYBRID_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, I
 
 ## Debuging Main Space & Example
 if __name__ == "__main__":    
+    # File ID extracted from the Google Drive link for the Databases
+    file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
+    output_path = 'file.zip'  # Output filename
+
+    # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
+    print(f"UNLOGGED:\tAttempting to download EGAP_Databases.zip from Google Drive...")
+    download_from_gdrive(file_id, output_path)
+    unzip_path = '~/EGAP/'
+    unzip_file(output_path, unzip_path)
+    os.remove(output_path)
+    
     # Generate Main Logfile
     debug_log = f'{BASE_FOLDER}EGAP_log.tsv'
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
