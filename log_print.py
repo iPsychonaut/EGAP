@@ -88,7 +88,7 @@ if __name__ == '__main__':
             print('WINDOWS ENVIRONMENT')
     except FileNotFoundError:
         print('LINUX/WSL/MAC ENVIRONMENT')
-        input_file = input_file.replace(input_file.split('/')[0],'/mnt/e')    
+        input_file = input_file.replace(input_file.split('/')[0],'/mnt/e')
 
     # Generate log file with the desired behavior
     file_extension = pathlib.Path(input_file).suffix
