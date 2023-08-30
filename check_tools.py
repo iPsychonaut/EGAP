@@ -108,7 +108,7 @@ def get_env_dir(BASE_FOLDER):
 
     # Mapping OS to environment directory and command prefix
     mounted_drive = mounted_drive = f"{'/'.join(BASE_FOLDER.split('/')[:3])}/"
-    os_mapping = {('nt', 'Windows'): (f"{mounted_drive}}:", "wsl "),
+    os_mapping = {('nt', 'Windows'): (f"{mounted_drive}:", "wsl "),
                   ('posix', 'Linux'): (f"/mnt/{mounted_drive}", "")}
 
     # Check the current OS against the mapping and set the environment directory and command prefix
