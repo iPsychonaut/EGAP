@@ -326,14 +326,11 @@ if __name__ == "__main__":
     print('EGAP Pilon Pilosher')   
     # Argument Parsing
     parser = argparse.ArgumentParser(description='Pilon Polish Cleaned ONT Read with Trimmed Illumina Reads')
-
-    # Get working environment information
-    environment_dir = get_env_dir()
-    
+   
     # Default values
-    default_ont = f'{environment_dir}/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_flye_filtered.fasta'
-    default_illumina_f = f'{environment_dir}/Entheome/Ps_aff_hopii/MODULAR_TEST/Illumina_PE150/B1_3_trimmomatic_forward_paired.fq'
-    default_illumina_r = f'{environment_dir}/Entheome/Ps_aff_hopii/MODULAR_TEST/Illumina_PE150/B1_3_trimmomatic_reverse_paired.fq'
+    default_ont = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_flye_filtered.fasta'
+    default_illumina_f = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/Illumina_PE150/B1_3_trimmomatic_forward_paired.fq'
+    default_illumina_r = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/Illumina_PE150/B1_3_trimmomatic_reverse_paired.fq'
     default_organism_kingdom = 'Funga'
     default_percent_resources = 80
     
@@ -356,6 +353,9 @@ if __name__ == "__main__":
     ILLUM_R_READS = args.illumina_r_input
     CURRENT_ORGANISM_KINGDOM = args.organism_kingdom
     PERCENT_RESOURCES = (args.resource_use/100)
+    
+    # Get working environment information
+    environment_dir = get_env_dir(ONT_READS)
     
     # Generate Main Logfile
     illumina_reads_list = [ILLUM_F_READS, ILLUM_R_READS]
