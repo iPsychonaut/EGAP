@@ -14,48 +14,11 @@ The --primer_type must be a string similar to 'TruSeq3-PE' to represent the Illu
 """
 import sys, subprocess, argparse, multiprocessing, math, os, platform, shutil, zipfile
 
-# Function to determine the current operating system and set the environment directory and command prefix
-def get_env_dir():
-    """
-    Determine the operating system and set environment directory and command prefix.
-
-    Returns:
-        str: The environment directory for the detected operating system.
-
-    Raises:
-        Exception: If the OS is neither Windows nor Linux.
-    """
-    # Determine the operating system in use
-    os_name = os.name
-    platform_system = platform.system()
-
-    # Mapping OS to environment directory and command prefix
-    os_mapping = {('nt', 'Windows'): ("E:", "wsl "),
-                  ('posix', 'Linux'): ("/mnt/e", "")}
-
-    # Check the current OS against the mapping and set the environment directory and command prefix
-    for os_keys, (env_dir, cmd_prefix) in os_mapping.items():
-        if os_name in os_keys or platform_system in os_keys:
-            global environment_dir, environment_cmd_prefix
-            environment_dir, environment_cmd_prefix = env_dir, cmd_prefix
-            break
-    else:
-        # If the operating system is neither Windows nor Linux, raise an Exception
-        raise Exception("ERROR: OS NOT TESTED WITH THIS CODE")
-
-    # Print the detected operating system and determined environment directory
-    print(f'Operating System: {platform_system}')
-    print(f'Environment Directory: {environment_dir}')
-
-    return environment_dir
-
 # Define and parse command line arguments
 parser = argparse.ArgumentParser(description="Run Entheome Illumina+ONT Pipeline")
 
-environment_dir = get_env_dir()
-
 # Default values
-default_folder = f'{environment_dir}/Entheome/Ps_aff_hopii/MODULAR_TEST/'
+default_folder = f'/mnt/e/EGAP/MODULAR_TEST/'
 default_organism_kingdom = 'Funga'
 default_genome_size = 60
 default_primer = 'TruSeq3-PE'
@@ -91,6 +54,44 @@ ILLU_PRIMER_TYPE = args.primer_type
 ORGANISM_DATA = args.org_data
 PERCENT_RESOURCES = (args.resource_use/100)
 EGAP_ATTEMPT_INSTALL = args.attempt_install
+
+# Function to determine the current operating system and set the environment directory and command prefix
+def get_env_dir(BASE_FOLDER):
+    """
+    Determine the operating system and set environment directory and command prefix.
+
+    Returns:
+        str: The environment directory for the detected operating system.
+
+    Raises:
+        Exception: If the OS is neither Windows nor Linux.
+    """
+    # Determine the operating system in use
+    os_name = os.name
+    platform_system = platform.system()
+
+    # Mapping OS to environment directory and command prefix
+    mounted_drive = mounted_drive = f"{'/'.join(BASE_FOLDER.split('/')[:3])}/"
+    os_mapping = {('nt', 'Windows'): (f"{mounted_drive}}:", "wsl "),
+                  ('posix', 'Linux'): (f"/mnt/{mounted_drive}", "")}
+
+    # Check the current OS against the mapping and set the environment directory and command prefix
+    for os_keys, (env_dir, cmd_prefix) in os_mapping.items():
+        if os_name in os_keys or platform_system in os_keys:
+            global environment_dir, environment_cmd_prefix
+            environment_dir, environment_cmd_prefix = env_dir, cmd_prefix
+            break
+    else:
+        # If the operating system is neither Windows nor Linux, raise an Exception
+        raise Exception("ERROR: OS NOT TESTED WITH THIS CODE")
+
+    # Print the detected operating system and determined environment directory
+    print(f'Operating System: {platform_system}')
+    print(f'Environment Directory: {environment_dir}')
+
+    return environment_dir
+
+environment_dir = get_env_dir(BASE_FOLDER)
 
 # Check if already tried installing required Python libraries
 if EGAP_ATTEMPT_INSTALL == '1':  
@@ -147,9 +148,8 @@ if EGAP_ATTEMPT_INSTALL == '1':
         os.execv(sys.executable, ['python'] + sys.argv + ['--attempt_install', '0'])
     except:
         # Print an error if something goes wrong during the installation
-        print(f"UNLOGGED ERROR:\t Unable to Install {library}")
-        
-if EGAP_ATTEMPT_INSTALL == '1':
+        print(f"UNLOGGED ERROR:\t Unable to Install {library}")      
+elif EGAP_ATTEMPT_INSTALL == '0':
     print(f'UNLOGGED:\tSkipping Python Libraries installation')
 
 import psutil, gdown
@@ -170,6 +170,12 @@ def download_from_gdrive(file_id, output_path):
     - file_id: The ID of the file on Google Drive.
     - output_path: The path where the file should be saved.
     """
+
+    # Check if the EGAP_Database directory already exists
+    if os.path.exists(output_path):
+        print(f"EGAP_Database directory already exists at {output_path}. Skipping download and extraction.")
+        return
+
     url = f'https://drive.google.com/uc?id={file_id}'
     gdown.download(url, output_path, quiet=False)
 
@@ -182,8 +188,29 @@ def unzip_file(zip_path, extract_to):
     - zip_path: The path to the zip file.
     - extract_to: The directory where the contents should be extracted.
     """
+    
+    # Check if the EGAP_Database directory already exists
+    if os.path.exists(output_path):
+        print(f"EGAP_Database directory already exists at {output_path}. Skipping download and extraction.")
+        return
+    
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(extract_to)
+
+# Check if already tried installing required Python libraries
+if EGAP_ATTEMPT_INSTALL == '1':
+    # File ID extracted from the Google Drive link for the Databases
+    file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
+    output_path = 'file.zip'  # Output filename
+
+    # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
+    print(f"UNLOGGED:\tAttempting to download EGAP_Databases.zip from Google Drive...")
+    download_from_gdrive(file_id, output_path)
+    unzip_path = '~/EGAP/'
+    unzip_file(output_path, unzip_path)
+    os.remove(output_path)
+elif EGAP_ATTEMPT_INSTALL == '0':
+    print(f'UNLOGGED:\tSkipping EGAP_Databases download')
 
 # Main function to run the Entheome Pipeline developed by Ian
 def PILON_POLISH_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, ILLU_PRIMER_TYPE, PERCENT_RESOURCES, busco_db_dict, log_file):
@@ -435,17 +462,6 @@ def SPADES_HYBRID_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, I
 
 ## Debuging Main Space & Example
 if __name__ == "__main__":    
-    # File ID extracted from the Google Drive link for the Databases
-    file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
-    output_path = 'file.zip'  # Output filename
-
-    # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
-    print(f"UNLOGGED:\tAttempting to download EGAP_Databases.zip from Google Drive...")
-    download_from_gdrive(file_id, output_path)
-    unzip_path = '~/EGAP/'
-    unzip_file(output_path, unzip_path)
-    os.remove(output_path)
-    
     # Generate Main Logfile
     debug_log = f'{BASE_FOLDER}EGAP_log.tsv'
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
