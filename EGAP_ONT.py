@@ -99,12 +99,12 @@ def assemble_ont_flye(input_fastq, cpu_threads, log_file, GENOME_SIZE):
     if os.path.isfile(assembly_file_path):
         log_print(f"PASS:\tSkipping Flye Assembly: {assembly_file_path} already exists", log_file)    
         return assembly_file_path, output_directory
-    elif os.path.isfile(final_assembly_path):
-        log_print(f"PASS:\tSkipping Flye Assembly: {final_assembly_path} already exists", log_file)    
-        return final_assembly_path, output_directory
     elif os.path.isfile(filtered_file_path):
         log_print(f"PASS:\tSkipping Flye Assembly: {filtered_file_path} already exists", log_file)    
         return filtered_file_path, output_directory
+    elif os.path.isfile(final_assembly_path):
+        log_print(f"PASS:\tSkipping Flye Assembly: {final_assembly_path} already exists", log_file)    
+        return final_assembly_path, output_directory
     elif os.path.isfile(final_filtered_path):
         log_print(f"PASS:\tSkipping Flye Assembly: {final_filtered_path} already exists", log_file)    
         return final_filtered_path, output_directory
@@ -119,22 +119,26 @@ def assemble_ont_flye(input_fastq, cpu_threads, log_file, GENOME_SIZE):
                         output_directory,
                         "--threads",
                         str(cpu_threads),
-                        "--keep-haplotypes"]
+                        "--keep-haplotypes",
+                        "--resume"]
         
         # Run the command
         log_print(f"CMD:\t{' '.join(flye_command)}", log_file)
         flye_result = subprocess.run(flye_command, stdout = subprocess.PIPE, stderr = subprocess.PIPE)    
             
-        if flye_result.returncode != 0:
-            log_print(f"ERROR: {flye_result.stderr}", log_file)
-            return None
-        else:
-            os.rename(os.path.join(output_directory, "assembly.fasta"), assembly_file_path)
-            final_assembly_path = move_file_up(assembly_file_path, log_file, move_bool = False)
-            log_print("PASS: Successfully generated ONT Flye de novo Assembly", log_file)
-        
+    if flye_result.returncode != 0:
+        log_print(f"ERROR: {flye_result.stderr}", log_file)
+        return None
+    else:
+        # Rename the default Flye output to match your expected file name
+        default_flye_output = os.path.join(output_directory, "assembly.fasta")
+        if os.path.exists(default_flye_output):
+            os.rename(default_flye_output, assembly_file_path)
+            
+        log_print("PASS: Successfully generated ONT Flye de novo Assembly", log_file)
+                
         # Return the path to the assembled file    
-        return final_assembly_path, output_directory
+        return assembly_file_path, output_directory
 
 # Main ONT Folder Processing Function
 def process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOURCES, busco_db_dict, log_file):
@@ -171,19 +175,19 @@ def process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOU
 
     # Flye Assembly of combined ONT FASTQs
     ont_flye_assembly, flye_dir = assemble_ont_flye(combined_ont_fastq, cpu_threads, log_file, GENOME_SIZE)
-    
+        
     # Decontamination of ONT Flye Assembly
     cleaned_ont_assembly, removed_csv = clean_dirty_fasta(ont_flye_assembly, ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, log_file)                
     base_name = cleaned_ont_assembly.split('/')[-1].split('_ont')[0]
     
     # Cleanup ONT assembly bulk files and keep only the items_to_keep found in the ONT_FOLDER
     items_to_keep = [nanostat_dir.replace('_ont_combined_NanoStat',''), nanostat_dir,
-                     nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][0].split("/")[-1]}_busco'),
-                     nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][1].split("/")[-1]}_busco'),
-                     nanostat_dir.replace('_ont_combined_NanoStat','_ont_flye_filtered_quast'),
-                     combined_ont_fastq, ont_flye_assembly,
-                     cleaned_ont_assembly, removed_csv,
-                     f'{ONT_FOLDER}/{base_name}_ont_flye_bwa_aligned.bam']
+                      nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][0].split("/")[-1]}_busco'),
+                      nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][1].split("/")[-1]}_busco'),
+                      nanostat_dir.replace('_ont_combined_NanoStat','_ont_flye_filtered_quast'),
+                      combined_ont_fastq, ont_flye_assembly,
+                      cleaned_ont_assembly, removed_csv,
+                      f'{ONT_FOLDER}/{base_name}_ont_flye_bwa_aligned.bam']
     
     chopping_block = os.listdir(ONT_FOLDER)
     chopping_block = [os.path.join(ONT_FOLDER, item) for item in chopping_block]
