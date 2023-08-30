@@ -353,7 +353,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Quality Control Checks')
     
     # Default values
-    default_file = f'{get_env_dir()}/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_combined.fastq'
+    default_file = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_combined.fastq'
     default_organism_kingdom = 'Funga'
     default_percent_resources = 40
     
@@ -370,9 +370,9 @@ if __name__ == "__main__":
     INPUT_FILE = args.input_file
     CURRENT_ORGANISM_KINGDOM = args.organism_kingdom
     PERCENT_RESOURCES = args.resource_use
-
+    
     # Get working environment information
-    environment_dir = get_env_dir()
+    environment_dir = get_env_dir(INPUT_FILE)
     
     # Get the number of CPUs available on the system
     num_cpus = multiprocessing.cpu_count()
