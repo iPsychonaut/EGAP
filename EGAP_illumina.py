@@ -19,7 +19,7 @@ import os, subprocess, glob, fnmatch, hashlib, shutil, gzip, argparse, multiproc
 import pandas as pd
 from threading import Thread
 from log_print import log_print, generate_log_file
-from check_tools import get_env_dir, get_md5, search_directory_for_file, check_for_jars, move_file_up
+from check_tools import get_md5, search_directory_for_file, check_for_jars, move_file_up
 from EGAP_qc import assess_with_fastqc
 
 # Function to run MD5 checksums on all .FQ.GZ files in the provided directory given there is also an MD5.txt file
@@ -359,7 +359,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process Illumina Folder')
     
     # Default values
-    default_folder = f'{get_env_dir()}/Entheome/Ps_aff_hopii/MODULAR_TEST/Illumina_PE150/B1_3'
+    default_folder = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/Illumina_PE150/B1_3'
     default_primer = 'TruSeq3-PE'
     default_percent_resources = 80
     
@@ -376,7 +376,7 @@ if __name__ == "__main__":
     ILLUMINA_FOLDER = args.illumina_folder
     ILLU_PRIMER_TYPE = args.primer_type
     PERCENT_RESOURCES = args.resource_use
-        
+    
     # Generate log file with the desired behavior
     debug_log = f'{ILLUMINA_FOLDER}/Illumina_log.tsv'
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
