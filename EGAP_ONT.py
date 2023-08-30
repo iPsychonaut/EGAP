@@ -225,15 +225,12 @@ def process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOU
 
 ## Debuging Main Space & Example
 if __name__ == "__main__":
-    print('EGAP Oxford Nanopore Technologies (ONT) Pipeline')    
-    # Get working environment information
-    environment_dir = get_env_dir()
-    
+    print('EGAP Oxford Nanopore Technologies (ONT) Pipeline')       
     # Argument Parsing
     parser = argparse.ArgumentParser(description='Process ONT Folder and Genome Size')
     
     # Default values
-    default_folder = f'{environment_dir}/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/'
+    default_folder = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/'
     default_organism_kingdom = 'Funga'
     default_genome_size = 60
     default_percent_resources = 80
@@ -255,6 +252,9 @@ if __name__ == "__main__":
     CURRENT_ORGANISM_KINGDOM = args.organism_kingdom
     GENOME_SIZE = args.genome_size
     PERCENT_RESOURCES = (args.resource_use/100)
+    
+    # Get working environment information
+    environment_dir = get_env_dir(ONT_FOLDER)
     
     # Generate log file with the desired behavior
     debug_log = f'{ONT_FOLDER}ONT_log.tsv'
