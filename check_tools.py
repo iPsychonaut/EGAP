@@ -92,7 +92,7 @@ def find_file(root, filename):
     return None
 
 # Function to determine the current operating system and set the environment directory and command prefix
-def get_env_dir():
+def get_env_dir(BASE_FOLDER):
     """
     Determine the operating system and set environment directory and command prefix.
 
@@ -107,8 +107,9 @@ def get_env_dir():
     platform_system = platform.system()
 
     # Mapping OS to environment directory and command prefix
-    os_mapping = {('nt', 'Windows'): ("E:", "wsl "),
-                  ('posix', 'Linux'): ("/mnt/e", "")}
+    mounted_drive = mounted_drive = f"{'/'.join(BASE_FOLDER.split('/')[:3])}/"
+    os_mapping = {('nt', 'Windows'): (f"{mounted_drive}}:", "wsl "),
+                  ('posix', 'Linux'): (f"/mnt/{mounted_drive}", "")}
 
     # Check the current OS against the mapping and set the environment directory and command prefix
     for os_keys, (env_dir, cmd_prefix) in os_mapping.items():
@@ -179,6 +180,7 @@ def check_for_jars(program_dict, log_file):
     Returns:
         jar_paths_dict (dict): Dictionary containing program names as keys and paths to the respective JAR files as values.
     """
+    # TODO: INSTALL INTO CURRENT WORKING DIRECTORY (SHOULD BE )
     base_dir = os.path.expanduser("~")
     jar_paths_dict = {}
     
