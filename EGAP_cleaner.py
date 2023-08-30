@@ -374,16 +374,13 @@ def clean_dirty_fasta(dirty_fasta, OUTPUT_DIR, current_organism_kingdom, log_fil
 
 ## Debuging Main Space & Example
 if __name__ == "__main__":
-    print('EGAP Contig Cleaner')    
-    # Get working environment information
-    environment_dir = get_env_dir()
-    
+    print('EGAP Contig Cleaner')       
     # Argument Parsing
     parser = argparse.ArgumentParser(description='Tools to clean a contanminated FASTA file')
     
     # Default values
-    default_file = f'{environment_dir}/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_flye_output/B1_3_ont_flye.fasta'
-    default_folder = f'{environment_dir}/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/'
+    default_file = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_flye_output/B1_3_ont_flye.fasta'
+    default_folder = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/'
     default_organism_kingdom = 'Funga'
     
     # Add arguments with default values
