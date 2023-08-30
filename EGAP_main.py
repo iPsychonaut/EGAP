@@ -55,44 +55,6 @@ ORGANISM_DATA = args.org_data
 PERCENT_RESOURCES = (args.resource_use/100)
 EGAP_ATTEMPT_INSTALL = args.attempt_install
 
-# Function to determine the current operating system and set the environment directory and command prefix
-def get_env_dir(BASE_FOLDER):
-    """
-    Determine the operating system and set environment directory and command prefix.
-
-    Returns:
-        str: The environment directory for the detected operating system.
-
-    Raises:
-        Exception: If the OS is neither Windows nor Linux.
-    """
-    # Determine the operating system in use
-    os_name = os.name
-    platform_system = platform.system()
-
-    # Mapping OS to environment directory and command prefix
-    mounted_drive = mounted_drive = f"{'/'.join(BASE_FOLDER.split('/')[:3])}/"
-    os_mapping = {('nt', 'Windows'): (f"{mounted_drive}}:", "wsl "),
-                  ('posix', 'Linux'): (f"/mnt/{mounted_drive}", "")}
-
-    # Check the current OS against the mapping and set the environment directory and command prefix
-    for os_keys, (env_dir, cmd_prefix) in os_mapping.items():
-        if os_name in os_keys or platform_system in os_keys:
-            global environment_dir, environment_cmd_prefix
-            environment_dir, environment_cmd_prefix = env_dir, cmd_prefix
-            break
-    else:
-        # If the operating system is neither Windows nor Linux, raise an Exception
-        raise Exception("ERROR: OS NOT TESTED WITH THIS CODE")
-
-    # Print the detected operating system and determined environment directory
-    print(f'Operating System: {platform_system}')
-    print(f'Environment Directory: {environment_dir}')
-
-    return environment_dir
-
-environment_dir = get_env_dir(BASE_FOLDER)
-
 # Check if already tried installing required Python libraries
 if EGAP_ATTEMPT_INSTALL == '1':  
     # Make sure mamba is installed
@@ -154,7 +116,7 @@ elif EGAP_ATTEMPT_INSTALL == '0':
 
 import psutil, gdown
 from threading import Thread
-from check_tools import check_for_jars, check_prereqs_installed
+from check_tools import get_env_dir, check_for_jars, check_prereqs_installed
 from log_print import log_print, generate_log_file
 from EGAP_ONT import process_ONT
 from EGAP_illumina import process_illumina
@@ -196,6 +158,9 @@ def unzip_file(zip_path, extract_to):
     
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         zip_ref.extractall(extract_to)
+
+# Get working environment information
+environment_dir = get_env_dir(BASE_FOLDER)
 
 # Check if already tried installing required Python libraries
 if EGAP_ATTEMPT_INSTALL == '1':
