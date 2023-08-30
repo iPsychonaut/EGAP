@@ -326,15 +326,29 @@ def clean_dirty_fasta(dirty_fasta, OUTPUT_DIR, current_organism_kingdom, log_fil
                         
                     contig_list = df['contig_name'].tolist()
                     log_print(f'NOTE:\tKeeping {round((len(contig_list)/contig_number)*100,0)}% of Contigs', log_file)
-                
-                    with open(cleaned_assembly, 'r') as original, open(cleaned_fasta, 'w') as filtered:
-                        fasta_sequences = SeqIO.parse(original, 'fasta')
-                        for fasta in fasta_sequences:
-                            if fasta.id in contig_list:
-                                SeqIO.write(fasta, filtered, 'fasta')
                     
-                    log_print(f"PASS:\tFiltered fasta file saved as {cleaned_fasta}", log_file)
-                
+                    try:                    
+                        with open(cleaned_assembly, 'r') as original, open(cleaned_fasta, 'w') as filtered:
+                            fasta_sequences = SeqIO.parse(original, 'fasta')
+                            for fasta in fasta_sequences:
+                                if fasta.id in contig_list:
+                                    SeqIO.write(fasta, filtered, 'fasta')
+                        
+                        log_print(f"PASS:\tFiltered fasta file saved as {cleaned_fasta}", log_file)
+                    except FileNotFoundError:
+                        assembly_file_name = os.path.basename(cleaned_assembly)
+                        trimmomatic_output_dir = f'{os.path.dirname(cleaned_assembly)}/{assembly_file_name.replace(".fasta","")}'
+                        cleaned_assembly = '{trimmomatic_output_dir}/{assembly_file_name}'
+                        print(assembly_file_name)
+                        print(trimmomatic_output_dir)
+                        print(cleaned_assembly)
+                        with open(cleaned_assembly, 'r') as original, open(cleaned_fasta, 'w') as filtered:
+                            fasta_sequences = SeqIO.parse(original, 'fasta')
+                            for fasta in fasta_sequences:
+                                if fasta.id in contig_list:
+                                    SeqIO.write(fasta, filtered, 'fasta')
+                        
+                        log_print(f"PASS:\tFiltered fasta file saved as {cleaned_fasta}", log_file)
                 # update the path to the cleaned assembly after each iteration
                 cleaned_assembly = cleaned_fasta  
    
