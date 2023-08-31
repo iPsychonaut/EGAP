@@ -34,7 +34,6 @@ def move_file_up(file_path, log_file, move_bool=True):
         log_print(f"PASS:\tSuccessfully moved {file_path} to {new_path}", log_file)
     if move_bool == False:
         # Just return the new_path
-        log_print(f"NOTE:\tSkipping move, returning {new_path}", log_file)
         pass
     
     return new_path
@@ -107,7 +106,7 @@ def get_env_dir(BASE_FOLDER):
     platform_system = platform.system()
 
     # Mapping OS to environment directory and command prefix
-    mounted_drive = mounted_drive = f"{'/'.join(BASE_FOLDER.split('/')[:3])}/"
+    mounted_drive = f"{'/'.join(BASE_FOLDER.split('/')[:3]).replace('/mnt/','')}"
     os_mapping = {('nt', 'Windows'): (f"{mounted_drive}:", "wsl "),
                   ('posix', 'Linux'): (f"/mnt/{mounted_drive}", "")}
 
@@ -170,55 +169,63 @@ def libraries_check(libraries, log_file):
 
 # Function to check if third-party programs' specific JAR file is installed in the current working environment
 def check_for_jars(program_dict, log_file):
-    """
-    Check if third-party programs' specific JAR files are installed within the immediate subdirectories of the base directory.
-    
-    Args:
-        program_dict (dict): Dictionary containing program names as keys and tuples containing their git repos and jar file patterns as values.
-        log_file (obj): Path to the log file where the analysis progress and results will be stored.
-    
-    Returns:
-        jar_paths_dict (dict): Dictionary containing program names as keys and paths to the respective JAR files as values.
-    """
-    # TODO: INSTALL INTO CURRENT WORKING DIRECTORY (SHOULD BE )
     base_dir = os.path.expanduser("~")
     jar_paths_dict = {}
-    
-    # List all immediate subdirectories of the base directory
     subdirs = [os.path.join(base_dir, d) for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]
     
-    for program_name, (git_repo, jar_pattern) in program_dict.items():
-    
-        # Searching for the JAR file in immediate subdirectories
+    for program_name, (git_repo, jar_pattern, zip_url) in program_dict.items():
         file_path = None
         for subdir in subdirs:
             for root, _, files in os.walk(subdir):
                 for filename in fnmatch.filter(files, jar_pattern):
                     file_path = os.path.join(root, filename)
                     break
-                if file_path:  # break the loop as soon as we found the file
+                if file_path:
                     break
-            if file_path:  # break the outer loop as well if we found the file
+            if file_path:
                 break
-    
+                
         if file_path:
             message = f"PASS:\t{program_name} JAR file is installed at {file_path}"
             jar_paths_dict[program_name] = file_path
         else:
-            log_print(f"WARN:\t{program_name} JAR file is not installed. Installing from {git_repo}...", log_file)
-            
-            # Install the program from git
             install_path = os.path.join(base_dir, program_name)
-            jar_cmd = ['git', 'clone', git_repo, install_path]
-            log_print(f"CMD:\t{' '.join(jar_cmd)}", log_file)
-            subprocess.run(jar_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             
-            # Now, search for the JAR file within the installed directory
+            if zip_url:
+                # Determine if we are dealing with a JAR or ZIP file based on the URL extension
+                if zip_url.endswith('.jar'):
+                    download_path = os.path.join(base_dir, f"{program_name}.jar")
+                else:
+                    download_path = os.path.join(base_dir, f"{program_name}.zip")
+                
+                # Download file using requests
+                log_print(f"CMD:\tDownloading {zip_url} to {download_path}", log_file)
+                response = requests.get(zip_url)
+                with open(download_path, 'wb') as f:
+                    f.write(response.content)
+                
+                if download_path.endswith('.zip'):
+                    # Unzip
+                    with zipfile.ZipFile(download_path, 'r') as zip_ref:
+                        zip_ref.extractall(install_path)
+                
+                # Move the JAR file to the install directory
+                for root, _, files in os.walk(install_path if download_path.endswith('.zip') else base_dir):
+                    for filename in fnmatch.filter(files, jar_pattern):
+                        jar_file_path = os.path.join(root, filename)
+                        shutil.move(jar_file_path, install_path)
+                        break
+            
+            if not file_path and git_repo:
+                git_cmd = ['git', 'clone', git_repo, install_path]
+                log_print(f"CMD:\t{' '.join(git_cmd)}", log_file)
+                subprocess.run(git_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
             for root, _, files in os.walk(install_path):
                 for filename in fnmatch.filter(files, jar_pattern):
                     file_path = os.path.join(root, filename)
                     break
-                if file_path:  # break the loop as soon as we found the file
+                if file_path:
                     break
             
             if file_path:
@@ -227,10 +234,9 @@ def check_for_jars(program_dict, log_file):
             else:
                 message = f"ERROR:\tFailed to find {program_name} JAR file after installation"
                 jar_paths_dict[program_name] = None
-        
+                
         log_print(message, log_file)
-
-    return jar_paths_dict, base_dir 
+    return jar_paths_dict, base_dir
 
 def check_prereqs_installed(prerequisites, log_file):
     """
@@ -297,8 +303,12 @@ if __name__ == "__main__":
     libraries_check(libraries, log_file)
 
     # Check for specific Third-Party JAR Files with adjusted program_dict
-    program_dict = {"trimmomatic": ("https://github.com/usadellab/Trimmomatic", "trimmomatic-*.jar"),
-                    "pilon": ("https://github.com/broadinstitute/pilon", "pilon*.jar")}
+    program_dict = {"trimmomatic": ("https://github.com/usadellab/Trimmomatic",
+                                "trimmomatic-*.jar",
+                                "http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip"),
+                    "pilon": ("https://github.com/broadinstitute/pilon",
+                              "pilon-*.jar",
+                              "https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar")}
     jar_paths_dict, _ = check_for_jars(program_dict, log_file)
 
     # Check Pipeline Third-Party Prerequisites
