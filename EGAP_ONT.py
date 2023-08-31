@@ -119,8 +119,7 @@ def assemble_ont_flye(input_fastq, cpu_threads, log_file, GENOME_SIZE):
                         output_directory,
                         "--threads",
                         str(cpu_threads),
-                        "--keep-haplotypes",
-                        "--resume"]
+                        "--keep-haplotypes"]
         
         # Run the command
         log_print(f"CMD:\t{' '.join(flye_command)}", log_file)
@@ -179,31 +178,31 @@ def process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOU
     # Decontamination of ONT Flye Assembly
     cleaned_ont_assembly, removed_csv = clean_dirty_fasta(ont_flye_assembly, ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, log_file)                
     base_name = cleaned_ont_assembly.split('/')[-1].split('_ont')[0]
-    
-    # Cleanup ONT assembly bulk files and keep only the items_to_keep found in the ONT_FOLDER
-    items_to_keep = [nanostat_dir.replace('_ont_combined_NanoStat',''), nanostat_dir,
-                      nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][0].split("/")[-1]}_busco'),
-                      nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][1].split("/")[-1]}_busco'),
-                      nanostat_dir.replace('_ont_combined_NanoStat','_ont_flye_filtered_quast'),
-                      combined_ont_fastq, ont_flye_assembly,
-                      cleaned_ont_assembly, removed_csv,
-                      f'{ONT_FOLDER}/{base_name}_ont_flye_bwa_aligned.bam']
-    
-    chopping_block = os.listdir(ONT_FOLDER)
-    chopping_block = [os.path.join(ONT_FOLDER, item) for item in chopping_block]
-        
-    for item in chopping_block:
-        item_path = os.path.join(ONT_FOLDER, item)
-        if item_path not in items_to_keep:
-            if os.path.isfile(item_path):
-                os.remove(item_path)
-            elif os.path.isdir(item_path):
-                shutil.rmtree(item_path)
 
 ## QUALITY CONTROL CHECK AREA
     if __name__ != "__main__":
         pass
     else:
+        # # Cleanup ONT assembly bulk files and keep only the items_to_keep found in the ONT_FOLDER
+        # items_to_keep = [nanostat_dir.replace('_ont_combined_NanoStat',''), nanostat_dir,
+        #                   nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][0].split("/")[-1]}_busco'),
+        #                   nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][1].split("/")[-1]}_busco'),
+        #                   nanostat_dir.replace('_ont_combined_NanoStat','_ont_flye_filtered_quast'),
+        #                   combined_ont_fastq, ont_flye_assembly,
+        #                   cleaned_ont_assembly, removed_csv,
+        #                   f'{ONT_FOLDER}/{base_name}_ont_flye_bwa_aligned.bam']
+        # chopping_block = os.listdir(ONT_FOLDER)
+        # chopping_block = [os.path.join(ONT_FOLDER, item) for item in chopping_block]
+            
+        # for item in chopping_block:
+        #     item_path = os.path.join(ONT_FOLDER, item)
+        #     if item_path not in items_to_keep:
+        #         if os.path.isfile(item_path):
+        #             os.remove(item_path)
+        #         elif os.path.isdir(item_path):
+        #             shutil.rmtree(item_path)
+        
+        print(busco_db_dict)
         # Quality Control Check Cleaned ONT Assembly with QUAST
         quast_thread = Thread(target = assess_with_quast, args = (cleaned_ont_assembly, log_file, cpu_threads))
         quast_thread.start()
