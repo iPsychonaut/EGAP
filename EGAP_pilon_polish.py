@@ -192,8 +192,10 @@ def pilon_polish_assembly(assembly_file, bam_file, ram_gb, cpu_threads, log_file
         os.makedirs(pilon_output, exist_ok=True)  # add exist_ok=True
 
     # Check for specific Third-Party JAR Files with adjusted program_dict
-    program_dict = {"pilon": ("https://github.com/broadinstitute/pilon", "pilon*.jar")}
-    pilon_jar_path_dict, base_dir = check_for_jars(program_dict, log_file)
+    pilon_jar_path_dict, _ = check_for_jars({"pilon": ("https://github.com/broadinstitute/pilon",
+                                                        "pilon-*.jar",
+                                                        "https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar")},
+                                            'EGAP')
     pilon_jar_path = pilon_jar_path_dict['pilon']
 
     # If the file doesn't exist, run Pilon
