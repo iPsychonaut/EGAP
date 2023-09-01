@@ -12,7 +12,7 @@ The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flo
 The --genome_size is a number in Mega-Bytes/Bases that the expected genome is to be. 
 The --primer_type must be a string similar to 'TruSeq3-PE' to represent the Illumina primer type to use with trimmomatic.
 """
-import sys, subprocess, argparse, multiprocessing, math, os, platform, shutil, zipfile
+import sys, subprocess, argparse, multiprocessing, math, os, platform, shutil
 
 # Define and parse command line arguments
 parser = argparse.ArgumentParser(description="Run Entheome Illumina+ONT Pipeline")
@@ -86,7 +86,7 @@ if EGAP_ATTEMPT_INSTALL == '1':
         print(f'UNLOGGED ERROR:\tUnable to install: {module_name}')
     
     # Ensure all other libraries are installed
-    libraries = ['busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
+    libraries = ['requests==2.31.0', 'busco==5.5.0','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
                  'biopython==1.81', 'tqdm==4.38.0', 'termcolor==2.3.0', 'beautifulsoup4==4.12.2',
                  'fastqc==0.11.8', 'quast==5.2.0', 'nanostat==1.6.0', 'flye==2.9.2',
                  'bbtools==37.62', 'metaeuk==6.a5d39d9', 'blast==2.14.1', 'bwa==0.7.17',
@@ -98,45 +98,42 @@ if EGAP_ATTEMPT_INSTALL == '1':
         for library in libraries:
             # Run a subprocess calling conda install for each missing library
             install_module(library)
+    except:
+        # Print an error if something goes wrong during the installation
+        print(f"UNLOGGED ERROR:\t Unable to Install {library}")      
+elif EGAP_ATTEMPT_INSTALL == '0':
+    print(f'UNLOGGED:\tSkipping Python Libraries installation')
+
+if EGAP_ATTEMPT_INSTALL == '1':  
+    import requests, zipfile, gdown
+
+    # File ID extracted from the Google Drive link for the Databases
+    file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
+    output_path = 'file.zip'  # Output filename
+    unzip_path = '~/EGAP/'
+    url = f'https://drive.google.com/uc?id={file_id}'
+
+    # Check if the EGAP_Database directory already exists
+    if os.path.exists(output_path):
+        print(f"EGAP_Database directory already exists at {output_path}. Skipping download and extraction.")
+    else:
+        # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
+        print(f"UNLOGGED:\tAttempting to download EGAP_Databases.zip from Google Drive...")
+    
+        # Download Zip with gdown
+        gdown.download(url, output_path, quiet=False)
         
-        # Attempt to download EGAP_Databases.zip from google drive
-        try:
-            import gdown
-        except ModuleNotFoundError:
-            gdown_module = 'gdown==4.7.1'
-            install_module(gdown_module)
-            import gdown
-
-        # Check if the EGAP_Database directory already exists
-        if os.path.exists(output_path):
-            print(f"EGAP_Database directory already exists at {output_path}. Skipping download and extraction.")
-        else:
-            # Download Databases from Google Drive then Unzip the downloaded and Remove the zip file
-            print(f"UNLOGGED:\tAttempting to download EGAP_Databases.zip from Google Drive...")
-
-            # File ID extracted from the Google Drive link for the Databases
-            file_id = '1i2zSQ4G0t9gWHL2ndIQHweXCkfwLX8N2'
-            output_path = 'file.zip'  # Output filename
-            unzip_path = '~/EGAP/'
-            url = f'https://drive.google.com/uc?id={file_id}'
-
-            # Download Zip with gdown
-            gdown.download(url, output_path, quiet=False)
-            
-            # Unzip contents and then remove zip file
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_to)        
-            os.remove(output_path)
-        
+        # Unzip contents and then remove zip file
+        with zipfile.ZipFile(output_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_to)        
+        os.remove(output_path)
+                    
         # Set the flag to indicate we've attempted installation
         os.environ['EGAP_ATTEMPT_INSTALL'] = '0'
         
         # Reset the script with loaded libraries
         print('UNLOGGED PASS:\tRestarting EGAP')
         os.execv(sys.executable, ['python'] + sys.argv + ['--attempt_install', '0'])
-    except:
-        # Print an error if something goes wrong during the installation
-        print(f"UNLOGGED ERROR:\t Unable to Install {library}")      
 elif EGAP_ATTEMPT_INSTALL == '0':
     print(f'UNLOGGED:\tSkipping Python Libraries installation')
 
@@ -411,22 +408,22 @@ if __name__ == "__main__":
     # Generate Main Logfile
     debug_log = f'{BASE_FOLDER}EGAP_log.tsv'
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
-    log_print('RUNNING EGAP PIPELINE', log_file)
+    log_print('RUNNING ENTHEOME GENOME EXTRACTION PIPELINE - EGAP', log_file)
 
     # Check for specific Third-Party JAR Files with adjusted program_dict
     program_dict = {"trimmomatic": ("https://github.com/usadellab/Trimmomatic",
-                                    "trimmomatic-*.jar",
-                                    "http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip"),
+                                "trimmomatic-*.jar",
+                                "http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip"),
                     "pilon": ("https://github.com/broadinstitute/pilon",
                               "pilon-*.jar",
                               "https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar")}
-    jar_paths_dict, _ = check_for_jars(program_dict, log_file)
+    jar_paths_dict, _ = check_for_jars(program_dict, 'EGAP')
 
     # Check Pipeline Third-Party Prerequisites
     prerequisites = ["java", "fastqc", "quast.py", "busco", "samtools", "bwa",
                      "makeblastdb", "blastn", "racon", "nanoq", "NanoStat",
                      "spades.py", "tblastn", "flye", "minimap2", "metaeuk", "tqdm"]
-    check_prereqs_installed(prerequisites, log_file)
+    check_prereqs_installed(prerequisites)
     ### TODO: ADD KELSEY'S PREREQUISITE: abyss-sealer
     
     # Generate BUSCO Database Dictionary
