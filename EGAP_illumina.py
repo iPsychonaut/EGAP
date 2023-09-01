@@ -19,7 +19,7 @@ import os, subprocess, glob, fnmatch, hashlib, shutil, gzip, argparse, multiproc
 import pandas as pd
 from threading import Thread
 from log_print import log_print, generate_log_file
-from check_tools import get_md5, search_directory_for_file, check_for_jars, move_file_up
+from check_tools import get_md5, search_directory_for_file, check_for_jars
 from EGAP_qc import assess_with_fastqc
 
 # Function to run MD5 checksums on all .FQ.GZ files in the provided directory given there is also an MD5.txt file
@@ -208,7 +208,10 @@ def trim_with_trimmomatic(folder_name, combined_files, data_type, ILLU_PRIMER_TY
     """    
     # Check for trimmomatic jar file
     log_print(f"Running Trimmomatic on {data_type} files {combined_files} using {ILLU_PRIMER_TYPE}...", log_file)
-    jar_paths_dict, _ = check_for_jars({'trimmomatic': ("https://github.com/usadellab/Trimmomatic", "trimmomatic-*.jar")}, log_file)
+    jar_paths_dict, _ = check_for_jars({"trimmomatic": ("https://github.com/usadellab/Trimmomatic",
+                                                        "trimmomatic-*.jar",
+                                                        "http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip")},
+                                       'EGAP')
     trimmomatic_jar_path = jar_paths_dict['trimmomatic']
 
     # Generate directories and lists
