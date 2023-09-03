@@ -5,9 +5,9 @@ Created on Thu Aug 17 18:18:22 2023
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 
 Command Line Example:
-    python EGAP_cleaner.py --dirty_fasta /path/to/dirty.fasta --output_dir /path/to/folder --organism_kingdom STRING
+    python EGAP_cleaner.py -i /path/to/dirty.fasta -o /path/to/folder -k STRING
 
-The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
+The -k, --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
 """
 # Base Python Imports
 import os, subprocess, glob, random, tempfile, shutil
@@ -389,11 +389,14 @@ if __name__ == "__main__":
     default_organism_kingdom = 'Funga'
     
     # Add arguments with default values
-    parser.add_argument('--dirty_fasta', default = default_file,
+    parser.add_argument('--dirty_fasta', '-i', 
+                        type = str, default = default_file,
                         help = f'Path to the Contaminated FASTA file. (default: {default_file})')
-    parser.add_argument('--output_dir', default = default_folder,
+    parser.add_argument('--output_dir', '-o',
+                        type = str, default = default_folder,
                         help = f'Path to the desired output folder. (default: {default_folder})')
-    parser.add_argument('--organism_kingdom',default = default_organism_kingdom,
+    parser.add_argument('--organism_kingdom', '-k',
+                        type = str, default = default_organism_kingdom,
                         help = f'Kingdom the current organism data belongs to. (default: {default_organism_kingdom})')
     
     # Parse the arguments
