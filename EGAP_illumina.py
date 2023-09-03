@@ -5,21 +5,27 @@ Created on Mon Jul 17 11:48:13 2023
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 
 Command Line Example:
-    python EGAP_illumina.py --illumina_folder /path/to/folder --primer_type STRING --resource_use INTEGER
+    python EGAP_illumina.py -i /path/to/folder -p STRING -r INTEGER
 
-The --primer_type must be a string similar to 'TruSeq3-PE' to represent the Illumina primer type to use with trimmomatic.
-The --illumina_folder must have a sub-folder with raw Illumina .fq.gz files and their matching MD5.txt file.
+The -i, --illumina_folder must have a sub-folder with raw Illumina .fq.gz files and their matching MD5.txt file.
+The -p, --primer_type must be a string similar to 'TruSeq3-PE' to represent the Illumina primer type to use with trimmomatic.
 
 Note:
 1. The script supports both Single-End (SE) and Paired-End (PE) datasets.
 2. For SE datasets, the script expects files with a '_combined.fq' suffix.
 3. For PE datasets, the script expects files with '_combined_1.fq' and '_combined_2.fq' suffixes.
 """  
+# Base Python Imports
 import os, subprocess, glob, fnmatch, hashlib, shutil, gzip, argparse, multiprocessing, queue, psutil, math, sys
+
+# Required Python Imports
 import pandas as pd
 from threading import Thread
+
+# Custom Python Imports
 from log_print import log_print, generate_log_file
-from check_tools import get_md5, search_directory_for_file, check_for_jars
+from check_tools import get_md5, search_directory_for_file
+from EGAP_setup import download_and_setup, find_folder
 from EGAP_qc import assess_with_fastqc
 
 # Function to run MD5 checksums on all .FQ.GZ files in the provided directory given there is also an MD5.txt file
@@ -208,11 +214,15 @@ def trim_with_trimmomatic(folder_name, combined_files, data_type, ILLU_PRIMER_TY
     """    
     # Check for trimmomatic jar file
     log_print(f"Running Trimmomatic on {data_type} files {combined_files} using {ILLU_PRIMER_TYPE}...", log_file)
-    jar_paths_dict, _ = check_for_jars({"trimmomatic": ("https://github.com/usadellab/Trimmomatic",
-                                                        "trimmomatic-*.jar",
-                                                        "http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip")},
-                                       'EGAP')
-    trimmomatic_jar_path = jar_paths_dict['trimmomatic']
+
+    
+    # Find the base install directory
+    base_install_dir = find_folder('EGAP')
+    program_dict = {"trimmomatic": "http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip"}    
+    for key, entry in program_dict.items():
+        # Generate install directories
+        install_dir = os.path.join(base_install_dir, key)
+        trimmomatic_jar_path = download_and_setup(install_dir, entry)
 
     # Generate directories and lists
     fq_paired_list = []
@@ -367,11 +377,14 @@ if __name__ == "__main__":
     default_percent_resources = 80
     
     # Add arguments with default values
-    parser.add_argument('--illumina_folder', default = default_folder,
+    parser.add_argument('--illumina_folder', '-i',
+                        type = str, default = default_folder,
                         help = f'Path to the Illumina (PE or SE) Folder. (default: {default_folder})')
-    parser.add_argument('--primer_type', default = default_primer,
+    parser.add_argument('--primer_type', '-p',
+                        type = str, default = default_primer,
                         help = f'Type of Illumina Primers used. (default: {default_primer})')
-    parser.add_argument('--resource_use', type = int, default = default_percent_resources,
+    parser.add_argument('--resource_use', '-r',
+                        type = int, default = default_percent_resources,
                         help = f'Percent of Resources to use. (default: {default_percent_resources})')
     
     # Parse the arguments
