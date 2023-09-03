@@ -5,7 +5,10 @@ Created on Wed Aug  2 08:53:45 2023
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 
 """
+# Base Python Imports
 import pathlib, os
+
+# Required Python Imports
 from termcolor import cprint
 from datetime import datetime
 
