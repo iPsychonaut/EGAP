@@ -4,20 +4,26 @@ Created on Mon Jul 17 11:49:17 2023
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 
 Command Line Example:
-    python EGAP_ONT.py --ont_folder /path/to/folder --organism_kingdom STRING --genome_size INTEGER --resource_use INTEGER
+    python EGAP_ONT.py -i /path/to/folder -k STRING -g INTEGER -r INTEGER
 
-The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
+The -k, --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
 """
-import os, subprocess, glob, shutil, gzip, random, tempfile, multiprocessing, math, psutil, csv, argparse
+# Base Python Imports
+import os, subprocess, glob, shutil, gzip, random, tempfile, multiprocessing, math, psutil, csv, argparse, gdown
+from threading import Thread
+
+# Required Python Imports
 import pandas as pd
 from tqdm import tqdm
 from Bio import SeqIO
 from Bio.Blast.Applications import NcbiblastnCommandline
-from threading import Thread
+
+# Custom Python Imports
 from log_print import log_print, generate_log_file
 from check_tools import get_env_dir, move_file_up
 from EGAP_qc import assess_with_quast, assess_with_busco, assess_with_nanostat
 from EGAP_cleaner import clean_dirty_fasta
+from EGAP_setup import download_busco_dbs, download_and_setup, find_folder
 
 # Function to extract and combine multiple FASTQ.GZ files into a single FASTQ file
 def ont_combine_fastq_gz(ONT_FOLDER, log_file):
@@ -92,8 +98,8 @@ def assemble_ont_flye(input_fastq, cpu_threads, log_file, GENOME_SIZE):
     # Path to the assembled file
     assembly_file_path = f"{output_directory}/{base_name.replace('combined.fastq','flye.fasta')}"
     filtered_file_path = assembly_file_path.replace('flye.fasta','flye_filtered.fasta')
-    final_assembly_path = move_file_up(assembly_file_path, log_file, move_bool = False)
-    final_filtered_path = move_file_up(filtered_file_path, log_file, move_bool = False)
+    final_assembly_path = move_file_up(assembly_file_path, move_bool = False)
+    final_filtered_path = move_file_up(filtered_file_path, move_bool = False)
     
     # Check if the assembly already exists
     if os.path.isfile(assembly_file_path):
@@ -235,13 +241,17 @@ if __name__ == "__main__":
     default_percent_resources = 80
     
     # Add arguments with default values
-    parser.add_argument('--ont_folder', default = default_folder,
+    parser.add_argument('--ont_folder', '-i',
+                        type = str, default = default_folder,
                         help = f'Path to the ONT Folder. (default: {default_folder})')
-    parser.add_argument('--organism_kingdom',default = default_organism_kingdom,
+    parser.add_argument('--organism_kingdom', '-k',
+                        type = str, default = default_organism_kingdom,
                         help = f'Kingdom the current organism data belongs to. (default: {default_organism_kingdom})')
-    parser.add_argument('--genome_size', type = int, default = default_genome_size,
+    parser.add_argument('--genome_size', '-g',
+                        type = int, default = default_genome_size,
                         help = f'Genome Size. (default: {default_genome_size})')
-    parser.add_argument('--resource_use', type = int, default = default_percent_resources,
+    parser.add_argument('--resource_use', '-r',
+                        type = int, default = default_percent_resources,
                         help = f'Percent of Resources to use. (default: {default_percent_resources})')
     
     # Parse the arguments
@@ -260,18 +270,19 @@ if __name__ == "__main__":
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
     
     # Generate BUSCO Database Dictionary
-    busco_db_dict = {'Archaea':  [f'{environment_dir}/EGAP/BUSCO_Databases/archaea_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/euryarchaeota_odb10',],
-                     'Bacteria': [f'{environment_dir}/EGAP/BUSCO_Databases/actinobacteria_phylum_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/proteobacteria_odb10',],
-                     'Fauna':    [f'{environment_dir}/EGAP/BUSCO_Databases/vertebrata_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/arthropoda_odb10',],
-                     'Flora':    [f'{environment_dir}/EGAP/BUSCO_Databases/eudicots_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/liliopsida_odb10'],
-                     'Funga':    [f'{environment_dir}/EGAP/BUSCO_Databases/basidiomycota_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/agaricales_odb10'],
-                     'Protista': [f'{environment_dir}/EGAP/BUSCO_Databases/alveolata_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/euglenozoa_odb10']}
+    busco_db_dict = {'Archaea':  ['archaea_odb10',
+                                  'euryarchaeota_odb10'],
+                     'Bacteria': ['actinobacteria_phylum_odb10',
+                                  'proteobacteria_odb10',],
+                     'Fauna':    ['vertebrata_odb10',
+                                  'arthropoda_odb10',],
+                     'Flora':    ['eudicots_odb10',
+                                  'liliopsida_odb10'],
+                     'Funga':    ['basidiomycota_odb10',
+                                  'agaricales_odb10'],
+                     'Protista': ['alveolata_odb10',
+                                  'euglenozoa_odb10']}
+    busco_db_dict = download_busco_dbs(busco_db_dict)
     
     # Run main ONT Cleaning function
     cleaned_ont_assembly = process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOURCES, busco_db_dict, log_file)
