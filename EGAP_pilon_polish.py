@@ -5,12 +5,16 @@ Created on Thu Aug 17 13:49:51 2023
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 
 Command Line Example:
-    python EGAP_pilon_polish.py --ont_input /path/to/cleaned_ont_reads.fastq --illumina_f_input /path/to/forward_reads.fq --illumina_r_input /path/to/reverse_reads.fq --organism_kingdom STRING --resource_use INTEGER
+    python EGAP_pilon_polish.py -oi /path/to/cleaned_ont_reads.fastq -if /path/to/forward_reads.fq -ir /path/to/reverse_reads.fq -k STRING -r INTEGER
 
-The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
+The -k, --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
 """
+# Base Python Imports
 import os, subprocess, argparse, multiprocessing, psutil, math, shutil
-from check_tools import get_env_dir, check_for_jars
+
+# Custom Python Imports
+from check_tools import get_env_dir
+from EGAP_setup import download_and_setup, find_folder
 from EGAP_qc import assess_with_quast, assess_with_busco
 from log_print import log_print, generate_log_file
 from threading import Thread
@@ -191,12 +195,13 @@ def pilon_polish_assembly(assembly_file, bam_file, ram_gb, cpu_threads, log_file
     else:
         os.makedirs(pilon_output, exist_ok=True)  # add exist_ok=True
 
-    # Check for specific Third-Party JAR Files with adjusted program_dict
-    pilon_jar_path_dict, _ = check_for_jars({"pilon": ("https://github.com/broadinstitute/pilon",
-                                                        "pilon-*.jar",
-                                                        "https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar")},
-                                            'EGAP')
-    pilon_jar_path = pilon_jar_path_dict['pilon']
+    # Find the base install directory
+    base_install_dir = find_folder('EGAP')
+    program_dict = {"pilon": "https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar"}    
+    for key, entry in program_dict.items():
+        # Generate install directories
+        install_dir = os.path.join(base_install_dir, key)
+        pilon_jar_path = download_and_setup(install_dir, entry)
 
     # If the file doesn't exist, run Pilon
     pilon_cmd = ["java", f"-Xmx{ram_gb}G",
@@ -243,6 +248,7 @@ def final_pilon_polish(cleaned_ont_assembly, illumina_reads_list, CURRENT_ORGANI
     cpu_threads = int(math.floor(num_cpus * PERCENT_RESOURCES))
     ram_gb = int(mem_info.total / (1024.0 ** 3) * PERCENT_RESOURCES)
     
+    # Generate paths for the SAM & BAM files
     output_sam = cleaned_ont_assembly.replace("_filtered.fasta", "_bwa_aligned.sam")
     output_bam = output_sam.replace(".sam", ".bam")
     
@@ -259,8 +265,7 @@ def final_pilon_polish(cleaned_ont_assembly, illumina_reads_list, CURRENT_ORGANI
         elif len(illumina_reads_list) == 1:
             data_type = 'SE'
         
-        print(data_type)
-        
+        # Generate SAM file based on reads data_type
         if data_type == 'PE':
             # Generate the SAM file based on the indexed cleaned ont assembly and trimmed paired illumina reads
             sam_file = generate_illumina_sam(cleaned_ont_assembly, illumina_reads_list[0], illumina_reads_list[1], cpu_threads, log_file)
@@ -274,32 +279,7 @@ def final_pilon_polish(cleaned_ont_assembly, illumina_reads_list, CURRENT_ORGANI
     
     # Perfrom final Pilon Polish on the cleaned ont assembly with the generated BAM file
     pilon_output = pilon_polish_assembly(cleaned_ont_assembly, bam_file, ram_gb, cpu_threads, log_file)    
-    
-    # Clean up after final pilon polish
-    ONT_FOLDER = os.path.dirname(cleaned_ont_assembly)
-    base_name = cleaned_ont_assembly.split('/')[-1].split('_ont')[0]
-    nanostat_dir = f'{ONT_FOLDER}/{base_name}_ont_combined_NanoStat'
-    # Cleanup ONT assembly bulk files and keep only the items_to_keep found in the ONT_FOLDER
-    items_to_keep = [nanostat_dir.replace('_ont_combined_NanoStat',''), nanostat_dir,
-                     nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][0].split("/")[-1]}_busco'),
-                     nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][1].split("/")[-1]}_busco'),
-                     nanostat_dir.replace('_ont_combined_NanoStat','_ont_flye_filtered_quast'),
-                     cleaned_ont_assembly.replace('flye_filtered.fasta','combined.fastq'),
-                     cleaned_ont_assembly.replace('_filtered',''), cleaned_ont_assembly, 
-                     f'{ONT_FOLDER}/cumulative_removed_sequences.csv',
-                     f'{ONT_FOLDER}/{base_name}_ont_flye_bwa_aligned.bam']
-    
-    chopping_block = os.listdir(ONT_FOLDER)
-    chopping_block = [os.path.join(ONT_FOLDER, item) for item in chopping_block]
-        
-    for item in chopping_block:
-        item_path = os.path.join(ONT_FOLDER, item)
-        if item_path not in items_to_keep:
-            if os.path.isfile(item_path):
-                os.remove(item_path)
-            elif os.path.isdir(item_path):
-                shutil.rmtree(item_path)   
- 
+     
 ## QUALITY CONTROL CHECK AREA
     if __name__ != "__main__":
         pass
@@ -337,15 +317,20 @@ if __name__ == "__main__":
     default_percent_resources = 80
     
     # Add arguments with default values
-    parser.add_argument('--ont_input', default = default_ont,
+    parser.add_argument('--ont_input', '-oi',
+                        default = default_ont,
                         help = f'Path to the Cleaned ONT Reads. (default: {default_ont})')
-    parser.add_argument('--illumina_f_input', default = default_illumina_f,
+    parser.add_argument('--illumina_f_input', '-if',
+                        default = default_illumina_f,
                         help = f'Path to the Trimmed Forward Illumina Reads. (default: {default_illumina_f})')
-    parser.add_argument('--illumina_r_input', default = default_illumina_r,
+    parser.add_argument('--illumina_r_input', '-ir',
+                        default = default_illumina_r,
                         help = f'Path to the Trimmed Reverse Illumina Reads. (default: {default_illumina_r})')
-    parser.add_argument('--organism_kingdom',default = default_organism_kingdom,
+    parser.add_argument('--organism_kingdom', '-k',
+                        default = default_organism_kingdom,
                         help = f'Kingdom the current organism data belongs to. (default: {default_organism_kingdom})')
-    parser.add_argument('--resource_use', type = int, default = default_percent_resources,
+    parser.add_argument('--resource_use', '-r',
+                        type = int, default = default_percent_resources,
                         help = f'Percent of Resources to use. (default: {default_percent_resources})')
     
     # Parse the arguments
@@ -366,18 +351,18 @@ if __name__ == "__main__":
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
     
     # Generate BUSCO Database Dictionary
-    busco_db_dict = {'Archaea':  [f'{environment_dir}/EGAP/BUSCO_Databases/archaea_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/euryarchaeota_odb10',],
-                     'Bacteria': [f'{environment_dir}/EGAP/BUSCO_Databases/actinobacteria_phylum_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/proteobacteria_odb10',],
-                     'Fauna':    [f'{environment_dir}/EGAP/BUSCO_Databases/vertebrata_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/arthropoda_odb10',],
-                     'Flora':    [f'{environment_dir}/EGAP/BUSCO_Databases/eudicots_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/liliopsida_odb10'],
-                     'Funga':    [f'{environment_dir}/EGAP/BUSCO_Databases/basidiomycota_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/agaricales_odb10'],
-                     'Protista': [f'{environment_dir}/EGAP/BUSCO_Databases/alveolata_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/euglenozoa_odb10']}
+    busco_db_dict = {'Archaea':  [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/archaea_odb10',
+                                  f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/euryarchaeota_odb10',],
+                      'Bacteria': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/actinobacteria_phylum_odb10',
+                                  f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/proteobacteria_odb10',],
+                      'Fauna':    [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/vertebrata_odb10',
+                                  f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/arthropoda_odb10',],
+                      'Flora':    [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/eudicots_odb10',
+                                  f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/liliopsida_odb10'],
+                      'Funga':    [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/basidiomycota_odb10',
+                                  f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/agaricales_odb10'],
+                      'Protista': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/alveolata_odb10',
+                                  f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/euglenozoa_odb10']}
 
     # Run main Pilon Polish
     pilon_output = final_pilon_polish(ONT_READS, illumina_reads_list, CURRENT_ORGANISM_KINGDOM, PERCENT_RESOURCES, busco_db_dict, log_file)
