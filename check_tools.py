@@ -4,116 +4,12 @@ Created on Wed Aug  2 11:39:38 2023
 
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 """
-import math, platform, os, subprocess, hashlib, shutil, pkg_resources, fnmatch, requests, zipfile, psutil, multiprocessing
+# Base Python Imports
+import math, platform, os, subprocess, shutil, pkg_resources, fnmatch, multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 
-# Function to search for a folder named 'target_folder' within a specified maximum depth in the directory tree
-def find_folder(target_folder, max_depth=5):
-    """
-    Searches for a folder named 'target_folder' within a specified maximum depth in the directory tree.
-
-    Args:
-        target_folder (str): Name of the folder to search for.
-        max_depth (int, optional): Maximum depth of folders to search in; default is 5.
-
-    Returns:
-        result (str): Path to the folder of interest.
-    """
-    
-    # Nested function to search a single drive
-    def search_drive(drive):
-        depth = 0  # Initialize depth counter
-        # os.walk generates the file names in a directory tree by walking either top-down or bottom-up through the directory tree.
-        for root, dirs, files in os.walk(drive):
-            if depth > max_depth:
-                break  # Break if maximum depth reached
-            if target_folder in dirs:
-                return os.path.join(root, target_folder)  # Return full path if target_folder is found
-            depth += 1  # Increment depth for each new level in the directory tree
-
-    # List all available drives in Windows
-    all_drives = [f"{d}:\\" for d in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"{d}:\\")]
-    # List all available drives in Linux (WSL)
-    all_drives += [f"/mnt/{d.lower()}/" for d in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if os.path.exists(f"/mnt/{d.lower()}/")]
-
-    # Use multi-threading to search all drives in parallel
-    with ThreadPoolExecutor() as executor:
-        for result in executor.map(search_drive, all_drives):
-            if result is not None:
-                return result  # Return the first found result
-
-    return None  # Return None if target_folder is not found
-
-# Function to check for JAR files, downloads them if they are not found, and then moves them into the correct folder
-def check_for_jars(program_dict, search_dir):
-    """
-    Checks for JAR files, downloads them if they are not found, and then moves them into the correct folder.
-
-    Args:
-        program_dict (dict): Dictionary of the JAR's to locate.
-        search_dir (str): Name of the program install folder to store JARs in.
-
-    Returns:
-        jar_paths_dict (dict): 
-        install_dir (str): Path to the installed prgram directory.
-    """
-    
-    print(f"UNLOGGED:\tSearching for {search_dir} install folder...")
-    # Find the base install directory
-    install_dir = find_folder(search_dir)
-    
-    if install_dir is None:
-        print(f'UNLOGGED ERROR: Unable to find base {search_dir} install folder')
-        return None, None  # Return None values if install directory not found
-
-    jar_paths_dict = {}
-    # List subdirectories under the install directory
-    subdirs = [os.path.join(install_dir, d) for d in os.listdir(install_dir) if os.path.isdir(os.path.join(install_dir, d))]
-
-    # Loop through each program to check for JAR files
-    for program_name, (git_repo, jar_pattern, zip_url) in program_dict.items():
-        file_path = None
-        # Search for JAR files in the subdirectories
-        for subdir in subdirs:
-            for root, _, files in os.walk(subdir):
-                for filename in fnmatch.filter(files, jar_pattern):
-                    file_path = os.path.join(root, filename)
-                    break  # Break if JAR file is found
-                if file_path:
-                    break  # Break if JAR file is found
-            if file_path:
-                break  # Break if JAR file is found
-                
-        # If JAR file is found, update the message and dictionary
-        if file_path:
-            message = f"UNLOGGED PASS:\t{program_name} JAR file is installed at {file_path}"
-        else:  # If JAR file is not found, download and install it
-            install_path = os.path.join(install_dir, program_name)
-            os.makedirs(install_path, exist_ok=True)
-
-            # Clone the git repository if it exists
-            if git_repo:
-                git_cmd = ['git', 'clone', git_repo, install_path]
-                print(f"UNLOGGED CMD:\t{' '.join(git_cmd)}")
-                subprocess.run(git_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-            # Download the JAR file
-            download_path = os.path.join(install_dir, f"{program_name}.jar")
-            print(f"UNLOGGED CMD:\tDownloading {zip_url} to {download_path}")
-            response = requests.get(zip_url)
-            with open(download_path, 'wb') as f:
-                f.write(response.content)
-            
-            # Move the JAR file to the correct folder
-            shutil.move(download_path, os.path.join(install_path, f"{program_name}.jar"))
-            
-            # Update the message and dictionary
-            message = f"UNLOGGED PASS:\t{program_name} JAR file is now installed at {os.path.join(install_path, f'{program_name}.jar')}"
-        
-        jar_paths_dict[program_name] = file_path or os.path.join(install_path, f"{program_name}.jar")
-        print(message)
-        
-    return jar_paths_dict, install_dir  # Return the dictionary of JAR paths and the install directory
+# Required Python Imports
+import psutil, hashlib, requests, zipfile
 
 # Function to convert the user input PERCENT_RESOURCES into usuable cpu_threads and ram_gb values
 def get_resource_values(PERCENT_RESOURCES):
@@ -299,77 +195,6 @@ def libraries_check(libraries):
         # If all libraries are installed, print a confirmation message
         print("UNLOGGED PASS:\tAll libraries are installed")
 
-def check_prereqs_installed(prerequisites):
-    """
-    Check if third-party programs are installed in the current working environment.
-
-    Args:
-        prerequisites (list): List of third-party programs to check for installation.
-    """
-    log_print("Checking Third-Party Prerequisites...")
-
-    # Convert list into a single string for command
-    prereqs_string = ' '.join(prerequisites)
-
-    # Using f-string to correctly format the string with the prerequisites
-    prereq_cmd = ['bash', '-c', 
-                f'''for cmd in {prereqs_string}; \
-                    do \
-                        command -v $cmd >/dev/null 2>&1 && {{ echo "$cmd is installed"; }} || {{ echo >&2 "$cmd is not installed"; exit 1; }}; \
-                    done;''']
-    print(f"UNLOGGED:\tChecking for: {', '.join(prerequisites)}")
-    prereq_result = subprocess.run(prereq_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    if prereq_result.returncode != 0:
-        print(f"UNLOGGED ERROR:\tThere was a problem checking the installation of Third-Party Prerequisites. Return code: {prereq_result.returncode}")
-        
-        # Print detailed output
-        output_messages = prereq_result.stdout.decode().splitlines()
-        for message in output_messages:
-            print(f"UNLOGGED DETAIL:\t{message}")
-        
-        # If there's any error messages, log them as well
-        error_messages = prereq_result.stderr.decode().splitlines()
-        for message in error_messages:
-            print(f"UNLOGGED ERROR DETAIL:\t{message}")
-            
-    else:
-        print("UNLOGGED PASS:\tAll Third-Party Prerequisites successfully found")
-
 # Debuging Main Space & Example
 if __name__ == "__main__":
     print("check_tools.py DEBUG")
-    
-    # Ensure mamba is installed
-    mamba_cmd = ['conda', 'install', '-y', 'conda-forge', 'mamba==1.5.0']
-    print(f"UNLOGGED CMD:\t{' '.join(mamba_cmd)}")
-    mamba_result = subprocess.check_call(mamba_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if mamba_result == 0:
-        print(f'UNLOGGED PASS:\tSuccessfully installed: mamba')
-    else:
-        print(f'UNLOGGED ERROR:\tUnable to install: mamba')
-    
-    # Check Python Libraries
-    libraries = ['gdown==4.7.1','busco==4.1.2','openjdk==20.0.0', 'nanoq==0.10.0', 'pandas==2.0.3',
-                 'biopython==1.81', 'tqdm==4.38.0', 'psutil==5.9.5', 'termcolor==2.3.0',
-                 'beautifulsoup4==4.12.2', 'fastqc==0.11.8', 'quast==5.2.0', 'nanostat==1.6.0',
-                 'flye==2.9.2', 'bbtools==37.62', 'metaeuk==6.a5d39d9', 'blast==2.14.1',
-                 'bwa==0.7.17', 'minimap2==2.26', 'pysam==0.21.0', 'samtools==1.17',
-                 'arcs==1.2.5', 'tigmint==1.2.10', 'abyss==2.3.7', 'racon==1.5.0', 'spades==3.15.3']
-    libraries_check(libraries)
-
-    # Check for specific Third-Party JAR Files with adjusted program_dict
-    program_dict = {"trimmomatic": ("https://github.com/usadellab/Trimmomatic",
-                                "trimmomatic-*.jar",
-                                "http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip"),
-                    "pilon": ("https://github.com/broadinstitute/pilon",
-                              "pilon-*.jar",
-                              "https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar")}
-    jar_paths_dict, _ = check_for_jars(program_dict, 'EGAP')
-
-    # Check Pipeline Third-Party Prerequisites
-    prerequisites = ["java", "fastqc", "quast.py", "busco", "samtools", "bwa",
-                     "makeblastdb", "blastn", "racon", "nanoq", "NanoStat",
-                     "spades.py", "tblastn", "flye", "minimap2"]
-    check_prereqs_installed(prerequisites)
-    ### TODO: ADD KELSEY'S PREREQUISITE: abyss-sealer
