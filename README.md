@@ -22,25 +22,30 @@ To clone the entire EGAP repository to the desired location and extract out the 
 git clone https://github.com/iPsychonaut/EGAP.git ~/EGAP
 ```
 
-## Usage
+## Setup
 It is recommended that you create a dedicated conda environment for the pipeline.
 ```bash
 conda create -y --name egap_env python=3.9 && conda activate egap_env
 ```
 
+Run the main setup module.
+```bash
+python EGAP_setup.py
+```
+
 Command Line Example:
 ```bash
-python EGAP_main.py --input_dir /path/to/folder --organism_kingdom STRING --genome_size INTEGER --primer_type STRING --org_data [same/different] --resource_use INTEGER --attempt_install [0/1]
+python EGAP_main.py -i /path/to/folder -k STRING -g INTEGER -p STRING -d [same/different] -r INTEGER -a [0/1]
 ```
 
 ### Command-Line Arguments
-- `--input_dir`: Path to the folder containing input data. This directory must have sub-folders named either 'illumina' (containing raw PE150 .fq.gz files and their matching MD5.txt file) or 'ont' (containing raw pass .fastq.gz files).
-- `--organism_kingdom`: Specifies the organism kingdom. Valid values are: Archaea, Bacteria, Fauna, Flora, Funga, or Protista.
-- `--genome_size`: Expected genome size in Mega-Bytes/Bases.
-- `--primer_type`: String representing the Illumina primer type to use with trimmomatic. Example: 'TruSeq3-PE'.
-- `--org_data`: Specifies whether the organism data is the same or different.
-- `--resource_use`: Integer value specifying resource usage.
-- `--attempt_install`: Flag to indicate if the installation should be attempted 0 = No (default); 1 = Yes.
+- `-i`, `--input_dir`: Path to the folder containing input data. This directory must have sub-folders named either 'illumina' (containing raw PE150 .fq.gz files and their matching MD5.txt file) or 'ont' (containing raw pass .fastq.gz files).
+- `-k`, `--organism_kingdom`: Specifies the organism kingdom. Valid values are: Archaea, Bacteria, Fauna, Flora, Funga, or Protista.
+- `-g`, `--genome_size`: Expected genome size in Mega-Bytes/Bases.
+- `-`, `--primer_type`: String representing the Illumina primer type to use with trimmomatic. Example: 'TruSeq3-PE'.
+- `-d`, `--organism_data`: Specifies whether the organism data is the same or different.
+- `-r`, `--resource_use`: Integer value specifying resource usage.
+- `-a`, `--attempt_install`: Flag to indicate if the installation should be attempted 0 = No (default); 1 = Yes.
 
 ## Main Functionalities
 - `get_env_dir`: Retrieves environment-related directories.
@@ -95,7 +100,7 @@ Necessary JAR Files for this module include (* = version):
 Running the main pipeline (EGAP_main.py) will attempt to install all of these prerequisites and jar files. This can be turned off by adjusting the default_install variable in EGAP_main.py.
 
 ```bash
-default_install = '0' # 0 = Attempt to install; 1 = Skip install
+default_install = '0' # 0 = Skip install; 1 = Attempt to install
 ```
 
 ## Contact Information
@@ -117,99 +122,158 @@ The following modules are designed to run independently:
 For a streamlined experience, users can execute the `EGAP_main` module, which will orchestrate the entire analysis pipeline, integrating functionalities from all modules.
 
 ### Prerequisites
-The EGAP pipeline has several software prerequisites. While the pipeline attempts to install them as part of the main execution process, users are advised to ensure that all required software tools are available on their system. The `check_tools` module aids in verifying and managing the presence of these prerequisites.
+The EGAP pipeline has several software prerequisites. While the pipeline attempts to install them as part of the main execution process, users are advised to ensure that all required software tools are available on their system. The `EGAP_setup` module aids in verifying and managing the presence of these prerequisites.
+
+### EGAP_setup.py
+
+#### Description
+This module is responsible for setting up the initial environment for the EGAP pipeline. It performs tasks such as:
+- Importing essential Python libraries like `os`, `re`, `tarfile`, `zipfile`, and `subprocess`.
+- Using `ThreadPoolExecutor` for possible parallel execution.
+- Ensuring that `mamba==1.5.0` is installed via a conda command.
+
+#### Usage
+To execute this module, run the following command:
+```
+python EGAP_setup.py
+```
 
 
-## EGAP Illumina Module
+### EGAP Main Pipeline
 
-### Description
-This module handles various operations related to Illumina data processing, including extraction, verification, trimming, and overall processing. Currently the pipeline can determine if the data is Single-End (SE) or Paired-END (PE); however it has only been tested with PE data; if you have SE data that can be tested please contact the author.
+#### Description
+This module serves as the main entry point for executing the entire EGAP pipeline. It performs tasks such as:
+- Providing a comprehensive command-line interface with various options like `--input_dir`, `-k`, `-g`, `-p`, `-d`, `-r`, and `-a`.
+- Requiring the `--input_dir` to contain specific sub-folders for Illumina and ONT data.
+- Orchestrating the execution of various steps and modules in the EGAP pipeline.
 
-### Main Functionalities
-- `md5_check`: Verifies the integrity of files using MD5 hashing.
-- `illumina_extract_and_check`: Manages the extraction and verification of Illumina data.
-- `trim_with_trimmomatic`: Trims Illumina reads using the Trimmomatic tool.
-- `process_illumina`: Orchestrates the processing of Illumina data.
-
-
-## EGAP ONT Module
-
-### Description
-This module focuses on the processing and assembly of Oxford Nanopore Technologies (ONT) sequencing data. It provides tools for combining raw data, assembling sequences using Flye, and overall ONT data management.
-
-### Main Functionalities
-- `ont_combine_fastq_gz`: Combines multiple fastq.gz files related to ONT data.
-- `assemble_ont_flye`: Assembles sequences using the Flye tool tailored for ONT data.
-- `process_ONT`: Manages the overall processing of ONT data.
+#### Usage
+To execute this module, use the following command-line example:
+```
+python EGAP_main.py -i /path/to/folder -k STRING -g INTEGER -p STRING -d [same/different] -r INTEGER -a [0/1]
+```
 
 
-## EGAP Cleaner Module
+### EGAP Tool Checker Module
 
-### Description
-This module is dedicated to cleaning and managing sequence data. It provides tools for creating BLAST databases, handling sequence chunks, running BLASTn operations, and cleaning FASTA files. Provided are model organisms (Assembled_Databases) for each of the major kingdoms, however this is not an extensive list; feel free to include other organisms of interest.
+#### Description
+This module performs various checks and setups to ensure that the EGAP pipeline can run smoothly. It is responsible for:
+- Importing a wide range of Python libraries, including system and third-party libraries.
+- Utilizing `ThreadPoolExecutor` for potential parallel execution.
+- A function named `get_resource_values` to convert user-defined resource percentages into usable CPU threads and RAM values.
 
-### Main Functionalities
-- `create_BLAST_db`: Creates a BLAST database for sequences.
-- `chunk_seq`: Divides sequences into manageable chunks or segments.
-- `handle_chunk`: Manages individual sequence chunks.
-- `run_blastn`: Conducts BLASTn operations on sequences.
-- `clean_dirty_fasta`: Cleans or sanitizes FASTA files to remove unwanted sequences or contaminants.
-
-
-## EGAP Pilon Polish Module
-
-### Description
-This module focuses on the polishing of ONT Flye assemblies using Illumina reads. It integrates tools like BWA, Samtools, and Pilon to achieve a polished assembly from raw reads.
-
-### Main Functionalities
-- `index_cleaned_ont_assembly`: Indexes a cleaned ONT Flye assembly using BWA.
-- `generate_illumina_sam`: Generates a SAM map of the cleaned ONT Flye de novo assembly using the trimmed Illumina paired forward & reverse reads.
-- `convert_sam_to_bam`: Converts a SAM file into a BAM file using Samtools.
-- `pilon_polish_assembly`: Polishes a cleaned ONT Flye assembly using Illumina Binary Alignment Map with Pilon.
-- `final_pilon_polish`: Main function that handles the polishing of cleaned ONT reads with trimmed Illumina reads.
+#### Usage
+To execute this module, run the following command:
+```
+python check_tools.py
+```
 
 
-## EGAP Quality Control (QC) Module
+### EGAP Logging Module
 
-### Description
-This module is dedicated to assessing the quality of sequencing data and assemblies. It integrates various quality control tools like QUAST, BUSCO, FastQC, and NanoStat.
+#### Description
+This utility module is focused on generating and managing log files within the EGAP pipeline. It performs tasks such as:
+- Importing Python libraries like `pathlib` and `os` for file and directory management.
+- Utilizing `termcolor` for colored terminal text and `datetime` for date and time operations.
+- Providing a function named `generate_log_file` that either creates a new log file or clears an existing one.
+- Another function `log_print` that prints messages to both the console and a log file.
 
-### Main Functionalities
-- `assess_with_quast`: Conducts an assessment of assemblies using QUAST.
-- `assess_with_busco`: Evaluates assemblies for the presence of universal single-copy orthologs using BUSCO.
-- `assess_with_fastqc`: Runs a quality assessment on raw sequencing reads using FastQC.
-- `assess_with_nanostat`: Provides statistics for Oxford Nanopore sequencing data using NanoStat.
+#### Usage
+To use the logging features in other modules, import this module and use its functions as needed.
 
+```python
+from log_print import log_print, generate_log_file
 
-## EGAP Tool Checker Module
+# Generating a log file
+generate_log_file("/path/to/log_file.log")
 
-### Description
-This module provides functionalities for checking, finding, and managing files and software prerequisites necessary for the operation of the main program.
-
-### Main Functionalities
-- `move_file_up`: Moves a specified file up in the directory hierarchy.
-- `get_md5`: Computes the MD5 hash for a given file.
-- `search_directory_for_file`: Searches within a directory for a specific file.
-- `find_file`: Finds a specific file within a directory or its subdirectories.
-- `get_env_dir`: Retrieves the directory of the current environment.
-- `libraries_check`: Checks for the presence of specific libraries.
-- `check_for_jars`: Checks for the presence of specific Java JAR files.
-- `check_prereqs_installed`: Checks if prerequisite software is installed.
+# Logging a message
+log_print("This is a message", "info")
+```
 
 
-## EGAP Logging Module
+### EGAP Cleaner Module
 
-### Description
-This module is dedicated to logging messages. It aids in recording progress, results, and any messages during the execution of the program. It offers dual logging capabilities - to the console and to a specified log file.
+#### Description
+This module focuses on cleaning up FASTA files and preparing them for further processing in the EGAP pipeline. It performs tasks such as:
+- Importing essential Python libraries like `os`, `subprocess`, `glob`, `random`, `tempfile`, and `shutil`.
+- Utilizing `pandas` for possible data manipulation.
+- Providing a command-line interface for specifying `--dirty_fasta`, `--output_dir`, and `--organism_kingdom`.
 
-### Main Functionalities
-- `generate_log_file`: Generates a log file to record progress and results.
-- `log_print`: Logs messages simultaneously to the console and the specified log file.
+#### Usage
+To execute this module, use the following command-line example:
+```
+python EGAP_cleaner.py --dirty_fasta /path/to/dirty.fasta --output_dir /path/to/folder --organism_kingdom STRING
+```
+The `--organism_kingdom` must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista.
+
+
+### EGAP Illumina Module
+
+#### Description
+This module is designed for handling Illumina sequencing data within the EGAP pipeline. It performs tasks such as:
+- Providing a command-line interface for specifying `--illumina_folder`, `--primer_type`, and `-r` (an integer parameter).
+- Requiring the `--illumina_folder` to contain raw Illumina `.fq.gz` files and their matching MD5.txt file.
+- Requiring the `--primer_type` to be a string that represents the Illumina primer type to use with trimmomatic.
+
+#### Usage
+To execute this module, use the following command-line example:
+```
+python EGAP_illumina.py -i /path/to/folder -p STRING -r INTEGER
+```
+
+
+### EGAP ONT Module
+
+#### Description
+This module is designed for handling Oxford Nanopore Technologies (ONT) sequencing data within the EGAP pipeline. It performs tasks such as:
+- Providing a command-line interface for specifying `--input_dir`, `-k`, `-g`, and `-r`.
+- Requiring the `-k`, `--organism_kingdom` to be one of the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista.
+- Importing a range of Python libraries for tasks like file handling, subprocess execution, and multithreading.
+
+#### Usage
+To execute this module, use the following command-line example:
+```
+python EGAP_ONT.py -i /path/to/folder -k STRING -g INTEGER -r INTEGER
+```
+
+
+### EGAP Pilon Polish Module
+
+#### Description
+This module is designed for genome polishing using Pilon. It typically uses both long-read (like ONT) and short-read (like Illumina) sequencing data for high-quality genome assembly. It performs tasks such as:
+- Providing a command-line interface for specifying `-oi`, `-if`, `-ir`, `-k`, and `-r`.
+- Requiring the `-k`, `--organism_kingdom` to be one of the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista.
+- Importing a range of Python libraries for tasks like file handling, subprocess execution, and multithreading.
+
+#### Usage
+To execute this module, use the following command-line example:
+```
+python EGAP_pilon_polish.py -oi /path/to/cleaned_ont_reads.fastq -if /path/to/forward_reads.fq -ir /path/to/reverse_reads.fq -k STRING -r INTEGER
+```
+
+
+### EGAP Quality Control (QC) Module
+
+#### Description
+This module is focused on quality control (QC) and assessment of genome assemblies within the EGAP pipeline. It performs tasks such as:
+- Importing a range of Python libraries like `BeautifulSoup` for parsing HTML/XML documents and `pandas` for data manipulation.
+- Providing a function named `assess_with_quast` to run QUAST on an assembly for quality assessment.
+- Utilizing custom functions like `log_print` and `generate_log_file` for logging, and `get_env_dir` for environment setup.
+
+#### Usage
+To execute this module, run the following command:
+```
+python EGAP_qc.py
+```
+
 
 
 ## Future Expansions
 - MAIN TODO: Integration of Kelsey's Slot Lab 'different organism' SPAdes assembly Racon polishing pipeline. This includes getting abyss-sealer working.
 - FASTQC TODO: If warning is in Overrepresented sequences AND?/OR? Adapter Content then there is likely a Failed Primers Trimming Error.
+- OVERALL TODO: Perform file removal to reduce data bloat.
+
 
 
 ## License
