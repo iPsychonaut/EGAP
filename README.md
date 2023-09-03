@@ -154,44 +154,6 @@ python EGAP_main.py -i /path/to/folder -k STRING -g INTEGER -p STRING -d [same/d
 ```
 
 
-### EGAP Tool Checker Module
-
-#### Description
-This module performs various checks and setups to ensure that the EGAP pipeline can run smoothly. It is responsible for:
-- Importing a wide range of Python libraries, including system and third-party libraries.
-- Utilizing `ThreadPoolExecutor` for potential parallel execution.
-- A function named `get_resource_values` to convert user-defined resource percentages into usable CPU threads and RAM values.
-
-#### Usage
-To execute this module, run the following command:
-```
-python check_tools.py
-```
-
-
-### EGAP Logging Module
-
-#### Description
-This utility module is focused on generating and managing log files within the EGAP pipeline. It performs tasks such as:
-- Importing Python libraries like `pathlib` and `os` for file and directory management.
-- Utilizing `termcolor` for colored terminal text and `datetime` for date and time operations.
-- Providing a function named `generate_log_file` that either creates a new log file or clears an existing one.
-- Another function `log_print` that prints messages to both the console and a log file.
-
-#### Usage
-To use the logging features in other modules, import this module and use its functions as needed.
-
-```python
-from log_print import log_print, generate_log_file
-
-# Generating a log file
-generate_log_file("/path/to/log_file.log")
-
-# Logging a message
-log_print("This is a message", "info")
-```
-
-
 ### EGAP Cleaner Module
 
 #### Description
@@ -203,9 +165,9 @@ This module focuses on cleaning up FASTA files and preparing them for further pr
 #### Usage
 To execute this module, use the following command-line example:
 ```
-python EGAP_cleaner.py --dirty_fasta /path/to/dirty.fasta --output_dir /path/to/folder --organism_kingdom STRING
+python EGAP_cleaner.py -i /path/to/dirty.fasta -o /path/to/folder -k STRING
 ```
-The `--organism_kingdom` must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista.
+The `-k`, `--organism_kingdom` must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista.
 
 
 ### EGAP Illumina Module
@@ -261,11 +223,27 @@ This module is focused on quality control (QC) and assessment of genome assembli
 - Providing a function named `assess_with_quast` to run QUAST on an assembly for quality assessment.
 - Utilizing custom functions like `log_print` and `generate_log_file` for logging, and `get_env_dir` for environment setup.
 
+
+### EGAP Tool Checker Module
+
+#### Description
+This module performs various checks and setups to ensure that the EGAP pipeline can run smoothly. It is responsible for:
+- Importing a wide range of Python libraries, including system and third-party libraries.
+- Utilizing `ThreadPoolExecutor` for potential parallel execution.
+- A function named `get_resource_values` to convert user-defined resource percentages into usable CPU threads and RAM values.
+
+
+### EGAP Logging Module
+
+#### Description
+This utility module is focused on generating and managing log files within the EGAP pipeline. It performs tasks such as:
+- Importing Python libraries like `pathlib` and `os` for file and directory management.
+- Utilizing `termcolor` for colored terminal text and `datetime` for date and time operations.
+- Providing a function named `generate_log_file` that either creates a new log file or clears an existing one.
+- Another function `log_print` that prints messages to both the console and a log file.
+
 #### Usage
-To execute this module, run the following command:
-```
-python EGAP_qc.py
-```
+To use the logging features in other modules, import this module and use its functions as needed.
 
 
 
