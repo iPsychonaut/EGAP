@@ -390,15 +390,15 @@ if __name__ == "__main__":
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
     
     # Generate BUSCO Database Dictionary
-    busco_db_dict = {'Archaea': [f'{environment_dir}/EGAP/BUSCO_Databases/archaea_odb10',
-                                 f'{environment_dir}/EGAP/BUSCO_Databases/euryarchaeota_odb10',],
-                     'Bacteria': [f'{environment_dir}/EGAP/BUSCO_Databases/actinobacteria_phylum_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/proteobacteria_odb10',],
-                     'Fauna': [f'{environment_dir}/EGAP/BUSCO_Databases/vertebrata_odb10',
-                               f'{environment_dir}/EGAP/BUSCO_Databases/arthropoda_odb10',],
-                     'Flora': [f'{environment_dir}/EGAP/BUSCO_Databases/eudicots_odb10',
-                               f'{environment_dir}/EGAP/BUSCO_Databases/liliopsida_odb10'],
-                     'Funga': [f'{environment_dir}/EGAP/BUSCO_Databases/basidiomycota_odb10',
-                               f'{environment_dir}/EGAP/BUSCO_Databases/agaricales_odb10'],
-                     'Protista': [f'{environment_dir}/EGAP/BUSCO_Databases/alveolata_odb10',
-                                  f'{environment_dir}/EGAP/BUSCO_Databases/euglenozoa_odb10']}
+    busco_db_dict = {'Archaea': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/archaea_odb10',
+                                 f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/euryarchaeota_odb10',],
+                     'Bacteria': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/actinobacteria_phylum_odb10',
+                                  f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/proteobacteria_odb10',],
+                     'Fauna': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/vertebrata_odb10',
+                               f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/arthropoda_odb10',],
+                     'Flora': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/eudicots_odb10',
+                               f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/liliopsida_odb10'],
+                     'Funga': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/basidiomycota_odb10',
+                               f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/agaricales_odb10'],
+                     'Protista': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/alveolata_odb10',
+                                  f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/euglenozoa_odb10']}
