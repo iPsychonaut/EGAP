@@ -9,13 +9,18 @@ Command Line Example:
 
 The --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
 """
+# Base Python Imports
 import os, subprocess, glob, random, tempfile, shutil
+
+# Required Python Imports
 import pandas as pd
 from Bio import SeqIO
 from Bio.Blast.Applications import NcbiblastnCommandline
 from tqdm import tqdm
+
+# Custom Python Imports
 from log_print import log_print, generate_log_file
-from check_tools import get_env_dir, move_file_up
+from check_tools import move_file_up
 
 # Function to create BLAST databases from .gbff.gz and .fna files
 def create_BLAST_db(database_dir, log_file):
@@ -29,7 +34,7 @@ def create_BLAST_db(database_dir, log_file):
     Returns:
         _ (list): List of organisms in database.
         db_name (str): Path to database directory.
-    """  
+    """
     # Find all .gbff.gz and .fna files in the directory
     gbff_files = glob.glob(database_dir + "/*.gbff.gz")
     fna_files = glob.glob(database_dir + "/*.fna")
@@ -221,12 +226,12 @@ def clean_dirty_fasta(dirty_fasta, OUTPUT_DIR, current_organism_kingdom, log_fil
     cumulative_removed_df = pd.DataFrame()
     
     # Generate Database Directories List
-    database_directories = [f"{install_path}/EGAP/Assembled_Databases/Archaea",
-                            f"{install_path}/EGAP/Assembled_Databases/Bacteria",
-                            f"{install_path}/EGAP/Assembled_Databases/Fauna",
-                            f"{install_path}/EGAP/Assembled_Databases/Flora",
-                            f"{install_path}/EGAP/Assembled_Databases/Funga",
-                            f"{install_path}/EGAP/Assembled_Databases/Protista"] 
+    database_directories = [f"{install_path}/EGAP/EGAP_Databases/Assembled_Databases/Archaea",
+                            f"{install_path}/EGAP/EGAP_Databases/Assembled_Databases/Bacteria",
+                            f"{install_path}/EGAP/EGAP_Databases/Assembled_Databases/Fauna",
+                            f"{install_path}/EGAP/EGAP_Databases/Assembled_Databases/Flora",
+                            f"{install_path}/EGAP/EGAP_Databases/Assembled_Databases/Funga",
+                            f"{install_path}/EGAP/EGAP_Databases/Assembled_Databases/Protista"] 
     
     # Rename final cleaned FASTA & Generate new path to deposit file in
     last_db = database_directories[-1:]
@@ -356,7 +361,7 @@ def clean_dirty_fasta(dirty_fasta, OUTPUT_DIR, current_organism_kingdom, log_fil
     cumulative_removed_csv = os.path.join(OUTPUT_DIR, "cumulative_removed_sequences.csv")
     if not cumulative_removed_df.empty:
         cumulative_removed_df.to_csv(cumulative_removed_csv, index=False)
-        cumulative_removed_csv = move_file_up(cumulative_removed_csv, log_file, move_bool = True)
+        cumulative_removed_csv = move_file_up(cumulative_removed_csv, move_bool = True)
         log_print(f"NOTE:\tAll removed sequences saved in {cumulative_removed_csv}", log_file)
     else:
         log_print(f"PASS:\tNo sequences were removed across all databases", log_file)
