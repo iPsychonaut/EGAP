@@ -106,7 +106,7 @@ from log_print import log_print, generate_log_file
 from EGAP_ONT import process_ONT
 from EGAP_illumina import process_illumina
 from EGAP_pilon_polish import final_pilon_polish
-from EGAP_qc import assess_with_fastqc, assess_with_quast, assess_with_busco
+from EGAP_qc import assess_with_fastqc, assess_with_quast, assess_with_compleasm
 
 # Main function to run the Entheome Pipeline developed by Ian
 def PILON_POLISH_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, ILLU_PRIMER_TYPE, PERCENT_RESOURCES, busco_db_dict, log_file):
@@ -182,11 +182,11 @@ def PILON_POLISH_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, IL
             ont_quast_thread.start()
             
             # Quality Control Check Pilon Polished Assembly with BUSCO agasint first database
-            first_busco_thread = Thread(target = assess_with_busco, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0]))
+            first_busco_thread = Thread(target = assess_with_compleasm, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0]))
             first_busco_thread.start()
             
             # Quality Control Check Pilon Polished Assembly with BUSCO agasint second database
-            second_busco_thread = Thread(target = assess_with_busco, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1]))
+            second_busco_thread = Thread(target = assess_with_compleasm, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1]))
             second_busco_thread.start()
 
             # Register that ONT Folder has been processed
@@ -223,11 +223,11 @@ def PILON_POLISH_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, IL
         pilon_quast_thread.start()
 
         # Quality Control Check Pilon Polished Assembly with BUSCO agasint first database
-        first_pilon_busco_thread = Thread(target = assess_with_busco, args = (pilon_output, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0]))
+        first_pilon_busco_thread = Thread(target = assess_with_compleasm, args = (pilon_output, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0]))
         first_pilon_busco_thread.start()
 
         # Quality Control Check Pilon Polished Assembly with BUSCO agasint the second database
-        second_pilon_busco_thread = Thread(target = assess_with_busco, args = (pilon_output, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1]))
+        second_pilon_busco_thread = Thread(target = assess_with_compleasm, args = (pilon_output, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1]))
         second_pilon_busco_thread.start()   
     else:
         log_print('ERROR:\tcleaned_ont_assembly or fq_paired_list not found', log_file)
