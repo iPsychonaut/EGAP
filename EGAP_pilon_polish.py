@@ -15,7 +15,7 @@ import os, subprocess, argparse, multiprocessing, psutil, math, shutil
 # Custom Python Imports
 from check_tools import get_env_dir
 from EGAP_setup import download_and_setup, find_folder
-from EGAP_qc import assess_with_quast, assess_with_busco
+from EGAP_qc import assess_with_quast, assess_with_compleasm
 from log_print import log_print, generate_log_file
 from threading import Thread
 
@@ -289,11 +289,11 @@ def final_pilon_polish(cleaned_ont_assembly, illumina_reads_list, CURRENT_ORGANI
         quast_thread.start()
           
         # Quality Control Check Pilon Polished Assembly with BUSCO agasint first database
-        first_pilon_busco_thread = Thread(target = assess_with_busco, args = (pilon_output, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0]))
+        first_pilon_busco_thread = Thread(target = assess_with_compleasm, args = (pilon_output, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0]))
         first_pilon_busco_thread.start()
 
         # Quality Control Check Pilon Polished Assembly with BUSCO agasint the second database
-        second_pilon_busco_thread = Thread(target = assess_with_busco, args = (pilon_output, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1]))
+        second_pilon_busco_thread = Thread(target = assess_with_compleasm, args = (pilon_output, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1]))
         second_pilon_busco_thread.start()
             
         # Wait for all QC threads to finish
