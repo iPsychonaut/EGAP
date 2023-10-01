@@ -72,6 +72,7 @@ Necessary Python LIbraries for this module include:
 - samtools v1.17
 - bwa v0.7.17
 - busco v5.5.0
+- compleasm v0.2.2
 - blast v2.14.1
   - makeblastdb
   - blastn
