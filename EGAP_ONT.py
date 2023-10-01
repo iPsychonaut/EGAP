@@ -21,7 +21,7 @@ from Bio.Blast.Applications import NcbiblastnCommandline
 # Custom Python Imports
 from log_print import log_print, generate_log_file
 from check_tools import get_env_dir, move_file_up
-from EGAP_qc import assess_with_quast, assess_with_busco, assess_with_nanostat
+from EGAP_qc import assess_with_quast, assess_with_compleasm, assess_with_nanostat
 from EGAP_cleaner import clean_dirty_fasta
 from EGAP_setup import download_busco_dbs, download_and_setup, find_folder
 
@@ -188,37 +188,17 @@ def process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOU
 ## QUALITY CONTROL CHECK AREA
     if __name__ != "__main__":
         pass
-    else:
-        # # Cleanup ONT assembly bulk files and keep only the items_to_keep found in the ONT_FOLDER
-        # items_to_keep = [nanostat_dir.replace('_ont_combined_NanoStat',''), nanostat_dir,
-        #                   nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][0].split("/")[-1]}_busco'),
-        #                   nanostat_dir.replace('_ont_combined_NanoStat',f'_ont_flye_filtered_{busco_db_dict[CURRENT_ORGANISM_KINGDOM][1].split("/")[-1]}_busco'),
-        #                   nanostat_dir.replace('_ont_combined_NanoStat','_ont_flye_filtered_quast'),
-        #                   combined_ont_fastq, ont_flye_assembly,
-        #                   cleaned_ont_assembly, removed_csv,
-        #                   f'{ONT_FOLDER}/{base_name}_ont_flye_bwa_aligned.bam']
-        # chopping_block = os.listdir(ONT_FOLDER)
-        # chopping_block = [os.path.join(ONT_FOLDER, item) for item in chopping_block]
-            
-        # for item in chopping_block:
-        #     item_path = os.path.join(ONT_FOLDER, item)
-        #     if item_path not in items_to_keep:
-        #         if os.path.isfile(item_path):
-        #             os.remove(item_path)
-        #         elif os.path.isdir(item_path):
-        #             shutil.rmtree(item_path)
-        
-        print(busco_db_dict)
+    else:       
         # Quality Control Check Cleaned ONT Assembly with QUAST
         quast_thread = Thread(target = assess_with_quast, args = (cleaned_ont_assembly, log_file, cpu_threads))
         quast_thread.start()
           
         # Quality Control Check Pilon Polished Assembly with BUSCO agasint first database
-        first_busco_thread = Thread(target = assess_with_busco, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0]))
+        first_busco_thread = Thread(target = assess_with_compleasm, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0].split(".")[0]))
         first_busco_thread.start()
         
         # Quality Control Check Pilon Polished Assembly with BUSCO agasint second database
-        second_busco_thread = Thread(target = assess_with_busco, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1]))
+        second_busco_thread = Thread(target = assess_with_compleasm, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1].split(".")[0]))
         second_busco_thread.start()
             
         # Wait for all QC threads to finish
@@ -282,7 +262,8 @@ if __name__ == "__main__":
                                   'agaricales_odb10'],
                      'Protista': ['alveolata_odb10',
                                   'euglenozoa_odb10']}
-    busco_db_dict = download_busco_dbs(busco_db_dict)
+    base_install_dir = "/mnt/e/Entheome/EGAP"
+    busco_db_dict = download_busco_dbs(base_install_dir)
     
     # Run main ONT Cleaning function
     cleaned_ont_assembly = process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOURCES, busco_db_dict, log_file)
