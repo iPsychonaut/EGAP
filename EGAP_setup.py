@@ -352,6 +352,37 @@ def download_assembled_dbs(file_id, base_install_dir):
         # Remove zip file after downloading
         os.remove(zip_output_path)
 
+def download_and_extract_compleasm(base_install_dir):
+    """
+    Download and extract compleasm and its dependencies.
+
+    Args:
+        base_install_dir (str): Path of the directory the module is installed in.
+    """
+    print(f'UNLOGGED:\tAttempting to download and extract compleasm...')
+    
+    # Specify the download URL and output path
+    compleasm_url = "https://github.com/huangnengCSU/compleasm/releases/download/v0.2.2/compleasm-0.2.2_x64-linux.tar.bz2"
+    tar_output_path = os.path.join(base_install_dir, "compleasm-0.2.2_x64-linux.tar.bz2")
+    
+    # Download compleasm
+    response = requests.get(compleasm_url)
+    response.raise_for_status()  # Raise an exception for HTTP errors
+    
+    # Save the downloaded content to a .tar.bz2 file
+    with open(tar_output_path, 'wb') as f:
+        f.write(response.content)
+    
+    # Extract the .tar.bz2 file
+    extract_dir = os.path.join(base_install_dir, "compleasm")
+    os.makedirs(extract_dir, exist_ok=True)
+    with tarfile.open(tar_output_path, 'r:bz2') as tar:
+        tar.extractall(path=extract_dir)
+    
+    # Remove the .tar.bz2 file after extraction
+    os.remove(tar_output_path)
+    print(f'UNLOGGED PASS:\tSuccessfully downloaded and extracted compleasm to {extract_dir}')
+
 # Function to ensure Python libraries are installed for base_install_dir
 def setup_module(base_install_dir, python_libraries, java_program_dict, prereq_list):
     """
@@ -389,6 +420,9 @@ def setup_module(base_install_dir, python_libraries, java_program_dict, prereq_l
     
     # Download the assembled databases for cleaning
     download_assembled_dbs(assembled_db_zip_file_id, base_install_dir)
+    
+    # Download and install compleasm
+    download_and_extract_compleasm(base_install_dir)
     
     print(f'UNLOGGED:\t Completed {base_install_dir} setup successfully')
 
