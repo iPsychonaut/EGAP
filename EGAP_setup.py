@@ -435,7 +435,7 @@ if __name__ == "__main__":
                         'bbtools==37.62', 'metaeuk==6.a5d39d9', 'blast==2.14.1', 'bwa==0.7.17',
                         'minimap2==2.26', 'pysam==0.21.0', 'samtools==1.17', 'arcs==1.2.5',
                         'tigmint==1.2.10', 'abyss==2.3.7', 'racon==1.5.0', 'spades==3.15.3',
-                        'gdown==4.7.1', 'psutil==5.9.5']
+                        'gdown==4.7.1', 'psutil==5.9.5', 'compleasm==0.2.2']
     java_program_dict = {"trimmomatic": "http://www.usadellab.org/cms/uploads/supplementary/Trimmomatic/Trimmomatic-0.39.zip",
                          "pilon": "https://github.com/broadinstitute/pilon/releases/download/v1.24/pilon-1.24.jar"}
     prereq_list = ["java", "fastqc", "quast.py", "busco", "samtools", "bwa",
