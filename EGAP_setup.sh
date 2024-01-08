@@ -77,18 +77,17 @@ chmod +x Compleasm/compleasm_kit/compleasm.py
 rm ./compleasm-0.2.2_x64-linux.tar.bz2
 
 # Get the absolute path of the directory where this script is located
-echo -e "\e[36mUpdating ~/.bashrc...\e[0m"
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+# echo -e "\e[36mUpdating ~/.bashrc...\e[0m"
+# SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 # Add exports to .bashrc for future use
-echo "export GENEMARK_PATH=$SCRIPT_DIR/GeneMark/gmes_linux_64_4" >> ~/.bashrc
-echo "export FUNANNOTATE_DB=$SCRIPT_DIR/EGAP_Databases/Funannotate_Databases" >> ~/.bashrc
+# echo "export GENEMARK_PATH=$SCRIPT_DIR/GeneMark/gmes_linux_64_4" >> ~/.bashrc
+# echo "export FUNANNOTATE_DB=$SCRIPT_DIR/EGAP_Databases/Funannotate_Databases" >> ~/.bashrc
 
 # Add aliases to .bashrc for easy access
-echo "alias trimmomatic='java -jar $SCRIPT_DIR/Trimmomatic-0.39/Trimmomatic-0.39.jar'" >> ~/.bashrc
-echo "alias pilon='java -jar $SCRIPT_DIR/Pilon/pilon-1.24.jar'" >> ~/.bashrc
-echo "alias compleasm='python $SCRIPT_DIR/Compleasm/compleasm_kit/compleasm.py'" >> ~/.bashrc
+# echo "alias pilon='java -jar $SCRIPT_DIR/Pilon/pilon-1.24.jar'" >> ~/.bashrc
+# echo "alias compleasm='python $SCRIPT_DIR/Compleasm/compleasm_kit/compleasm.py'" >> ~/.bashrc
 
 # Source .bashrc to apply the changes
-echo -e "\e[33mPlease run 'source ~/.bashrc' to apply alias changes.\e[0m"
+echo -e "\e[33mPlease run 'conda activate entheome_env' to begin processing.\e[0m"
 echo -e "\e[32mEntheome pipeline set-up complete.\e[0m"
