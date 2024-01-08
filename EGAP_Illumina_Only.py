@@ -11,7 +11,7 @@ The -i, --input_folder must have input FASTQ.GZ file, matching primers.txt and I
 The -r, --resources Percentage of resources to use (0.01-1.00; default: 0.2) 
 
 """
-import os, subprocess, multiprocessing, math, platform, argparse
+import os, subprocess, multiprocessing, math, platform, argparse, gzip, shutil
 from datetime import datetime
 
 # Global output_area variable
@@ -230,14 +230,18 @@ def find_fq_files(input_folder):
     for file in os.listdir(input_folder):
         file_path = os.path.join(input_folder, file)
 
-        # Check if the file ends with '_1.fq' or '_2.fq'
-        if file.endswith('_1.fq'):
-            fq_files['_1.fq'] = file_path
-        elif file.endswith('_2.fq'):
-            fq_files['_2.fq'] = file_path
+        # Check if the file ends with '_1.fq.gz' or '_2.fq.gz' and unzip it
+        for end in ['_1.fq', '_2.fq']:
+            if file.endswith(end + '.gz'):
+                with gzip.open(file_path, 'rb') as f_in:
+                    with open(file_path[:-3], 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                fq_files[end] = file_path[:-3]
+            elif file.endswith(end):
+                fq_files[end] = file_path
 
-    # Convert the dictionary to a list and return
     return [fq_files['_1.fq'], fq_files['_2.fq']]
+
 
 def find_file(filename):
     """
@@ -323,30 +327,38 @@ def trimmomatic_prep(input_fq_list):
     trimmo_r_pair_path = input_fq_list[1].replace('_2.fq','_reverse_paired.fq')
     trimmo_r_unpair_path = input_fq_list[1].replace('_2.fq','_reverse_unpaired.fq')
     
-    # Default path to Trimmomatic adapters
+    # Default path to Trimmomatic paths
+    default_trimmo_path = "./Trimmomatic-0.39/trimmomatic-0.39.jar"
     default_trimmo_adapters_path = "./Trimmomatic-0.39/adapters/TruSeq3-PE.fa"
     
     if not os.path.exists(default_trimmo_adapters_path):
         # Perform a search for the file TruSeq3-PE.fa
         trimmo_adapters_path = find_file("TruSeq3-PE.fa", "/")
-        if trimmo_adapters_path is None:
+        trimmo_path = find_file("trimmomatic-0.39.jar","/")
+        if trimmo_adapters_path is None or trimmo_path is None:
             # try:
             drives = find_drives()
             for drive in drives:
                 for root, dirs, _ in os.walk(drive):
                     if 'Trimmomatic-0.39' in dirs:
+                        trimmo_path = os.path.join(root, 'Trimmomatic-0.39/trimmomatic-0.39.jar')
                         trimmo_adapters_path =  os.path.join(root, 'Trimmomatic-0.39/adapters/TruSeq3-PE.fa')
             # except:
             #     raise FileNotFoundError("Trimmomatic adapters file not found")
     else:
+        trimmo_path = default_trimmo_path
         trimmo_adapters_path = default_trimmo_adapters_path
     
+    
     # Make variables for other commands as needed: {trimmo_adapters_path}:{}:{}:{}:{}, SLIDINGWINDOW, MINLEN
-    trimmo_cmd = ["trimmomatic", "PE", "-phred33", "-threads", str(CPU_THREADS),
-                  input_fq_list[0], input_fq_list[1],
-                  trimmo_f_pair_path, trimmo_f_unpair_path,
-                  trimmo_r_pair_path, trimmo_r_unpair_path,
-             	  f"ILLUMINACLIP:{trimmo_adapters_path}:2:30:10:11 SLIDINGWINDOW:50:25 MINLEN:125"]
+    # Joining command list into a single string
+    trimmo_cmd = f"java -jar {trimmo_path} PE -phred33 -threads {CPU_THREADS} " \
+                f"{input_fq_list[0]} {input_fq_list[1]} " \
+                f"{trimmo_f_pair_path} {trimmo_f_unpair_path} " \
+                f"{trimmo_r_pair_path} {trimmo_r_unpair_path} " \
+                f"ILLUMINACLIP:{trimmo_adapters_path}:2:30:10:11 SLIDINGWINDOW:50:25 MINLEN:125"
+
+    # Executing the command
     _ = run_subprocess_cmd(trimmo_cmd, True)
     
     return trimmo_f_pair_path, trimmo_r_pair_path
@@ -578,15 +590,33 @@ def qc_checks(scaffolded_assmebly_path):
                  scaffolded_assmebly_path]
     _ = run_subprocess_cmd(quast_cmd, True)
     
+    # Default path to Compleasm
+    default_compleasm_path = "./Compleasm/compleasm_kit/compleasm.py" 
+    
+    if not os.path.exists(default_compleasm_path):
+        # Perform a search for the file compleasm.py
+        compleasm_path = find_file("compleasm.py", "/")
+        if compleasm_path is None:
+            # try:
+            drives = find_drives()
+            for drive in drives:
+                for root, dirs, _ in os.walk(drive):
+                    if 'Compleasm' in dirs:
+                        compleasm_path = os.path.join(root, 'compleasm_kit/compleasm.py')
+            # except:
+            #     raise FileNotFoundError("Compleasm python file not found")
+    else:
+        compleasm_path = default_compleasm_path
+    
     basidio_out = scaffolded_assmebly_path.replace(".fasta","_compleasm_basidiomycota")
-    compleasm_basidio_cmd = ["compleasm", "run", "-a", scaffolded_assmebly_path,
+    compleasm_basidio_cmd = ["python",compleasm_path, "run", "-a", scaffolded_assmebly_path,
                              "-o", basidio_out,
                              "-l", "basidiomycota",
                              "-t", str(CPU_THREADS)]
     _ = run_subprocess_cmd(compleasm_basidio_cmd, True)
     
     agaricales_out = scaffolded_assmebly_path.replace(".fasta","_compleasm_agaricales")
-    compleasm_agaricales_cmd = ["compleasm", "run", "-a", scaffolded_assmebly_path,
+    compleasm_agaricales_cmd = ["python",compleasm_path, "run", "-a", scaffolded_assmebly_path,
                                 "-o", agaricales_out,
                                 "-l", "agaricales",
                                 "-t", str(CPU_THREADS)]
