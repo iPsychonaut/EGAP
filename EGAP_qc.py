@@ -4,12 +4,12 @@ Created on Mon Jul 17 11:46:13 2023
 
 @author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
 """
-import os, subprocess, glob, csv, re, zipfile, multiprocessing, math, psutil, argparse, shutil
+import os, subprocess, csv, re, zipfile, multiprocessing, math, psutil, argparse
 import pandas as pd
-from threading import Thread
-from bs4 import BeautifulSoup
 from log_print import log_print, generate_log_file
-from check_tools import get_env_dir
+from check_tools import get_env_dir, find_file, find_drives
+
+from EGAP_setup import download_and_setup, find_folder
 
 # Function to run QUAST on an assembly
 def assess_with_quast(assembly_file_path, log_file, cpu_threads):
@@ -24,7 +24,7 @@ def assess_with_quast(assembly_file_path, log_file, cpu_threads):
     Returns:
         quast_dir (str): Path to the folder containing the QUAST output data.
     """
-    log_print(f'QUAST Analysis of {assembly_file_path} without reference...', log_file)
+    log_print(f'QUAST Analysis of {os.path.basename(assembly_file_path)} without reference...', log_file)
     quast_dir = assembly_file_path.replace('.fasta','_quast')
     summary_file_name = os.path.join(quast_dir, "report.tsv")
 
@@ -38,7 +38,7 @@ def assess_with_quast(assembly_file_path, log_file, cpu_threads):
         # Check if report file exists
         if not os.path.isfile(summary_file_name):
             # Generate quast command
-            quast_command = ["quast.py",
+            quast_command = ["quast",
                              "-t", str(cpu_threads),
                              "-o", quast_dir,
                              assembly_file_path]
@@ -84,96 +84,11 @@ def assess_with_quast(assembly_file_path, log_file, cpu_threads):
     if contigs_10k > 0.8 * total_contigs and N50 > 100000:
         log_print(f"PASS:\tHigh-quality assembly based on QUAST stats: {contigs_10k} contigs > 80% of total contigs; N50: {N50} > 100000", log_file)
     elif contigs_10k > 0.5 * total_contigs and N50 > 50000:
-        log_print(f"WARN:\tModerate-quality assembly based on QUAST stats: {contigs_10k} contigs > 50% of total contigs; N50: {N50} > 50000", log_file)
+        log_print(f"NOTE:\tModerate-quality assembly based on QUAST stats: {contigs_10k} contigs > 50% of total contigs; N50: {N50} > 50000", log_file)
     else:
         log_print(f"ERROR:\tLow-quality assembly based on QUAST stats: {contigs_10k} contigs; N50: {N50}", log_file)    
 
     return quast_dir
-
-# Function to check with BUSCO against '/path/to/database_dir/'
-def assess_with_busco(input_fasta, log_file, database_dir):
-    """
-    Quality Control Check of an organism sequence with a provided BUSCO Database.
-    
-    Args:
-        input_fasta (str): Path to the FASTA file to be analyzed.
-        log_file (obj): Path to the log file where the analysis progress and results will be stored.
-        database_dir (str): Path to Database for comparison against the input FASTA file.
-    
-    Returns:
-        busco_output (str): Path to the folder containing the BUSCO output data.
-    """
-    log_print(f'BUSCO Analysis of {input_fasta} against {database_dir}...', log_file)
-    base_db = database_dir.split('/')[-1]
-    input_dir = os.path.dirname(input_fasta)
-    base_name = os.path.basename(input_fasta)
-    busco_output = base_name.replace('.fasta',f"_{base_db}_busco")
-    database_name = os.path.basename(database_dir.split('.')[0])
-    
-    # Change the working directory to the output directory
-    os.chdir(input_dir)
-    
-    # Generate BUSCO command
-    busco_cmd = ["busco",
-                 "-i", input_fasta,
-                 "-l", database_dir,
-                 "-o", busco_output,
-                 "-m", "geno", "-f", "--offline"]
-    log_print(f"CMD:\t{' '.join(busco_cmd)}", log_file)
-
-    # Check summary file
-    summary_file_name = os.path.join(input_dir, busco_output,
-                                        f"short_summary.specific.{database_name}.{os.path.basename(input_fasta.replace('.fasta',''))}_{database_name}_busco.txt")
-    if os.path.isfile(summary_file_name):
-        log_print(f"PASS:\tOutput summary file already exists: {summary_file_name}", log_file)
-    else:
-    # Run BUSCO if no summary file is found
-        busco_result = subprocess.run(busco_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        # Check if BUSCO ran successfully
-        if busco_result.returncode != 0:
-            log_print(f"ERROR:\t{busco_result.stderr}", log_file)
-            return busco_output
-
-    # Establish Summary file and key varibles
-    completeness = 0
-    busco_stats = {}
-    
-    # Define the regex patterns for the values we're interested in
-    complete_pattern = re.compile(r"C:(\d+.\d+)%")
-    single_copy_pattern = re.compile(r"S:(\d+.\d+)%")
-    duplicated_pattern = re.compile(r"D:(\d+.\d+)%")
-    n_count_pattern = re.compile(f"n:(\d+.\d+)")
-
-    # Iterate over the Summary file and collect data for processing
-    with open(summary_file_name, 'r') as f:
-        for line in f:
-            if "C:" in line:
-                # Parse the line to extract the values
-                completeness = re.search(complete_pattern, line)
-                single_copy = re.search(single_copy_pattern, line)
-                duplicated = re.search(duplicated_pattern, line)
-                n_count = re.search(n_count_pattern, line)
-                
-                # If we found the values, add them to our stats dictionary
-                if completeness:
-                    busco_stats['Completeness'] = float(completeness.group(1))
-                if single_copy:
-                    busco_stats['Single copy'] = float(single_copy.group(1))
-                if duplicated:
-                    busco_stats['Duplicated'] = float(duplicated.group(1))
-                if n_count:
-                    busco_stats['N count'] = float(n_count.group(1))
-    
-    # Logic for BUSCO PASS-WARN-ERROR
-    if busco_stats['Completeness'] < 75:
-        log_print(f"ERROR:\t{base_db} BUSCO completeness (n={busco_stats['N count']}) {busco_stats['Completeness']}% < 75%; S: {busco_stats['Single copy']}%; D: {busco_stats['Duplicated']}%", log_file)
-    elif busco_stats['Completeness'] >= 75 and busco_stats['Completeness'] < 85:
-        log_print(f"WARN:\t{base_db} BUSCO completeness (n={busco_stats['N count']}) {busco_stats['Completeness']}% >= 75%; S: {busco_stats['Single copy']}%; D: {busco_stats['Duplicated']}%", log_file)
-    else:
-        log_print(f"PASS:\t{base_db} BUSCO completeness (n={busco_stats['N count']}) {busco_stats['Completeness']}% >= 85%; S: {busco_stats['Single copy']}%; D: {busco_stats['Duplicated']}%", log_file)
-    
-    return busco_output
 
 # Function to run FastQC on a provided sequence file an produce a fastqc_df from the summary.txt
 def assess_with_fastqc(sequence_file, fastqc_dir, log_file, cpu_threads):
@@ -189,7 +104,7 @@ def assess_with_fastqc(sequence_file, fastqc_dir, log_file, cpu_threads):
     Returns:
         fastqc_dir (str): Path to the folder contaiing the FASTQC ouput data.
     """
-    log_print(f"Running FastQC Analysis on {sequence_file}...", log_file)
+    log_print(f"Running FastQC Analysis on {os.path.basename(sequence_file)}...", log_file)
     if not os.path.exists(fastqc_dir):
         os.makedirs(fastqc_dir)
     
@@ -245,18 +160,16 @@ def assess_with_fastqc(sequence_file, fastqc_dir, log_file, cpu_threads):
     if not fastqc_df.empty:
         log_print(f"PASS:\tFastQC completed for {sequence_file}:", log_file)
         status_counts = fastqc_df['status'].value_counts()
-        pass_count = status_counts.get('PASS', 0)
         warn_count = status_counts.get('WARN', 0)
-        error_count = status_counts.get('ERROR', 0)
         
         # TODO: If warning is in Overrepresented sequences AND?/OR? Adapter Content then there is likely a Failed Primers Trimming Error
         # Rules for Three (3) Buckets: PASS, WARN, ERROR
-        if warn_count >= 3:
-            log_print(f'ERROR:\tFastQC Count Exceeded limit (3): {warn_count} data requires review', log_file)
-        elif warn_count == 2:
-             log_print(f'WARN:\tFastQC Count Approaching limit (3): {warn_count}. {sequence_file} is acceptable; should be reviewed', log_file)
-        elif warn_count == 1:
+        if warn_count == 1:
              log_print(f'PASS:\tFastQC Count: {warn_count}. {sequence_file} is acceptable', log_file)
+        elif warn_count < 3:
+             log_print(f'WARN:\tFastQC Count Approaching limit (3): {warn_count}. {sequence_file} is acceptable; should be reviewed', log_file)
+        elif warn_count > 3:
+            log_print(f'ERROR:\tFastQC Count Exceeded limit (3): {warn_count} data requires review', log_file)
         else:
             log_print(f'PASS:\tFastQC: {sequence_file} is acceptable', log_file)
     
@@ -272,7 +185,7 @@ def assess_with_nanostat(input_fastq, cpu_threads, log_file):
         cpu_threads (int): Number of CPU threads to be used by NanoStat.
         log_file (obj): Path to the log file where the analysis progress and results will be stored.
     """
-    log_print(f"Running NanoStat Analysis on {input_fastq}...", log_file)
+    log_print(f"Running NanoStat Analysis on {os.path.basename(input_fastq)}...", log_file)
     nanostat_dir = input_fastq.replace('.fastq','_NanoStat')
     csv_path = os.path.join(nanostat_dir, "nanostat_results.csv")
     
@@ -330,10 +243,10 @@ def assess_with_nanostat(input_fastq, cpu_threads, log_file):
     n50_length = float(loaded_df["Read length N50"].iloc[0].replace(',', ''))
     if n50_length >= 7000:
         log_print(f'PASS:\tRead length N50 meets the criteria of at least 7000bp: {n50_length}', log_file)
-    elif n50_length >= 5000:
-        log_print(f'WARN:\tRead length N50 is in the warning range of at least 5000bp {n50_length}', log_file)
+    elif n50_length >= 3500:
+        log_print(f'WARN:\tRead length N50 is in the warning range of at least 3500bp {n50_length}', log_file)
     else:
-        log_print(f'ERROR:\tRead length N50 does not meet the minimum criteria of at least 5000bp: {n50_length}', log_file)
+        log_print(f'ERROR:\tRead length N50 does not meet the minimum criteria of at least 3500bp: {n50_length}', log_file)
 
     # Check for Percentage of reads above Q10
     percentage_q10 = float(loaded_df[">Q10"].iloc[0].split(" ")[1].strip("()%"))
@@ -346,6 +259,116 @@ def assess_with_nanostat(input_fastq, cpu_threads, log_file):
         
     return nanostat_dir
 
+def assess_with_compleasm(input_fasta, log_file, database_dir, compleasm_threads):
+    """
+    Quality Control Check of an organism sequence with a provided compleasm Database.
+    
+    Args:
+        input_fasta (str): Path to the FASTA file to be analyzed.
+        log_file (obj): Path to the log file where the analysis progress and results will be stored.
+        database_dir (str): Path to Database (lineage) for comparison against the input FASTA file.
+    
+    Returns:
+        compleasm_output (str): Path to the folder containing the compleasm output data.
+    """
+    log_print(f'Compleasm Analysis of {os.path.basename(input_fasta)} against {database_dir.split("/")[-1]}...', log_file)
+    
+    # Default path to Compleasm
+    default_compleasm_path = "./Compleasm/compleasm_kit/compleasm.py" 
+    
+    if not os.path.exists(default_compleasm_path):
+        # Perform a search for the file compleasm.py
+        compleasm_path = find_file("compleasm.py")
+        if compleasm_path is None:
+            # try:
+            drives = find_drives()
+            for drive in drives:
+                for root, dirs, _ in os.walk(drive):
+                    if 'Compleasm' in dirs:
+                        compleasm_path = os.path.join(root, 'compleasm_kit/compleasm.py')
+            # except:
+            #     raise FileNotFoundError("Compleasm python file not found")
+    else:
+        compleasm_path = default_compleasm_path
+    
+    base_db = database_dir.split('/')[-1]
+    input_dir = os.path.dirname(input_fasta)
+    base_name = os.path.basename(input_fasta)
+    compleasm_output = base_name.replace('.fasta',f"_{base_db}_compleasm")
+    
+    # Extracting the lineage name from the database directory path
+    lineage_name = os.path.basename(database_dir)
+    
+    # Setting output directory name based on input fasta name
+    base_name = os.path.basename(input_fasta)
+    compleasm_output = os.path.join(os.path.dirname(input_fasta), base_name.replace('.fasta', f"_{lineage_name}_compleasm"))
+    
+    # Generate compleasm command
+    compleasm_cmd = ["python", compleasm_path, "run",
+                     "-a", input_fasta,
+                     "-o", compleasm_output,
+                     "-l", lineage_name,
+                     "-t", str(compleasm_threads)]
+    log_print(f"CMD:\t{' '.join(compleasm_cmd)}", log_file)
+ 
+    # Check summary file
+    summary_file_name = os.path.join(input_dir, compleasm_output, "summary.txt")
+    if os.path.isfile(summary_file_name):
+        log_print(f"PASS:\tOutput summary file already exists: {summary_file_name}", log_file)
+    else:
+        # Run compleasm
+        compleasm_result = subprocess.run(compleasm_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Check if compleasm ran successfully
+        if compleasm_result.returncode != 0:
+            log_print(f"ERROR:\t{compleasm_result.stderr.decode()}", log_file)
+            return compleasm_output
+        
+    # Establish Summary file and key varibles
+    compleasm_stats = {}
+    
+    # Define the regex patterns for the values we're interested in
+    single_copy_pattern = re.compile(r"S:(\d+.\d+)%, \d+")
+    duplicated_pattern = re.compile(r"D:(\d+.\d+)%, \d+")
+    fragmented_pattern = re.compile(r"F:(\d+.\d+)%, \d+")
+    incomplete_pattern = re.compile("I:(\d+.\d+)%, \d+")
+    missing_pattern = re.compile("M:(\d+.\d+)%, \d+")
+    n_count_pattern = re.compile("N:(\d+)")
+    
+    with open(summary_file_name, "r") as f:
+        for line in f:
+            # Parse the line to extract the values
+            single_copy = re.search(single_copy_pattern, line)
+            duplicated = re.search(duplicated_pattern, line)
+            fragmented = re.search(fragmented_pattern, line)
+            incomplete = re.search(incomplete_pattern, line)
+            missing = re.search(missing_pattern, line)
+            n_count = re.search(n_count_pattern, line)
+            
+            # If we found the values, add them to our stats dictionary
+            if single_copy:
+                compleasm_stats['Single copy'] = float(single_copy.group(1))
+            if duplicated:
+                compleasm_stats['Duplicated'] = float(duplicated.group(1))
+            if fragmented:
+                compleasm_stats['Fragmented'] = float(fragmented.group(1))
+            if incomplete:
+                compleasm_stats['Incomplete'] = float(incomplete.group(1))
+            if missing:
+                compleasm_stats['Missing'] = float(missing.group(1))
+            if n_count:
+                compleasm_stats['N_count'] = int(n_count.group(1))
+        compleasm_stats['Completeness'] = round(compleasm_stats['Single copy'] + compleasm_stats['Duplicated'],2)
+    
+        # Logic for COMPLEASM PASS-WARN-ERROR
+        if compleasm_stats['Completeness'] < 75:
+            log_print(f"ERROR:\t{base_db} compleasm BUSCO completeness (n={compleasm_stats['N_count']}) {compleasm_stats['Completeness']}% < 75%; S: {compleasm_stats['Single copy']}%; D: {compleasm_stats['Duplicated']}%, F: {compleasm_stats['Fragmented']}; I: {compleasm_stats['Incomplete']}; M: {compleasm_stats['Missing']}", log_file)
+        elif compleasm_stats['Completeness'] >= 75 and compleasm_stats['Completeness'] < 85:
+            log_print(f"NOTE:\t{base_db} compleasm BUSCO completeness (n={compleasm_stats['N_count']}) {compleasm_stats['Completeness']}% < 75%; S: {compleasm_stats['Single copy']}%; D: {compleasm_stats['Duplicated']}%, F: {compleasm_stats['Fragmented']}; I: {compleasm_stats['Incomplete']}; M: {compleasm_stats['Missing']}", log_file)
+        else:
+            log_print(f"PASS:\t{base_db} compleasm BUSCO completeness (n={compleasm_stats['N_count']}) {compleasm_stats['Completeness']}% < 75%; S: {compleasm_stats['Single copy']}%; D: {compleasm_stats['Duplicated']}%, F: {compleasm_stats['Fragmented']}; I: {compleasm_stats['Incomplete']}; M: {compleasm_stats['Missing']}", log_file)
+        return compleasm_output
+
 # Debuging Main Space & Example
 if __name__ == "__main__":
     print('EGAP_qc.py DEBUG')    
@@ -353,7 +376,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Quality Control Checks')
     
     # Default values
-    default_file = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_combined.fastq'
+    default_file = '/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/B1_3_ont_combined.fastq'
     default_organism_kingdom = 'Funga'
     default_percent_resources = 40
     
@@ -386,7 +409,7 @@ if __name__ == "__main__":
 
     # Generate log file with the desired behavior
     main_folder = os.path.dirname(default_file)
-    debug_log = f'{main_folder}QC_log.tsv'
+    debug_log = f'{main_folder}_QC_log.tsv'
     log_file = generate_log_file(debug_log, use_numerical_suffix=False)
     
     # Generate BUSCO Database Dictionary
@@ -402,3 +425,7 @@ if __name__ == "__main__":
                                f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/agaricales_odb10'],
                      'Protista': [f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/alveolata_odb10',
                                   f'{environment_dir}/EGAP/EGAP_Databases/BUSCO_Databases/euglenozoa_odb10']}
+    
+    cleaned_ont_assembly = "/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/Ps_aff_hopii_B1_3_polished_pilon.fasta"
+    compleasm_output = assess_with_compleasm(cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0])
+    compleasm_output = assess_with_compleasm(cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1])
