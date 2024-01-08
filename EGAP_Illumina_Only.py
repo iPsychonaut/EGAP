@@ -294,7 +294,7 @@ def find_drives():
     else:
         return []
 
-def trimmomatic_prep(input_fq_list):
+def trimmomatic_prep(input_fq_list, CPU_THREADS):
     """
     Prepares and runs the Trimmomatic command for paired-end sequence trimming.
 
@@ -320,7 +320,6 @@ def trimmomatic_prep(input_fq_list):
         - It's important to have the correct path to the adapter file used by Trimmomatic; this function uses a 
           default path and raises an error if the file is not found there.
     """    
-    global CPU_THREADS
     # Build output file path names based on input_fq_list
     trimmo_f_pair_path = input_fq_list[0].replace('_1.fq','_forward_paired.fq')
     trimmo_f_unpair_path = input_fq_list[0].replace('_1.fq','_forward_unpaired.fq')
@@ -476,7 +475,7 @@ def parse_bbmerge_output(output):
     return avg_insert, std_dev
 
 
-def masurca_config_gen(input_folder, clump_f_dedup_path, clump_r_dedup_path):
+def masurca_config_gen(input_folder, clump_f_dedup_path, clump_r_dedup_path, CPU_THREADS):
     """
     Generates a configuration file for MaSuRCA and executes genome assembly.
     
@@ -511,7 +510,6 @@ def masurca_config_gen(input_folder, clump_f_dedup_path, clump_r_dedup_path):
         - Implement error handling to catch and log any issues during the assembly process.
         - Make additional parameters (like USE_LINKING_MATES, LIMIT_JUMP_COVERAGE, etc.) configurable if needed.
     """
-    global CPU_THREADS
     bbmap_out_path = clump_f_dedup_path.replace('_forward_dedup.fq','_bbmap')
     
     # bbmerge to Determine average insert size and standard deviation
@@ -565,7 +563,7 @@ def masurca_config_gen(input_folder, clump_f_dedup_path, clump_r_dedup_path):
     scaffolded_assmebly_path = f"{os.path.dirname(input_fq_list[0])}/CA/primary.genome.scf.fasta"
     return scaffolded_assmebly_path
 
-def qc_checks(scaffolded_assmebly_path):
+def qc_checks(scaffolded_assmebly_path, CPU_THREADS):
     """
     Performs quality control checks on the scaffolded assembly using QUAST and CompleAsm.
     
@@ -582,7 +580,6 @@ def qc_checks(scaffolded_assmebly_path):
           Basidiomycota and Agaricales. The output for each lineage is stored in separate directories.
         - The function uses the global `CPU_THREADS` variable to set the number of threads for both QUAST and CompleAsm.
     """
-    global CPU_THREADS
     quast_out = scaffolded_assmebly_path.replace(".fasta","_quast")
     quast_cmd = ["quast",
                  "-o", quast_out,
@@ -652,6 +649,32 @@ def barcode_extractor(scaffolded_assmebly_path, barcodes_path):
     
     _ = run_subprocess_cmd(exonerate_cmd, True)
 
+def illumina_only_main(INPUT_FOLDER, PERCENT_RESOURCES):
+    # CPU Threads count setup
+    num_cpus = multiprocessing.cpu_count()
+    CPU_THREADS = int(math.floor(num_cpus * PERCENT_RESOURCES))
+    
+    # Generate list of raw input fq files
+    input_fq_list = find_fq_files(INPUT_FOLDER)
+    initialize_logging_environment(INPUT_FOLDER)
+    
+    # Run Trimmomatic on the raw input files
+    trimmo_f_pair_path, trimmo_r_pair_path = trimmomatic_prep(input_fq_list, CPU_THREADS)
+    
+    # Run bbduk on the trimmed files
+    bbduk_f_map_path, bbduk_r_map_path = bbduk_map(trimmo_f_pair_path, trimmo_r_pair_path)
+    
+    # Run clumpify on the mapped files
+    clump_f_dedup_path, clump_r_dedup_path = clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path)
+    
+    # Run Masurca to generate a Scaffolded Assembly
+    scaffolded_assmebly_path = masurca_config_gen(INPUT_FOLDER, clump_f_dedup_path, clump_r_dedup_path, CPU_THREADS)
+    
+    # Run QC Checks on Scaffolded Assembly
+    qc_checks(scaffolded_assmebly_path, CPU_THREADS)
+    
+    return scaffolded_assmebly_path
+
 if __name__ == "__main__":
     # Set Default Values
     default_input_folder = "/mnt/d/ENTHEOME/Ps_zapatecorum/RECREATION"
@@ -674,25 +697,5 @@ if __name__ == "__main__":
     INPUT_FOLDER = args.input_folder
     PERCENT_RESOURCES = args.resources
     
-    # Rest of your script...
-    num_cpus = multiprocessing.cpu_count()
-    CPU_THREADS = int(math.floor(num_cpus * PERCENT_RESOURCES))
-    
-    # Generate list of raw input fq files
-    input_fq_list = find_fq_files(INPUT_FOLDER)
-    initialize_logging_environment(INPUT_FOLDER)
-    
-    # Run Trimmomatic on the raw input files
-    trimmo_f_pair_path, trimmo_r_pair_path = trimmomatic_prep(input_fq_list)
-    
-    # Run bbduk on the trimmed files
-    bbduk_f_map_path, bbduk_r_map_path = bbduk_map(trimmo_f_pair_path, trimmo_r_pair_path)
-    
-    # Run clumpify on the mapped files
-    clump_f_dedup_path, clump_r_dedup_path = clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path)
-    
-    # Run Masurca to generate a Scaffolded Assembly
-    scaffolded_assmebly_path = masurca_config_gen(INPUT_FOLDER, clump_f_dedup_path, clump_r_dedup_path)
-    
-    # Run QC Checks on Scaffolded Assembly
-    qc_checks(scaffolded_assmebly_path)
+    # Main function
+    scaffolded_assmebly_path = illumina_only_main(INPUT_FOLDER, PERCENT_RESOURCES)
