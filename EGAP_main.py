@@ -181,11 +181,11 @@ def PILON_POLISH_PIPELINE(BASE_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, IL
             ont_quast_thread = Thread(target = assess_with_quast, args = (cleaned_ont_assembly, log_file, ont_cpus))
             ont_quast_thread.start()
             
-            # Quality Control Check Pilon Polished Assembly with BUSCO agasint first database
+            # Quality Control Check Flye de Novo Assembly with BUSCO agasint first database
             first_busco_thread = Thread(target = assess_with_compleasm, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0]))
             first_busco_thread.start()
             
-            # Quality Control Check Pilon Polished Assembly with BUSCO agasint second database
+            # Quality Control Check Flye de Novo Assembly with BUSCO agasint second database
             second_busco_thread = Thread(target = assess_with_compleasm, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1]))
             second_busco_thread.start()
 
