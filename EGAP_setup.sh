@@ -16,6 +16,10 @@ conda run -n base pip install --upgrade pip
 # Check if Conda is installed
 if ! command -v conda &> /dev/null; then
     echo -e "\e[36mConda is not installed. Please install Conda before running this script."
+    echo "Run the following commands to install Miniconda3:"
+    echo "     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+    echo "     bash Miniconda3-latest-Linux-x86_64.sh"
+    echo "     source ~/.bashrc"
     exit 1
 else
     # Update Conda
@@ -35,12 +39,12 @@ conda create -n entheome_env python=3.8.15 -y
 # Check if gdown is installed, and install it if it's not
 if ! command -v gdown &> /dev/null; then
     echo -e "\e[36mInstalling gdown...\e[0m"
-    conda entheome_env run pip install gdown==4.7.1
+    conda run -n entheome_env pip install gdown==4.7.1
 fi
 
 # Download the Google Drive file
 echo -e "\e[36mDownloading databases from Google Drive...\e[0m"
-conda entheome_env run gdown https://drive.google.com/uc?id=1Hj-8tFlJPiOoP_8_Sp4pyWipaQ3zr745 -O EGAP_Databases.zip
+conda run -n entheome_env gdown https://drive.google.com/uc?id=1Hj-8tFlJPiOoP_8_Sp4pyWipaQ3zr745 -O EGAP_Databases.zip
 
 # Create the EGAP_Databases directory and extract the contents of the zip file
 echo -e "\e[36mExtracting contents to './EGAP_Databases'...\e[0m"
@@ -50,7 +54,7 @@ rm EGAP_Databases.zip
 
 # Make Sure all Mamba installations are complete
 echo -e "\e[36mDownloading Python libraries...\e[0m"
-conda entheome_env run mamba install -y -c bioconda -c conda-forge -c agbiome -c prkrekel pandas==2.0.3 busco==5.5.0 nanoq==0.10.0 biopython==1.81 tqdm==4.38.0 beautifulsoup4==4.12.2 fastqc==0.11.8 quast==5.2.0 nanostat==1.6.0 flye==2.9.2 bbtools==37.62 metaeuk==6.a5d39d9 blast==2.14.1 bwa==0.7.17 minimap2==2.26 pysam==0.21.0 samtools==1.17 arcs==1.2.5 tigmint==1.2.10 abyss==2.3.7 racon==1.5.0 spades==3.15.3 gdown==4.7.1 psutil==5.9.5 abyss==2.3.7 requests==2.31.0 minimap2==2.26 spoa==4.1.3 racon==1.5.0 termcolor==2.3.0 fastqc==0.12.1
+conda run -n entheome_env mamba install -y -c bioconda -c conda-forge -c agbiome -c prkrekel pandas==2.0.3 busco==5.5.0 nanoq==0.10.0 biopython==1.81 tqdm==4.38.0 beautifulsoup4==4.12.2 fastqc==0.11.8 quast==5.2.0 nanostat==1.6.0 flye==2.9.2 bbtools==37.62 metaeuk==6.a5d39d9 blast==2.14.1 bwa==0.7.17 minimap2==2.26 pysam==0.21.0 samtools==1.17 arcs==1.2.5 tigmint==1.2.10 abyss==2.3.7 racon==1.5.0 spades==3.15.3 gdown==4.7.1 psutil==5.9.5 abyss==2.3.7 requests==2.31.0 minimap2==2.26 spoa==4.1.3 racon==1.5.0 termcolor==2.3.0 fastqc==0.12.1 masurca==4.1.0 openjdk=8
 
 # sepp==4.5.1 into funannotate env
 
