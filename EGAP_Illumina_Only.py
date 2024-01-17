@@ -5,7 +5,7 @@ Created on Thu Dec 28 12:20:03 2023
 @author: ian.michael.bollinger@gmail.com/researchconsultants@critical.consulting
 
 Command Line Example:
-    python Illumina_Pipe.py -i /path/to/folder -r FLOAT
+    python EGAP_Illumina_Only.py -i /path/to/folder -r FLOAT
 
 The -i, --input_folder must have input FASTQ.GZ file, matching primers.txt and Index.txt
 The -r, --resources Percentage of resources to use (0.01-1.00; default: 0.2) 
@@ -17,6 +17,7 @@ from datetime import datetime
 # Global output_area variable
 CPU_THREADS = 1
 DEFAULT_LOG_FILE = None
+ENVIRONMENT_TYPE = None
 
 def generate_log_file(log_file_path, use_numerical_suffix=False):
     """
@@ -133,7 +134,7 @@ def initialize_logging_environment(INPUT_FOLDER):
         - Prints unlogged messages to the console regarding environment detection and file existence.
         - Modifies the global DEFAULT_LOG_FILE variable.
     """
-    global DEFAULT_LOG_FILE
+    global DEFAULT_LOG_FILE, ENVIRONMENT_TYPE
 
     # Change the file extension to .txt
     input_file_path = f"{INPUT_FOLDER}/{INPUT_FOLDER.split('/')[-1]}_log.txt"
@@ -144,6 +145,7 @@ def initialize_logging_environment(INPUT_FOLDER):
     # Depending on the operating system, handle the input file path differently
     if os_name == "Windows":
         print('UNLOGGED:\tWINDOWS ENVIRONMENT')
+        ENVIRONMENT_TYPE = "WIN"
     elif os_name in ["Linux", "Darwin"]:  # Darwin is the system name for macOS
         drive, path_without_drive = os.path.splitdrive(input_file_path)
         if drive:
@@ -151,6 +153,7 @@ def initialize_logging_environment(INPUT_FOLDER):
             path_without_drive_mod = path_without_drive.replace("\\", "/")
             input_file_path = f'/mnt/{drive_letter.lower()}{path_without_drive_mod}'
         print('UNLOGGED:\tLINUX/WSL/MAC ENVIRONMENT')
+        ENVIRONMENT_TYPE = "LINUX/WSL/MAC"
     else:
         print(f'UNLOGGED ERROR:\tUnsupported OS: {os_name}')
         return
@@ -201,7 +204,8 @@ def run_subprocess_cmd(cmd_list, shell_check):
             log_print(f"PASS:\tSuccessfully processed command: {' '.join(cmd_list)}")
         return process.stdout
 
-def find_fq_files(input_folder):
+
+def parse_fq_files(input_folder):
     """
     Searches for specific files in a given folder and returns their paths.
     
@@ -224,24 +228,34 @@ def find_fq_files(input_folder):
         - This function is typically used in contexts where paired-end sequence data files are expected, often in 
           bioinformatics workflows.
     """
+    log_print("Parsing input folder for .fq files...")
     fq_files = {'_1.fq': None, '_2.fq': None}
 
-    # Iterate through all files in the given folder
-    for file in os.listdir(input_folder):
-        file_path = os.path.join(input_folder, file)
+    # First, search for .fq files
+    for end in ['_1.fq', '_2.fq']:
+        for file in os.listdir(input_folder):
+            if file.endswith(end):
+                fq_files[end] = os.path.join(input_folder, file)
 
-        # Check if the file ends with '_1.fq.gz' or '_2.fq.gz' and unzip it
-        for end in ['_1.fq', '_2.fq']:
+    # Check if both .fq files are found
+    if all(fq_files.values()):
+        return [fq_files['_1.fq'], fq_files['_2.fq']]
+
+    # If not, search for .fq.gz files and unzip them
+    for end in ['_1.fq', '_2.fq']:
+        for file in os.listdir(input_folder):
             if file.endswith(end + '.gz'):
-                with gzip.open(file_path, 'rb') as f_in:
-                    with open(file_path[:-3], 'wb') as f_out:
+                gz_file_path = os.path.join(input_folder, file)
+                unzipped_file_path = gz_file_path.rstrip('.gz')
+
+                # Unzip the file
+                with gzip.open(gz_file_path, 'rb') as f_in:
+                    with open(unzipped_file_path, 'wb') as f_out:
                         shutil.copyfileobj(f_in, f_out)
-                fq_files[end] = file_path[:-3]
-            elif file.endswith(end):
-                fq_files[end] = file_path
+                fq_files[end] = unzipped_file_path
+                break
 
     return [fq_files['_1.fq'], fq_files['_2.fq']]
-
 
 def find_file(filename):
     """
@@ -254,45 +268,21 @@ def find_file(filename):
         str: The path to the first instance of the file, if found.
         None: If the file is not found.
     """
-    current_working_directory = os.getcwd()
+    global ENVIRONMENT_TYPE
+    
+    log_print(f"Looking for {filename}")
+    
+    if ENVIRONMENT_TYPE == "WIN":
+        root_directory = 'C:\\'  # Adjust if necessary for different drives
+    elif ENVIRONMENT_TYPE in ["LINUX/WSL/MAC"]:
+        root_directory = '/'
+    else:
+        raise ValueError("Unknown ENVIRONMENT_TYPE")
 
-    for root, dirs, files in os.walk(current_working_directory):
+    for root, dirs, files in os.walk(root_directory):
         if filename in files:
             return os.path.join(root, filename)
     return None
-
-def find_drives():
-    """
-    Identifies and returns a list of root directories for all available drives on the system.
-    
-    This function is designed to be cross-platform, supporting both Unix-like and Windows systems. 
-    It categorizes and returns the system's root directories differently based on the operating system.
-    
-    On Unix-like systems (identified by os.name == 'posix'), it returns a list containing only the root ('/'), 
-    as these systems mount all drives under the root directory.
-    
-    On Windows systems (identified by os.name == 'nt'), it generates a list of drive letters (e.g., 'C:\\', 'D:\\', ...) 
-    by checking each letter from A to Z to see if it corresponds to an existing drive. 
-    
-    Returns:
-        list of str: A list of strings, each representing the root directory of an available drive on the system. 
-        The list will contain just '/' for Unix-like systems or a list of drive letters like ['C:\\', 'D:\\', ...] for Windows systems.
-         
-        If the operating system is neither Unix-like nor Windows, or if an error occurs, it returns an empty list.
-    """
-    # For Unix and Unix-like systems, return '/'
-    if os.name == 'posix':
-        return ['/']
-    # For Windows, return a list of drive letters
-    elif os.name == 'nt':
-        drives = []
-        for drive_letter in range(65, 91): # ASCII values for A-Z
-            drive = chr(drive_letter) + ':\\'
-            if os.path.exists(drive):
-                drives.append(drive)
-        return drives
-    else:
-        return []
 
 def trimmomatic_prep(input_fq_list, CPU_THREADS):
     """
@@ -320,6 +310,7 @@ def trimmomatic_prep(input_fq_list, CPU_THREADS):
         - It's important to have the correct path to the adapter file used by Trimmomatic; this function uses a 
           default path and raises an error if the file is not found there.
     """    
+    log_print("Trimming Illumina reads with Trimmomatic...")
     # Build output file path names based on input_fq_list
     trimmo_f_pair_path = input_fq_list[0].replace('_1.fq','_forward_paired.fq')
     trimmo_f_unpair_path = input_fq_list[0].replace('_1.fq','_forward_unpaired.fq')
@@ -327,38 +318,26 @@ def trimmomatic_prep(input_fq_list, CPU_THREADS):
     trimmo_r_unpair_path = input_fq_list[1].replace('_2.fq','_reverse_unpaired.fq')
     
     # Default path to Trimmomatic paths
-    default_trimmo_path = "./Trimmomatic-0.39/trimmomatic-0.39.jar"
-    default_trimmo_adapters_path = "./Trimmomatic-0.39/adapters/TruSeq3-PE.fa"
-    
-    if not os.path.exists(default_trimmo_adapters_path):
-        # Perform a search for the file TruSeq3-PE.fa
-        trimmo_adapters_path = find_file("TruSeq3-PE.fa", "/")
-        trimmo_path = find_file("trimmomatic-0.39.jar","/")
-        if trimmo_adapters_path is None or trimmo_path is None:
-            # try:
-            drives = find_drives()
-            for drive in drives:
-                for root, dirs, _ in os.walk(drive):
-                    if 'Trimmomatic-0.39' in dirs:
-                        trimmo_path = os.path.join(root, 'Trimmomatic-0.39/trimmomatic-0.39.jar')
-                        trimmo_adapters_path =  os.path.join(root, 'Trimmomatic-0.39/adapters/TruSeq3-PE.fa')
-            # except:
-            #     raise FileNotFoundError("Trimmomatic adapters file not found")
-    else:
-        trimmo_path = default_trimmo_path
-        trimmo_adapters_path = default_trimmo_adapters_path
-    
+    default_trimmo_path = "trimmomatic-0.39.jar"
+    default_trimmo_adapters_path = "TruSeq3-PE.fa"
+    trimmo_path = find_file(default_trimmo_path)
+    trimmo_adapters_path = find_file(default_trimmo_adapters_path)   
     
     # Make variables for other commands as needed: {trimmo_adapters_path}:{}:{}:{}:{}, SLIDINGWINDOW, MINLEN
     # Joining command list into a single string
-    trimmo_cmd = f"java -jar {trimmo_path} PE -phred33 -threads {CPU_THREADS} " \
-                f"{input_fq_list[0]} {input_fq_list[1]} " \
-                f"{trimmo_f_pair_path} {trimmo_f_unpair_path} " \
-                f"{trimmo_r_pair_path} {trimmo_r_unpair_path} " \
-                f"ILLUMINACLIP:{trimmo_adapters_path}:2:30:10:11 SLIDINGWINDOW:50:25 MINLEN:125"
+    trimmo_cmd =["java", "-jar", trimmo_path,
+                 "PE","-phred33","-threads", str(CPU_THREADS),
+                 input_fq_list[0], input_fq_list[1],
+                 trimmo_f_pair_path, trimmo_f_unpair_path,
+                 trimmo_r_pair_path, trimmo_r_unpair_path,
+                 f"ILLUMINACLIP:{trimmo_adapters_path}:2:30:10:11",
+                 "SLIDINGWINDOW:50:25", "MINLEN:125"]
 
-    # Executing the command
-    _ = run_subprocess_cmd(trimmo_cmd, True)
+    if os.path.exists(trimmo_f_pair_path) and os.path.exists(trimmo_r_pair_path):
+        log_print("PASS:\tSkipping Trimmomatic, output files already exist")
+    else:
+        # Executing the command
+        _ = run_subprocess_cmd(trimmo_cmd, False)
     
     return trimmo_f_pair_path, trimmo_r_pair_path
 
@@ -391,31 +370,22 @@ def bbduk_map(trimmo_f_pair_path, trimmo_r_pair_path):
     bbduk_r_map_path = trimmo_r_pair_path.replace('_reverse_paired.fq','_reverse_mapped.fq')
     
     # Default path to BBDuk adapters
-    default_adapters_path = "/home/eye/miniconda3/envs/entheome_env/bbtools/lib/resources/adapters.fa"
-    
-    if not os.path.exists(default_adapters_path):
-        # Perform a search for the file TruSeq3-PE.fa
-        adapters_path = find_file("adapters.fa", "/")
-        if adapters_path is None:
-            # try:
-            conda_env_path = os.environ['CONDA_PREFIX']
-            # Walk through the directories in the Conda environment
-            for root, dirs, files in os.walk(conda_env_path):
-                if 'bbtools' in dirs:
-                    # Return the full path if bbtools is found
-                    adapters_path = os.path.join(root, 'bbtools/lib/resources/adapters.fa')
-            # except:
-            #     raise FileNotFoundError("bbduk adapters file not found")
-    else:
-        adapters_path = default_adapters_path
+    default_adapters_path = "adapters.fa"
+    default_bbduk_path = "bbduk.sh"
+    adapters_path = find_file(default_adapters_path)
+    bbduk_path = find_file(default_bbduk_path)
         
     # bbduk Map Illumina Reads with run_subprocess_cmd shell_check = True
-    bbduk_cmd = ["bbduk.sh",
-                 f"in1={trimmo_f_pair_path}", f"in2={trimmo_r_pair_path}",
-                 f"out1={bbduk_f_map_path}", f"out2={bbduk_r_map_path}",
-                 f"ref={adapters_path}",
-                 "ktrim=r", "k=23", "mink=11", "hdist=1", "tpe", "tbo", "qtrim=rl", "trimq=20"]
-    _ = run_subprocess_cmd(bbduk_cmd, True)
+    bbduk_cmd = [bbduk_path,
+                f"in1={trimmo_f_pair_path}", f"in2={trimmo_r_pair_path}",
+                f"out1={bbduk_f_map_path}", f"out2={bbduk_r_map_path}",
+                f"ref={adapters_path}", "ktrim=r", "k=23", "mink=11", "hdist=1",
+                "tpe","tbo", "qtrim=rl", "trimq=20"]
+    if os.path.exists(bbduk_f_map_path) and os.path.exists(bbduk_r_map_path):
+        log_print("PASS:\tSkipping bbduk, Mapped outputs alredy exist")
+    else:
+        _ = run_subprocess_cmd(bbduk_cmd, False)
+    
     return bbduk_f_map_path, bbduk_r_map_path
 
 def clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path):
@@ -440,13 +410,21 @@ def clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path):
     clump_f_dedup_path = bbduk_f_map_path.replace('_forward_mapped.fq','_forward_dedup.fq')
     clump_r_dedup_path = bbduk_r_map_path.replace('_reverse_mapped.fq','_reverse_dedup.fq')
     
-    clumpify_cmd = ["clumpify.sh",
+    default_clumpify_path = "clumpify.sh"
+    
+    clumpify_path = find_file(default_clumpify_path)
+    
+    clumpify_cmd = [clumpify_path,
                     f"in={bbduk_f_map_path}",
                     f"in2={bbduk_r_map_path}",
                     f"out={clump_f_dedup_path}",
                     f"out2={clump_r_dedup_path}",
                     "dedupe"]
-    _ = run_subprocess_cmd(clumpify_cmd, True)
+    
+    if os.path.exists(clump_f_dedup_path) and os.path.exists(clump_r_dedup_path):
+        log_print("PASS:\tSkipping clumpify, deduplicated outputs alredy exist")
+    else:
+        _ = run_subprocess_cmd(clumpify_cmd, False)
     
     return clump_f_dedup_path, clump_r_dedup_path
 
@@ -474,8 +452,7 @@ def parse_bbmerge_output(output):
 
     return avg_insert, std_dev
 
-
-def masurca_config_gen(input_folder, clump_f_dedup_path, clump_r_dedup_path, CPU_THREADS):
+def masurca_config_gen(input_folder, input_fq_list, clump_f_dedup_path, clump_r_dedup_path, CPU_THREADS):
     """
     Generates a configuration file for MaSuRCA and executes genome assembly.
     
@@ -512,13 +489,16 @@ def masurca_config_gen(input_folder, clump_f_dedup_path, clump_r_dedup_path, CPU
     """
     bbmap_out_path = clump_f_dedup_path.replace('_forward_dedup.fq','_bbmap')
     
+    default_bbmerge_path = "bbmerge.sh"
+    bbmerge_path = find_file(default_bbmerge_path)
+    
     # bbmerge to Determine average insert size and standard deviation
-    bbmerge_cmd = ["bbmerge.sh",
+    bbmerge_cmd = [bbmerge_path,
                    f"in1={clump_f_dedup_path}",
                    f"in2={clump_r_dedup_path}",
                    f"out={bbmap_out_path}",
                    "ihist=insert_size_histogram.txt"]
-    bbmerge_output = run_subprocess_cmd(bbmerge_cmd, True)
+    bbmerge_output = run_subprocess_cmd(bbmerge_cmd, False)
    
     # Parse standard out text for avg_insert and std_dev
     try:
@@ -529,38 +509,61 @@ def masurca_config_gen(input_folder, clump_f_dedup_path, clump_r_dedup_path, CPU
         
     # Define the content to be written to the file
     # TODO: Make variables for other commands as needed: USE_LINKING_MATES, LIMIT_JUMP_COVERAGE, CA_PARAMETERS, MEGA_READS_ONE_PASS, LHE_COVERAGE, KMER_COUNT_THRESHOLD, JF_SIZE, DO_HOMOPOLYMER_TRIM
-    config_content = f"""DATA
-                       PE= pe {avg_insert} {std_dev} {clump_f_dedup_path} {clump_r_dedup_path}
-                       END
-                       PARAMETERS
-                       GRAPH_KMER_SIZE = auto
-                       USE_LINKING_MATES = 1
-                       LIMIT_JUMP_COVERAGE = 300
-                       CA_PARAMETERS = cgwErrorRate=0.15
-                       MEGA_READS_ONE_PASS=0
-                       LHE_COVERAGE=35
-                       KMER_COUNT_THRESHOLD = 1
-                       NUM_THREADS = {CPU_THREADS}
-                       JF_SIZE = 2500000000
-                       DO_HOMOPOLYMER_TRIM = 0
-                       END"""
+    config_content = ["DATA\n",
+                      f"PE= pe {avg_insert} {std_dev} {clump_f_dedup_path} {clump_r_dedup_path}\n",
+                      "END\n",
+                      "PARAMETERS\n",
+                      "GRAPH_KMER_SIZE = auto\n",
+                      "USE_LINKING_MATES = 1\n",
+                      "LIMIT_JUMP_COVERAGE = 300\n",
+                      "CA_PARAMETERS = cgwErrorRate=0.15\n",
+                      "MEGA_READS_ONE_PASS=0\n",
+                      "LHE_COVERAGE=35\n",
+                      "KMER_COUNT_THRESHOLD = 1\n",
+                      f"NUM_THREADS = {CPU_THREADS}\n",
+                      "JF_SIZE = 2500000000\n",
+                      "DO_HOMOPOLYMER_TRIM = 0\n",
+                      "END"]
     
     # Specify the file name
     config_path = f"{input_folder}/masurca_config_file.txt"
     
     # Open the file for writing
     with open(config_path, 'w') as file:
-        file.write(config_content)
+        for entry in config_content:
+            file.write(entry)
 
     # Masurca Assembly commands in succession
     masurca_config_cmd = ["masurca", config_path]
     _ = run_subprocess_cmd(masurca_config_cmd, True)
-    
-    masurca_assemble_cmd = [f"{input_folder}/assemble.sh"]
-    _ = run_subprocess_cmd(masurca_assemble_cmd, True)
 
-    # TODO: If completed successfully return scaffolded_assmebly_path, else error out and print path to log file for review (TODO: generate log file)
-    scaffolded_assmebly_path = f"{os.path.dirname(input_fq_list[0])}/CA/primary.genome.scf.fasta"
+    # Move "./assemble.sh" to "{input_folder}/assemble.sh"
+    source_path = "./assemble.sh"
+    destination_path = f"{input_folder}/assemble.sh"
+
+    # Move the file
+    shutil.move(source_path, destination_path)
+
+    # Prepare the command
+    current_working_dir = os.getcwd()
+    os.chdir(input_folder)
+    masurca_assemble_cmd = [destination_path]
+    os.chdir(current_working_dir)
+    
+    # Check it outputs exist
+    default_scaffolded_assmebly_path = "./CA/primary.genome.scf.fasta"
+    scaffolded_assmebly_path = f"{input_folder}/CA/primary.genome.scf.fasta"
+    
+    # Move the CA folder
+    if os.path.exists(default_scaffolded_assmebly_path):
+        shutil.move(default_scaffolded_assmebly_path, scaffolded_assmebly_path)
+    
+    if os.path.exists(scaffolded_assmebly_path):
+        log_print("PASS:\tSkipping MaSuRCA, outputs alredy exist")
+    else:
+        _ = run_subprocess_cmd(masurca_assemble_cmd, True)
+        shutil.move(default_scaffolded_assmebly_path, scaffolded_assmebly_path)
+
     return scaffolded_assmebly_path
 
 def qc_checks(scaffolded_assmebly_path, CPU_THREADS):
@@ -585,69 +588,25 @@ def qc_checks(scaffolded_assmebly_path, CPU_THREADS):
                  "-o", quast_out,
                  "-t", str(CPU_THREADS),
                  scaffolded_assmebly_path]
-    _ = run_subprocess_cmd(quast_cmd, True)
+    _ = run_subprocess_cmd(quast_cmd, False)
     
     # Default path to Compleasm
-    default_compleasm_path = "./Compleasm/compleasm_kit/compleasm.py" 
-    
-    if not os.path.exists(default_compleasm_path):
-        # Perform a search for the file compleasm.py
-        compleasm_path = find_file("compleasm.py", "/")
-        if compleasm_path is None:
-            # try:
-            drives = find_drives()
-            for drive in drives:
-                for root, dirs, _ in os.walk(drive):
-                    if 'Compleasm' in dirs:
-                        compleasm_path = os.path.join(root, 'compleasm_kit/compleasm.py')
-            # except:
-            #     raise FileNotFoundError("Compleasm python file not found")
-    else:
-        compleasm_path = default_compleasm_path
+    default_compleasm_path = "compleasm.py" 
+    compleasm_path = find_file(default_compleasm_path)
     
     basidio_out = scaffolded_assmebly_path.replace(".fasta","_compleasm_basidiomycota")
     compleasm_basidio_cmd = ["python",compleasm_path, "run", "-a", scaffolded_assmebly_path,
                              "-o", basidio_out,
                              "-l", "basidiomycota",
                              "-t", str(CPU_THREADS)]
-    _ = run_subprocess_cmd(compleasm_basidio_cmd, True)
+    _ = run_subprocess_cmd(compleasm_basidio_cmd, False)
     
     agaricales_out = scaffolded_assmebly_path.replace(".fasta","_compleasm_agaricales")
     compleasm_agaricales_cmd = ["python",compleasm_path, "run", "-a", scaffolded_assmebly_path,
                                 "-o", agaricales_out,
                                 "-l", "agaricales",
                                 "-t", str(CPU_THREADS)]
-    _ = run_subprocess_cmd(compleasm_agaricales_cmd, True)
-
-def barcode_extractor(scaffolded_assmebly_path, barcodes_path):
-    """
-    Extracts barcode sequences from the scaffolded assembly using Exonerate.
-
-    This function uses Exonerate to align barcode sequences to the scaffolded genome assembly. The aim is to 
-    identify and extract regions in the assembly that correspond to specific barcode sequences provided in the 
-    barcodes file.
-
-    Parameters:
-        scaffolded_assmebly_path (str): The path to the scaffolded genome assembly file.
-        barcodes_path (str): The path to the file containing barcode sequences.
-
-    Notes:
-        - The output of Exonerate, which includes alignments and potentially identified barcodes, is stored in a 
-          file named after the scaffolded assembly file with the basename of the barcodes file appended.
-        - The Exonerate command is configured to use the 'est2genome' model, which is suitable for aligning 
-          expressed sequence tags (ESTs) to genomic sequences. This may be appropriate for barcode sequences 
-          depending on their nature and origin.
-    """
-    exonerate_output_path = scaffolded_assmebly_path.replace(".fasta",f"_{os.path.basename(barcodes_path)}")
-
-    exonerate_cmd = ["exonerate", "--model", "est2genome",
-                     "--query", barcodes_path,
-                     "--target", scaffolded_assmebly_path,
-                     "--showvulgar", "true",
-                     "--showalignment", "true",
-                     ">", exonerate_output_path]
-    
-    _ = run_subprocess_cmd(exonerate_cmd, True)
+    _ = run_subprocess_cmd(compleasm_agaricales_cmd, False)
 
 def illumina_only_main(INPUT_FOLDER, PERCENT_RESOURCES):
     # CPU Threads count setup
@@ -655,7 +614,7 @@ def illumina_only_main(INPUT_FOLDER, PERCENT_RESOURCES):
     CPU_THREADS = int(math.floor(num_cpus * PERCENT_RESOURCES))
     
     # Generate list of raw input fq files
-    input_fq_list = find_fq_files(INPUT_FOLDER)
+    input_fq_list = parse_fq_files(INPUT_FOLDER)
     initialize_logging_environment(INPUT_FOLDER)
     
     # Run Trimmomatic on the raw input files
@@ -668,7 +627,7 @@ def illumina_only_main(INPUT_FOLDER, PERCENT_RESOURCES):
     clump_f_dedup_path, clump_r_dedup_path = clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path)
     
     # Run Masurca to generate a Scaffolded Assembly
-    scaffolded_assmebly_path = masurca_config_gen(INPUT_FOLDER, clump_f_dedup_path, clump_r_dedup_path, CPU_THREADS)
+    scaffolded_assmebly_path = masurca_config_gen(INPUT_FOLDER, input_fq_list, clump_f_dedup_path, clump_r_dedup_path, CPU_THREADS)
     
     # Run QC Checks on Scaffolded Assembly
     qc_checks(scaffolded_assmebly_path, CPU_THREADS)
