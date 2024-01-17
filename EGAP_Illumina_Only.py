@@ -422,7 +422,7 @@ def clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path):
                     "dedupe"]
     
     if os.path.exists(clump_f_dedup_path) and os.path.exists(clump_r_dedup_path):
-        log_print("PASS:\tSkipping clumpify, deduplicated outputs alredy exist")
+        log_print("PASS:\tSkipping clumpify, deduplicated outputs already exist")
     else:
         _ = run_subprocess_cmd(clumpify_cmd, False)
     
@@ -487,6 +487,10 @@ def masurca_config_gen(input_folder, input_fq_list, clump_f_dedup_path, clump_r_
         - Implement error handling to catch and log any issues during the assembly process.
         - Make additional parameters (like USE_LINKING_MATES, LIMIT_JUMP_COVERAGE, etc.) configurable if needed.
     """
+    # Get current working directory and change to input folder
+    current_working_dir = os.getcwd()
+    os.chdir(input_folder)
+    
     bbmap_out_path = clump_f_dedup_path.replace('_forward_dedup.fq','_bbmap')
     
     default_bbmerge_path = "bbmerge.sh"
@@ -498,14 +502,26 @@ def masurca_config_gen(input_folder, input_fq_list, clump_f_dedup_path, clump_r_
                    f"in2={clump_r_dedup_path}",
                    f"out={bbmap_out_path}",
                    "ihist=insert_size_histogram.txt"]
-    bbmerge_output = run_subprocess_cmd(bbmerge_cmd, False)
+    
+    if os.path.exists(bbmap_out_path):
+        log_print("PASS:\tSkipping bbmap, insert size histogram output already exists")
+        
+        # Open the file for writing
+        with open(f"{input_folder}/insert_size_histogram.txt", 'r') as file:
+            for line in file:
+                if "#Mean	" in line:
+                    avg_insert = round(float(line.replace("#Mean	","").replace("\n","")),0)
+                if "#STDev	" in line:
+                    std_dev = round(float(line.replace("#STDev	","").replace("\n","")),0)
+    else:
+        bbmerge_output = run_subprocess_cmd(bbmerge_cmd, False)
    
-    # Parse standard out text for avg_insert and std_dev
-    try:
-        avg_insert, std_dev = parse_bbmerge_output(bbmerge_output)
-    except:
-        avg_insert = 251
-        std_dev = 30
+        # Parse standard out text for avg_insert and std_dev
+        try:
+            avg_insert, std_dev = parse_bbmerge_output(bbmerge_output)
+        except:
+            avg_insert = 251
+            std_dev = 30
         
     # Define the content to be written to the file
     # TODO: Make variables for other commands as needed: USE_LINKING_MATES, LIMIT_JUMP_COVERAGE, CA_PARAMETERS, MEGA_READS_ONE_PASS, LHE_COVERAGE, KMER_COUNT_THRESHOLD, JF_SIZE, DO_HOMOPOLYMER_TRIM
@@ -534,24 +550,15 @@ def masurca_config_gen(input_folder, input_fq_list, clump_f_dedup_path, clump_r_
             file.write(entry)
 
     # Masurca Assembly commands in succession
-    masurca_config_cmd = ["masurca", config_path]
-    _ = run_subprocess_cmd(masurca_config_cmd, True)
-
-    # Move "./assemble.sh" to "{input_folder}/assemble.sh"
-    source_path = "./assemble.sh"
-    destination_path = f"{input_folder}/assemble.sh"
-
-    # Move the file
-    shutil.move(source_path, destination_path)
+    masurca_config_cmd = ["masurca", "masurca_config_file.txt"]
+    _ = run_subprocess_cmd(masurca_config_cmd, False)
 
     # Prepare the command
-    current_working_dir = os.getcwd()
-    os.chdir(input_folder)
-    masurca_assemble_cmd = [destination_path]
+    masurca_assemble_cmd = ["bash",f"{input_folder}/assemble.sh"]
     os.chdir(current_working_dir)
     
     # Check it outputs exist
-    default_scaffolded_assmebly_path = "./CA/primary.genome.scf.fasta"
+    default_scaffolded_assmebly_path = f"{current_working_dir}/CA/primary.genome.scf.fasta"
     scaffolded_assmebly_path = f"{input_folder}/CA/primary.genome.scf.fasta"
     
     # Move the CA folder
@@ -561,7 +568,7 @@ def masurca_config_gen(input_folder, input_fq_list, clump_f_dedup_path, clump_r_
     if os.path.exists(scaffolded_assmebly_path):
         log_print("PASS:\tSkipping MaSuRCA, outputs alredy exist")
     else:
-        _ = run_subprocess_cmd(masurca_assemble_cmd, True)
+        _ = run_subprocess_cmd(masurca_assemble_cmd, False)
         shutil.move(default_scaffolded_assmebly_path, scaffolded_assmebly_path)
 
     return scaffolded_assmebly_path
