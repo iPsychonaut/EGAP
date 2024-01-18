@@ -317,7 +317,7 @@ def illumina_only_main(INPUT_FOLDER, PERCENT_RESOURCES):
     scaffolded_assmebly_path = masurca_config_gen(INPUT_FOLDER, input_fq_list, clump_f_dedup_path, clump_r_dedup_path, CPU_THREADS)
     
     # Run QC Checks on Scaffolded Assembly
-    illu_only_qc_checks(scaffolded_assmebly_path)
+    illu_only_qc_checks(scaffolded_assmebly_path, CPU_THREADS)
     
     os.chdir(current_working_dir)
     
