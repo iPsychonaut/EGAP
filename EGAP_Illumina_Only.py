@@ -486,11 +486,7 @@ def masurca_config_gen(input_folder, input_fq_list, clump_f_dedup_path, clump_r_
     TODO:
         - Implement error handling to catch and log any issues during the assembly process.
         - Make additional parameters (like USE_LINKING_MATES, LIMIT_JUMP_COVERAGE, etc.) configurable if needed.
-    """
-    # Get current working directory and change to input folder
-    current_working_dir = os.getcwd()
-    os.chdir(input_folder)
-    
+    """    
     bbmap_out_path = clump_f_dedup_path.replace('_forward_dedup.fq','_bbmap')
     
     default_bbmerge_path = "bbmerge.sh"
@@ -553,27 +549,60 @@ def masurca_config_gen(input_folder, input_fq_list, clump_f_dedup_path, clump_r_
     masurca_config_cmd = ["masurca", "masurca_config_file.txt"]
     _ = run_subprocess_cmd(masurca_config_cmd, False)
 
-    # Prepare the command
-    masurca_assemble_cmd = ["bash",f"{input_folder}/assemble.sh"]
-    os.chdir(current_working_dir)
+    # Use os.path.dirname for safer path construction
+    base_dir = "/".join(input_folder.split("/")[:-1])
+    default_masurca_output_path = os.path.join(base_dir, "CA")
+    masurca_output_path = os.path.join(input_folder, "CA")
+    default_scaffolded_assembly_path = os.path.join(masurca_output_path, "final.genome.scf.fasta")
+    scaffolded_assembly_path = os.path.join(input_folder, "final.genome.scf.fasta")
     
-    # Check it outputs exist
-    default_scaffolded_assmebly_path = f"{current_working_dir}/CA/primary.genome.scf.fasta"
-    scaffolded_assmebly_path = f"{input_folder}/CA/primary.genome.scf.fasta"
+    if os.path.exists(default_scaffolded_assembly_path):
+        log_print("PASS:\tSkipping MaSuRCA, moving output files")
+        shutil.move(default_scaffolded_assembly_path, scaffolded_assembly_path)
+    elif os.path.exists(scaffolded_assembly_path):
+        log_print("PASS:\tSkipping MaSuRCA, output files already exist")      
+    else:
+        # Prepare the command
+        masurca_assemble_cmd = ["bash",f"{input_folder}/assemble.sh"]
+       
+    # Check if the source directory exists
+    if os.path.exists(default_masurca_output_path):
+        log_print("Moving files...")
     
-    # Move the CA folder
-    if os.path.exists(default_scaffolded_assmebly_path):
-        shutil.move(default_scaffolded_assmebly_path, scaffolded_assmebly_path)
+        # Check if the destination directory exists, if so, remove or handle it
+        if os.path.exists(masurca_output_path):
+            # Handle existing destination directory (e.g., remove it or move its contents)
+            shutil.rmtree(masurca_output_path)  # Be cautious with this
     
-    if os.path.exists(scaffolded_assmebly_path):
-        log_print("PASS:\tSkipping MaSuRCA, outputs alredy exist")
+        # Now move the directory
+        try:
+            shutil.move(default_masurca_output_path, masurca_output_path)
+            shutil.move(default_scaffolded_assembly_path, scaffolded_assembly_path)
+            log_print("PASS:\tFiles moved successfully.")
+        except Exception as e:
+            log_print(f"ERROT:\tError occurred while moving: {e}")
+    else:
+        log_print("NOTE:\tSource directory does not exist.")
+        # If the directory is a symbolic link, resolve it
+        if os.path.islink(default_masurca_output_path):
+            resolved_path = os.path.realpath(default_masurca_output_path)
+            log_print("NOTE:\tResolved symbolic link path:", resolved_path)
+            if os.path.exists(resolved_path):
+                log_print("NOTE:\tResolved path exists.")
+            else:
+                log_print("ERROR:\tResolved path does not exist.")
+    
+    # Check if the final file exists in the new location
+    if os.path.exists(scaffolded_assembly_path):
+        log_print("PASS:\tSkipping MaSuRCA, outputs already exist")
     else:
         _ = run_subprocess_cmd(masurca_assemble_cmd, False)
-        shutil.move(default_scaffolded_assmebly_path, scaffolded_assmebly_path)
+        shutil.move(default_masurca_output_path, masurca_output_path)
+        shutil.move(default_scaffolded_assembly_path, scaffolded_assembly_path)
+    
+    return scaffolded_assembly_path
 
-    return scaffolded_assmebly_path
-
-def qc_checks(scaffolded_assmebly_path, CPU_THREADS):
+def qc_checks(scaffolded_assembly_path, CPU_THREADS):
     """
     Performs quality control checks on the scaffolded assembly using QUAST and CompleAsm.
     
@@ -582,7 +611,7 @@ def qc_checks(scaffolded_assmebly_path, CPU_THREADS):
     Agaricales) for completeness analysis of the assembly.
     
     Parameters:
-        scaffolded_assmebly_path (str): The path to the scaffolded genome assembly file.
+        scaffolded_assembly_path (str): The path to the scaffolded genome assembly file.
     
     Notes:
         - The output of QUAST is stored in a directory named after the scaffolded assembly file with '_quast' appended.
@@ -590,26 +619,26 @@ def qc_checks(scaffolded_assmebly_path, CPU_THREADS):
           Basidiomycota and Agaricales. The output for each lineage is stored in separate directories.
         - The function uses the global `CPU_THREADS` variable to set the number of threads for both QUAST and CompleAsm.
     """
-    quast_out = scaffolded_assmebly_path.replace(".fasta","_quast")
+    quast_out = scaffolded_assembly_path.replace(".fasta","_quast")
     quast_cmd = ["quast",
                  "-o", quast_out,
                  "-t", str(CPU_THREADS),
-                 scaffolded_assmebly_path]
+                 scaffolded_assembly_path]
     _ = run_subprocess_cmd(quast_cmd, False)
     
     # Default path to Compleasm
     default_compleasm_path = "compleasm.py" 
     compleasm_path = find_file(default_compleasm_path)
     
-    basidio_out = scaffolded_assmebly_path.replace(".fasta","_compleasm_basidiomycota")
-    compleasm_basidio_cmd = ["python",compleasm_path, "run", "-a", scaffolded_assmebly_path,
+    basidio_out = scaffolded_assembly_path.replace(".fasta","_compleasm_basidiomycota")
+    compleasm_basidio_cmd = ["python",compleasm_path, "run", "-a", scaffolded_assembly_path,
                              "-o", basidio_out,
                              "-l", "basidiomycota",
                              "-t", str(CPU_THREADS)]
     _ = run_subprocess_cmd(compleasm_basidio_cmd, False)
     
-    agaricales_out = scaffolded_assmebly_path.replace(".fasta","_compleasm_agaricales")
-    compleasm_agaricales_cmd = ["python",compleasm_path, "run", "-a", scaffolded_assmebly_path,
+    agaricales_out = scaffolded_assembly_path.replace(".fasta","_compleasm_agaricales")
+    compleasm_agaricales_cmd = ["python",compleasm_path, "run", "-a", scaffolded_assembly_path,
                                 "-o", agaricales_out,
                                 "-l", "agaricales",
                                 "-t", str(CPU_THREADS)]
@@ -634,10 +663,14 @@ def illumina_only_main(INPUT_FOLDER, PERCENT_RESOURCES):
     clump_f_dedup_path, clump_r_dedup_path = clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path)
     
     # Run Masurca to generate a Scaffolded Assembly
+    current_working_dir = os.getcwd()
+    os.chdir(INPUT_FOLDER)
     scaffolded_assmebly_path = masurca_config_gen(INPUT_FOLDER, input_fq_list, clump_f_dedup_path, clump_r_dedup_path, CPU_THREADS)
     
     # Run QC Checks on Scaffolded Assembly
     qc_checks(scaffolded_assmebly_path, CPU_THREADS)
+    
+    os.chdir(current_working_dir)
     
     return scaffolded_assmebly_path
 
