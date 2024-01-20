@@ -31,7 +31,7 @@ To facilitate an easy and robust setup process, we have divided the setup into t
 
 #### Part 1: Preparing the Environment
 
-1. Run the `EGAP_setup_1.sh` script. This script handles the initial setup, including:
+1. Run the `EGAP_setup.sh` script. This script handles the initial setup, including:
    - Updating the Java Runtime Environment (JRE).
    - Installing unzip.
    - Checking and updating Conda.
@@ -39,20 +39,21 @@ To facilitate an easy and robust setup process, we have divided the setup into t
 
    To run the script, use the following command in your terminal:
    ```bash
-   bash EGAP_setup_1.sh
+   bash EGAP_setup.sh
    ```
 
-2. After successfully running `EGAP_setup_1.sh`, **close and restart your terminal** to ensure that all changes are properly applied.
+2. After successfully running `EGAP_setup.sh`, **close and restart your terminal** to ensure that all changes are properly applied.
 
 #### Part 2: Completing the Setup
 
-1. Once you have restarted your terminal, run the `EGAP_setup_2.sh` script. This script completes the setup process by:
-   - Continuing with the installation of necessary tools and libraries.
-   - Setting up additional environment configurations.
-
-   Execute the script with the command:
+1. Once you have restarted your terminal, activate the entheome_env.
    ```bash
-   bash EGAP_setup_2.sh
+   conda activate entheome_env
+   ```
+
+2. Now install all necessary Python libraries with Mamba:
+   ```bash
+   mamba install -y -c bioconda -c conda-forge -c agbiome -c prkrekel pandas==2.0.3 busco==5.5.0 nanoq==0.10.0 biopython==1.81 tqdm==4.38.0 beautifulsoup4==4.12.2 quast==5.2.0 nanostat==1.6.0 flye==2.9.2 bbtools==37.62 metaeuk==6.a5d39d9 blast==2.14.1 bwa==0.7.17 minimap2==2.26 pysam==0.21.0 samtools==1.17 arcs==1.2.5 tigmint==1.2.10 abyss==2.3.7 racon==1.5.0 spades==3.15.3 gdown==4.7.1 psutil==5.9.5 abyss==2.3.7 requests==2.31.0 minimap2==2.26 spoa==4.1.3 racon==1.5.0 termcolor==2.3.0 fastqc==0.12.1 masurca==4.1.0 openjdk=8
    ```
 
 ### Note on Script Execution
