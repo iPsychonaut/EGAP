@@ -1,269 +1,278 @@
+# -*- coding: utf-8 -*-
 """
 Created on Mon Jul 17 11:49:17 2023
 
-@author: ian.michael.bollinger@gmail.com with the help of ChatGPT 4.0
+@author: ian.michael.bollinger@gmail.com/researchconsultants@critical.consulting with the help of ChatGPT 4.0
+
+EGAP Oxford Nanopore Technologies (ONT) Pipeline
 
 Command Line Example:
-    python EGAP_ONT.py -i /path/to/folder -k STRING -g INTEGER -r INTEGER
-
-The -k, --organism_kingdom must be from the following: Archaea, Bacteria, Fauna, Flora, Funga, or Protista
+    python EGAP_ONT.py -i /path/to/ont/folder -d READS_DATA_STRING
+                       -k ORGANISM_KINGDOM_STRING  -es ESTIMATED_GENOME_SIZE_MBP
+                       -r PERCENT_RESOURCES_FLOAT  -rf /path/to/reference_sequence
+Arguments:
+    -i, --ont_folder: Path to the ONT Folder.
+                      (default: /mnt/d/Entheome/Ps_semilanceata/ONT_MinION/)
+    -d, --reads_data: Specify the type of sequencing data. Must be one of:
+                      'illu' for Illumina, 'ont' for Nanopore, or 'hybrid' for combined data.
+                      (default: ont)
+    -k, --organism_kingdom: The kingdom to which the current organism belongs.
+                            Options: Archaea, Bacteria, Fauna, Flora, Funga, Protista.
+                            (default: Funga)
+    -es, --est_size: Estimated genome size in Megabase pairs (Mbp). For example, '60' will
+                     be converted to 60,000,000 base pairs. (default: 60)
+    -r, --resources: Percentage of available system resources (CPU and memory) to use.
+                     Must be between 0.01 and 1.00. (default: 0.45)
+    -rf, --ref_seq: Optional path to the reference genome for guiding the assembly.
+                    (default: None)
 """
 # Base Python Imports
-import os, subprocess, glob, shutil, gzip, random, tempfile, multiprocessing, math, psutil, csv, argparse, gdown
-from threading import Thread
+import os, glob, gzip, argparse
+
 
 # Required Python Imports
-import pandas as pd
 from tqdm import tqdm
 from Bio import SeqIO
-from Bio.Blast.Applications import NcbiblastnCommandline
+
 
 # Custom Python Imports
-from log_print import log_print, generate_log_file
-from check_tools import get_env_dir, move_file_up
-from EGAP_qc import assess_with_quast, assess_with_compleasm, assess_with_nanostat
-from EGAP_cleaner import clean_dirty_fasta
-from EGAP_setup import download_busco_dbs, download_and_setup, find_folder
+from EGAP_Tools import log_print, initialize_logging_environment, get_resource_values, cleanup, run_subprocess_cmd
+from EGAP_QC import assess_with_nanoplot, assembly_qc_checks
+from EGAP_Flye import assemble_ont_flye
+
+
+# Global output_area variable
+CPU_THREADS = 1
+RAM_GB = 1
+DEFAULT_LOG_FILE = None
+ENVIRONMENT_TYPE = None
+
 
 # Function to extract and combine multiple FASTQ.GZ files into a single FASTQ file
-def ont_combine_fastq_gz(ONT_FOLDER, log_file):
+def ont_combine_fastq_gz(ONT_FOLDER):
     """
     Combine multiple ONT FASTQ.GZ files into a single FASTQ file.
 
     Args:
         ONT_FOLDER (str): Path to the folder containing ONT FASTQ.GZ files.
-        log_file (obj): Path to the log file where the analysis progress and results will be stored.
 
     Returns:
         combined_ont_fastq_path (str): Path to the combined FASTQ file.
     """
-    log_print('Combining ONT FASTQ.GZ files...', log_file)
+    log_print('Combining ONT FASTQ.GZ files...')
 
     # Search for the folder containing multiple .gz files
     ont_raw_data_dir = next((subdir for subdir in glob.glob(os.path.join(ONT_FOLDER, "*"))
                             if os.path.isdir(subdir) and any(file.endswith(".gz") for file in os.listdir(subdir))), None)
     if ont_raw_data_dir is None:
-        log_print(f"WARN: No directory containing '.gz' files found within '{ONT_FOLDER}'", log_file)
-        log_print(f"Attempting with ONT_FOLDER '{ONT_FOLDER}'", log_file)
+        log_print(f"NOTE: No directory containing '.gz' files found within '{ONT_FOLDER}'")
+        log_print(f"Attempting with ONT_FOLDER '{ONT_FOLDER}'")
         ont_raw_data_dir = ONT_FOLDER
 
     # Get the base name from the path and append the '.fastq' extension
-    base_name = os.path.basename(ont_raw_data_dir)
+    base_name = ONT_FOLDER.split("/")[-3]
+    if base_name == "ENTHEOME":
+        base_name  = ONT_FOLDER.split("/")[-2]
     combined_ont_fastq_path = os.path.join(ONT_FOLDER, f'{base_name}_ont_combined.fastq')
     return_raw_data_dir = os.path.join(ONT_FOLDER, base_name)
+    raw_file_list = glob.glob(os.path.join(ont_raw_data_dir, '*.fastq.gz'))
     
     # Check if the combined file already exists
-    if os.path.exists(combined_ont_fastq_path):
-        log_print(f"PASS: Skipping extraction & combination: Combined fastq file: {combined_ont_fastq_path} already exists", log_file)
-        return return_raw_data_dir, combined_ont_fastq_path
+    print(combined_ont_fastq_path)
+    if os.path.isfile(combined_ont_fastq_path):
+        log_print(f"NOTE: Skipping extraction & combination: Combined fastq file: {combined_ont_fastq_path} already exists")
+        return return_raw_data_dir, raw_file_list, combined_ont_fastq_path
 
     # Combine the FASTQ files
-    file_list = glob.glob(os.path.join(ont_raw_data_dir, '*.fastq.gz'))
     with open(combined_ont_fastq_path, 'w') as combined_file:
-        for filename in tqdm(file_list, desc='Combining files'):
+        for filename in tqdm(raw_file_list, desc='Combining files'):
             with gzip.open(filename, 'rt') as gz_file:
                 for record in SeqIO.parse(gz_file, "fastq"):
                     try:
                         SeqIO.write(record, combined_file, "fastq")
                     except Exception as e:
-                        log_print(f"ERROR: in FASTQ record: {e}", log_file)
+                        log_print(f"ERROR: in FASTQ record: {e}")
                         raise e
 
-    log_print(f"PASS: Successfully created combined fastq file: {combined_ont_fastq_path}", log_file)
-    return return_raw_data_dir, combined_ont_fastq_path
+    log_print(f"PASS: Successfully created combined fastq file: {combined_ont_fastq_path}")
 
-# Function to generate a de novo assembly from ONT Reads with Flye
-def assemble_ont_flye(input_fastq, cpu_threads, log_file, GENOME_SIZE):
-    """
-    Generate a de novo assembly from ONT Reads with Flye.
+    return return_raw_data_dir, raw_file_list, combined_ont_fastq_path
 
-    Args:
-        input_fastq (str): Path to the combined ONT fastq reads.
-        cpu_threads (int): Number of threads available for processing.
-        log_file (obj): Path to the log file where the analysis progress and results will be stored.
-        GENOME_SIZE (int): Expected Mega-Base/Byte (MB) size of genome.      
 
-    Returns:
-        assembly_file_path (str): Path to the assembled FASTA file.
-        output_directory (str): Path to the Flye Output Directory.
-    """
-    log_print(f'Generating Flye de novo Assembly from {input_fastq}...', log_file)
+def run_porechop(combined_ont_fastq, length_threshold, quality_threshold, CPU_THREADS):
+    log_print('Removing Adapter sequences from ONT reads with Porechop...')
     
-    # Create the output directory if it does not exist
-    output_directory = input_fastq.replace('_ont_combined.fastq','_ont_flye_output')
-    if not os.path.exists(output_directory):
-        os.makedirs(output_directory)
-    base_name = os.path.basename(input_fastq)
+    chop_filtered_out = combined_ont_fastq.replace(".fq",".fastq").replace(".fastq","_chopped_filtered.fastq")
     
-    # Path to the assembled file
-    assembly_file_path = f"{output_directory}/{base_name.replace('combined.fastq','flye.fasta')}"
-    filtered_file_path = assembly_file_path.replace('flye.fasta','flye_filtered.fasta')
-    final_assembly_path = move_file_up(assembly_file_path, move_bool = False)
-    final_filtered_path = move_file_up(filtered_file_path, move_bool = False)
-    
-    # Check if the assembly already exists
-    if os.path.isfile(assembly_file_path):
-        log_print(f"PASS:\tSkipping Flye Assembly: {assembly_file_path} already exists", log_file)    
-        return assembly_file_path, output_directory
-    elif os.path.isfile(filtered_file_path):
-        log_print(f"PASS:\tSkipping Flye Assembly: {filtered_file_path} already exists", log_file)    
-        return filtered_file_path, output_directory
-    elif os.path.isfile(final_assembly_path):
-        log_print(f"PASS:\tSkipping Flye Assembly: {final_assembly_path} already exists", log_file)    
-        return final_assembly_path, output_directory
-    elif os.path.isfile(final_filtered_path):
-        log_print(f"PASS:\tSkipping Flye Assembly: {final_filtered_path} already exists", log_file)    
-        return final_filtered_path, output_directory
-    else:       
-        # Construct the Flye command
-        flye_command = ["flye",
-                        "--nano-hq",
-                        input_fastq,
-                        "--genome-size",
-                        str(GENOME_SIZE),
-                        "--out-dir",
-                        output_directory,
-                        "--threads",
-                        str(cpu_threads),
-                        "--keep-haplotypes"]
-        
-        # Run the command
-        log_print(f"CMD:\t{' '.join(flye_command)}", log_file)
-        flye_result = subprocess.run(flye_command, stdout = subprocess.PIPE, stderr = subprocess.PIPE)    
-            
-    if flye_result.returncode != 0:
-        log_print(f"ERROR: {flye_result.stderr}", log_file)
-        return None
+    if os.path.isfile(chop_filtered_out):
+        log_print(f"NOTE: Skipping Porechop: Chopped & Filtered fastq file {chop_filtered_out} already exists")
     else:
-        # Rename the default Flye output to match your expected file name
-        default_flye_output = os.path.join(output_directory, "assembly.fasta")
-        if os.path.exists(default_flye_output):
-            os.rename(default_flye_output, assembly_file_path)
-            
-        log_print("PASS: Successfully generated ONT Flye de novo Assembly", log_file)
-                
-        # Return the path to the assembled file    
-        return assembly_file_path, output_directory
+        porechop_cmd = ["porechop", "-i", combined_ont_fastq,
+                        "-o", chop_filtered_out,
+                        "-v", "2",
+                        "-t", str(CPU_THREADS)]
+        
+        _ = run_subprocess_cmd(porechop_cmd, False)
+        
+        log_print('PASS:\tAdapter sequences removed from ONT reads.')
+    
+        run_nanofilt(chop_filtered_out, length_threshold, quality_threshold, CPU_THREADS)
+    
+    return chop_filtered_out
 
-# Main ONT Folder Processing Function
-def process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOURCES, busco_db_dict, log_file):
+
+def run_nanofilt(chopped_ont_fastq, length_threshold, quality_threshold, CPU_THREADS):
+    log_print('Filtering out Low-Quality ONT reads with NanoFilt...')
+    
+    nanofilt_cmd = ["NanoFilt",
+                    "-l", str(length_threshold),
+                    "-q", str(quality_threshold),
+                    chopped_ont_fastq]
+    
+    _ = run_subprocess_cmd(nanofilt_cmd, False)
+    
+    log_print('PASS:\tLow-Quality reads filtered from ONT reads.')
+    
+
+def ont_prep(ONT_FOLDER, READS_DATA, CURRENT_ORGANISM_KINGDOM, EST_SIZE, PERCENT_RESOURCES, REF_SEQ):
     """
-    Processes basecalled ONT reads into a cleaned and indexed de novo assembly.
+    Main pipeline for preparing ONT data for MaSuRCA hybrid genome assembly.
     
     Args:
-        ONT_FOLDER (str): Path to the folder containing a sub-folder with the ONT reads.
-        CURRENT_ORGANISM_KINGDOM (str): Single word Kingdom Description: Archaea, Bacteria, Fauna, Flora, Funga, or Protista.
-        GENOME_SIZE (int): Expected size in Mega-Bytes/Bases for the genome (Fungi are about 60-80).
-        PERCENT_RESOURCES (int): Percentage of resources that can be utilized for processing (default = 80).
-        busco_db_dict (dict): Dictionary of all Kingdoms and their respective BUSCO databases.
-        log_file (obj): Path to the log file where the analysis progress and results will be stored.
-    
+        ONT_FOLDER (str): Path to the folder containing input ONT data.
+        READS_DATA (str): Type of sequencing reads ("illu", "ont", or "hybrid").
+        CURRENT_ORGANISM_KINGDOM (str): Kingdom to which the organism belongs (e.g., "Funga").
+        EST_SIZE (str): Estimated genome size in Megabase pairs (Mbp) (e.g. "60").
+        PERCENT_RESOURCES (float): Percentage of system resources (CPU and memory) to use.
+        REF_SEQ (str): Path to the reference genome (optional).
+        
     Returns:
-        cleaned_ont_assembly (str): Path to the final cleaned ONT assembly FASTA file.
-    """    
-    # Get the number of CPUs available on the system
-    num_cpus = multiprocessing.cpu_count()
-
-    # Get the amount of RAM (GB) currently available
-    mem_info = psutil.virtual_memory()
-
-    # Calculate the number of threads based on PERCENT_RESOURCES for available CPUs & RAM
-    cpu_threads = int(math.floor(num_cpus * PERCENT_RESOURCES))
-    ram_gb = int(mem_info.total / (1024.0 ** 3) * PERCENT_RESOURCES)
+        trimmed_ont_fastq (str): Path to the trimmed ONT FASTQ file.
+    """
+    initialize_logging_environment(ONT_FOLDER)
+    
+    CPU_THREADS, ram_gb = get_resource_values(PERCENT_RESOURCES)
     
     # Take ONT Folder with FASTQ Files, extract, combine
-    ont_raw_data_dir, combined_ont_fastq = ont_combine_fastq_gz(ONT_FOLDER, log_file)
+    ont_raw_data_dir, raw_file_list, combined_ont_fastq = ont_combine_fastq_gz(ONT_FOLDER)
 
-## QUALITY CONTROL CHECK AREA
-    # Quality Control Check of Combined ONT Reads with NanoStat
-    nanostat_dir = assess_with_nanostat(combined_ont_fastq, cpu_threads, log_file)
-
-    # Flye Assembly of combined ONT FASTQs
-    ont_flye_assembly, flye_dir = assemble_ont_flye(combined_ont_fastq, cpu_threads, log_file, GENOME_SIZE)
-        
-    # Decontamination of ONT Flye Assembly
-    cleaned_ont_assembly, removed_csv = clean_dirty_fasta(ont_flye_assembly, ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, log_file)                
-    base_name = cleaned_ont_assembly.split('/')[-1].split('_ont')[0]
-
-## QUALITY CONTROL CHECK AREA
-    if __name__ != "__main__":
-        pass
-    else:       
-        # Quality Control Check Cleaned ONT Assembly with QUAST
-        quast_thread = Thread(target = assess_with_quast, args = (cleaned_ont_assembly, log_file, cpu_threads))
-        quast_thread.start()
-          
-        # Quality Control Check Pilon Polished Assembly with BUSCO agasint first database
-        first_busco_thread = Thread(target = assess_with_compleasm, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][0].split(".")[0]))
-        first_busco_thread.start()
-        
-        # Quality Control Check Pilon Polished Assembly with BUSCO agasint second database
-        second_busco_thread = Thread(target = assess_with_compleasm, args = (cleaned_ont_assembly, log_file, busco_db_dict[CURRENT_ORGANISM_KINGDOM][1].split(".")[0]))
-        second_busco_thread.start()
-            
-        # Wait for all QC threads to finish
-        quast_thread.join()
-        first_busco_thread.join()
-        second_busco_thread.join()
+    # Quality Control Check of Combined ONT Reads with NanoPlot
+    raw_nanoplot_dir, length_threshold, quality_threshold = assess_with_nanoplot(combined_ont_fastq, CPU_THREADS)
     
-    return cleaned_ont_assembly
+    # RUN Porechop & NanoFilt ON combined_ont_fastq
+    filtered_ont_fastq = run_porechop(combined_ont_fastq, length_threshold, quality_threshold, CPU_THREADS)
+    
+    # Quality Control Check of Combined ONT Reads with NanoPlot
+    filtered_nanoplot_dir, _, _ = assess_with_nanoplot(filtered_ont_fastq, CPU_THREADS)
+
+    log_print("PASS:\tProcessed ONT Raw Data; ready for next steps.\n")
+
+    return filtered_ont_fastq
+
+
+def ont_only_main(ONT_FOLDER, READS_DATA, CURRENT_ORGANISM_KINGDOM, EST_SIZE, PERCENT_RESOURCES, REF_SEQ):
+    """
+    Main pipeline for performing ONT-only genome assembly, produces de novo and referenced assemblys (if REF_SEQ is not None).
+    
+    Args:
+        ONT_FOLDER (str): Path to the folder containing input ONT data.
+        READS_DATA (str): Type of sequencing reads ("illu", "ont", or "hybrid").
+        CURRENT_ORGANISM_KINGDOM (str): Kingdom to which the organism belongs (e.g., "Funga").
+        EST_SIZE (str): Estimated genome size in Megabase pairs (Mbp) (e.g. "60").
+        PERCENT_RESOURCES (float): Percentage of system resources (CPU and memory) to use.
+        REF_SEQ (str): Path to the reference genome (optional).
+        
+    Returns:
+        ref_seq_assembly_path (str): Path to the MaSuRCA referenced assembly FASTA file.
+        de_novo_assembly_path (str): Path to the MaSuRCA de novo assembly assembly FASTA file.
+    """
+    initialize_logging_environment(ONT_FOLDER)
+
+    if READS_DATA != "ont":
+        log_print(f"ERROR:\tThe input data should be 'ont' and is '{READS_DATA}'. Please check input.")
+        return None
+    
+    trimmed_ont_fastq = ont_prep(ONT_FOLDER, READS_DATA, CURRENT_ORGANISM_KINGDOM, EST_SIZE, PERCENT_RESOURCES, REF_SEQ)
+    
+    # Create unique folders for De-Novo and Ref-Seq Assemblies
+    de_novo_folder = os.path.join(ONT_FOLDER, "De-Novo-Assembly")
+    
+    os.makedirs(de_novo_folder, exist_ok=True)
+    ont_flye_assembly, ont_flye_indexed_bam, flye_dir = assemble_ont_flye(trimmed_ont_fastq, READS_DATA, CURRENT_ORGANISM_KINGDOM, EST_SIZE, CPU_THREADS, REF_SEQ)
+    
+    # Quality Control Check of the ONT de novo Assembly with QUAST & 2x Compleasm BUSCO # UPDATE TO USE _clean.fasta when fully implemented
+    quast_output_dir, compleasm_output_dir_1, compleasm_output_dir_2 = assembly_qc_checks(ont_flye_assembly, READS_DATA, CURRENT_ORGANISM_KINGDOM, REF_SEQ, CPU_THREADS)
+
+    
+    # Create a set of absolute paths to keep
+    keep_paths = [ONT_FOLDER, DEFAULT_LOG_FILE, ont_flye_assembly,
+                  quast_output_dir,
+                  compleasm_output_dir_1, compleasm_output_dir_2]
+    
+    # # add to keep_paths if REF_SEQ != None
+    # if REF_SEQ != None:
+    #     keep_paths = set(keep_paths, [ref_assembly_path, ref_seq_quast_output_dir, ref_seq_compleasm_output_dir_1, ref_seq_compleasm_output_dir_2])
+
+    # Cleanup files    
+    # cleanup(keep_paths, ILLU_FOLDER, DEFAULT_LOG_FILE) # Gets hung up removing CA folder specifically -7
+
+    log_print("PASS:\ONT reads Sucessfully Assembled; ready for next steps.\n")
+
+    return keep_paths
+
 
 ## Debuging Main Space & Example
 if __name__ == "__main__":
     print('EGAP Oxford Nanopore Technologies (ONT) Pipeline')       
+    
     # Argument Parsing
-    parser = argparse.ArgumentParser(description='Process ONT Folder and Genome Size')
+    parser = argparse.ArgumentParser(description='RUN EGAP ONT Pipeline')
     
     # Default values
-    default_folder = f'/mnt/e/Entheome/Ps_aff_hopii/MODULAR_TEST/ONT_MinION/'
+    default_folder = '/mnt/d/Entheome/Ps_semilanceata/ONT_MinION/'
+    default_reads_data = "ont"
     default_organism_kingdom = 'Funga'
-    default_genome_size = 60
-    default_percent_resources = 80
+    default_estimated_genome_size = 60
+    default_percent_resources = 0.45
+    default_reference_sequence = None
     
     # Add arguments with default values
     parser.add_argument('--ont_folder', '-i',
                         type = str, default = default_folder,
                         help = f'Path to the ONT Folder. (default: {default_folder})')
+    parser.add_argument('--reads_data', '-d',
+                        type = str, default = default_reads_data,
+                        choices = ["illu","ont","hybrid"],
+                        help = f'Indicate if the provided data are generated from the same organism or different organisms (default: {default_reads_data})')
     parser.add_argument('--organism_kingdom', '-k',
-                        type = str, default = default_organism_kingdom,
+                        type=str, default=default_organism_kingdom,
                         help = f'Kingdom the current organism data belongs to. (default: {default_organism_kingdom})')
-    parser.add_argument('--genome_size', '-g',
-                        type = int, default = default_genome_size,
-                        help = f'Genome Size. (default: {default_genome_size})')
-    parser.add_argument('--resource_use', '-r',
-                        type = int, default = default_percent_resources,
-                        help = f'Percent of Resources to use. (default: {default_percent_resources})')
+    parser.add_argument("--est_size", "-es",
+                        type=int, default=default_estimated_genome_size,
+                        help="Estimaged size of the genome in Mbp (aka million-base-pairs). (default: {default_estimated_genome_size}Mbp => {int(default_estimated_genome_size)*1000000})")
+    parser.add_argument("-r", "--resources",
+                        type=float, default=default_percent_resources,
+                        help=f"Percentage of resources to use. (0.01-1.00; default: {default_percent_resources})")
+    parser.add_argument("--ref_seq", "-rf",
+                        type=str, default=default_reference_sequence,
+                        help="Path to the reference genome for assembly. (default: {default_reference_sequence})")
     
     # Parse the arguments
     args = parser.parse_args()
-    
     ONT_FOLDER = args.ont_folder
+    READS_DATA = args.reads_data
     CURRENT_ORGANISM_KINGDOM = args.organism_kingdom
-    GENOME_SIZE = args.genome_size
-    PERCENT_RESOURCES = (args.resource_use/100)
-    
-    # Get working environment information
-    environment_dir = get_env_dir(ONT_FOLDER)
-    
-    # Generate log file with the desired behavior
-    debug_log = f'{ONT_FOLDER}ONT_log.tsv'
-    log_file = generate_log_file(debug_log, use_numerical_suffix=False)
-    
-    # Generate BUSCO Database Dictionary
-    busco_db_dict = {'Archaea':  ['archaea_odb10',
-                                  'euryarchaeota_odb10'],
-                     'Bacteria': ['actinobacteria_phylum_odb10',
-                                  'proteobacteria_odb10',],
-                     'Fauna':    ['vertebrata_odb10',
-                                  'arthropoda_odb10',],
-                     'Flora':    ['eudicots_odb10',
-                                  'liliopsida_odb10'],
-                     'Funga':    ['basidiomycota_odb10',
-                                  'agaricales_odb10'],
-                     'Protista': ['alveolata_odb10',
-                                  'euglenozoa_odb10']}
-    base_install_dir = "/mnt/e/Entheome/EGAP"
-    busco_db_dict = download_busco_dbs(base_install_dir)
-    
+    EST_SIZE = args.est_size
+    PERCENT_RESOURCES = args.resource_use
+    REF_SEQ = args.ref_seq
+
     # Run main ONT Cleaning function
-    cleaned_ont_assembly = process_ONT(ONT_FOLDER, CURRENT_ORGANISM_KINGDOM, GENOME_SIZE, PERCENT_RESOURCES, busco_db_dict, log_file)
+    combined_ont_fastq = ont_prep(ONT_FOLDER, READS_DATA,
+                                  CURRENT_ORGANISM_KINGDOM, EST_SIZE,
+                                  PERCENT_RESOURCES, REF_SEQ)
+
+    
+    ont_final_paths_list = ont_only_main(ONT_FOLDER, READS_DATA,
+                                         CURRENT_ORGANISM_KINGDOM,
+                                         EST_SIZE, PERCENT_RESOURCES,
+                                         REF_SEQ)
