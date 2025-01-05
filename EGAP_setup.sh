@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Change to the home directory
+cd ~ || { echo "Failed to change to home directory."; exit 1; }
+
 # Function to check if a command was successful
 check_success() {
     if [ $? -ne 0 ]; then
@@ -8,38 +11,20 @@ check_success() {
     fi
 }
 
-# Updating Java Runtime Environment (JRE)
-echo -e "\e[36mUpdating Java Runtime Environment (JRE)...\e[0m"
-sudo apt-get update && sudo apt install openjdk-8-jre-headless -y
-check_success "JRE update"
-
-# Installing unzip
-echo -e "\e[36mDownloading unzip...\e[0m"
-sudo apt install unzip
-check_success "Unzip installation"
-
-# Checking and Updating Conda
-echo -e "\e[36mChecking for Conda...\e[0m"
-if ! command -v conda &> /dev/null; then
-    echo -e "\e[31mConda is not installed. Please install Conda before running this script.\e[0m"
-    exit 1
-else
-    echo -e "\e[36mUpdating Conda...\e[0m"
-    conda update -n base -c defaults conda -y
-    check_success "Conda update"
-fi
-
-# Check if gdown is installed, and install it if it's not
-if ! command -v gdown &> /dev/null; then
-    echo -e "\e[36mInstalling gdown...\e[0m"
-    pip install gdown==4.7.1
-fi
-
-# Check if file "EGAP_installs.zip" is in the current folder, if not download it from the following github link:
+# Check if file "EGAP_installs.zip" is in the current folder, if not download it from the following GitHub link:
 if [ ! -f "EGAP_installs.zip" ]; then
     echo -e "\e[36mDownloading EGAP_installs.zip...\e[0m"
     wget https://raw.githubusercontent.com/iPsychonaut/EGAP/126930051737949b2565e1daa9d0d40883fb0797/EGAP_installs.zip
     check_success "Downloading EGAP_installs.zip"
+fi
+
+# Add downloaded tools to PATH if not already present
+if ! grep -q 'export PATH="$HOME/Pilon-1.24:$PATH"' ~/.bashrc; then
+    echo 'export PATH="$HOME/Pilon-1.24:$PATH"' >> ~/.bashrc
+fi
+
+if ! grep -q 'export PATH="$HOME/Trimmomatic-0.39:$PATH"' ~/.bashrc; then
+    echo 'export PATH="$HOME/Trimmomatic-0.39:$PATH"' >> ~/.bashrc
 fi
 
 # Unzip the contents of "EGAP_installs.zip" directly into this folder
@@ -51,14 +36,103 @@ check_success "Unzipping EGAP_installs.zip"
 rm EGAP_installs.zip
 check_success "Removing EGAP_installs.zip"
 
-# Creating a custom Conda environment
-echo -e "\e[36mCreating custom Conda environment 'entheome_env' with Python 3.8.15...\e[0m"
-conda create -n entheome_env python=3.8.15 -y
-check_success "Conda environment creation"
+# Clone purge_dups repository if it doesn't exist
+if [ ! -d "purge_dups" ]; then
+    echo -e "\e[36mCloning purge_dups repository...\e[0m"
+    git clone https://github.com/dfguan/purge_dups.git
+    check_success "Cloning purge_dups repository"
+else
+    echo -e "\e[33mDirectory 'purge_dups' already exists. Skipping clone.\e[0m"
+fi
 
-# Restart terminal, acivate entheome_env, and run mamba install command
-echo -e "\e[32mInitial Setup complete.\e[0m"
+# Build purge_dups
+cd purge_dups/src || { echo "Failed to change to purge_dups/src directory."; exit 1; }
+make
+check_success "Building purge_dups"
+cd ~ # Return to home directory
 
-echo -e "\e[36mRestart the terminal and run 'conda activate entheome_env' to activate the environment and then run the following 'mamba install...' command.\e[0m"
+# Download and install Miniforge3 if not already installed
+if [ -d "$HOME/miniforge3" ]; then
+    echo -e "\e[33mMiniforge3 is already installed at $HOME/miniforge3. Skipping installation.\e[0m"
+    # Initialize Conda/Mamba
+    eval "$(conda shell.bash hook)"
+else
+    MINIFORGE_URL="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh"
+    echo -e "\e[36mDownloading Miniforge3 installer...\e[0m"
+    wget "$MINIFORGE_URL" -O Miniforge3-Linux-x86_64.sh
+    check_success "Downloading Miniforge3-Linux-x86_64.sh"
 
-echo -e "\e[36mmamba install -y -c bioconda -c conda-forge -c agbiome -c prkrekel pandas==2.0.3 busco==5.5.0 nanoq==0.10.0 biopython==1.81 tqdm==4.38.0 beautifulsoup4==4.12.2 quast==5.2.0 nanostat==1.6.0 flye==2.9.2 bbtools==37.62 metaeuk==6.a5d39d9 blast==2.14.1 bwa==0.7.17 minimap2==2.26 pysam==0.21.0 samtools==1.17 arcs==1.2.5 tigmint==1.2.10 abyss==2.3.7 racon==1.5.0 spades==3.15.3 gdown==4.7.1 psutil==5.9.5 abyss==2.3.7 requests==2.31.0 minimap2==2.26 spoa==4.1.3 racon==1.5.0 termcolor==2.3.0 fastqc==0.12.1 masurca==4.1.0 openjdk=8\e[0m"
+    # Run install bash script
+    echo -e "\e[36mInstalling Miniforge3...\e[0m"
+    bash Miniforge3-Linux-x86_64.sh -b -p "$HOME/miniforge3"
+    check_success "Installing Miniforge3"
+
+    # Cleanup Miniforge3 installer
+    rm Miniforge3-Linux-x86_64.sh
+    check_success "Removing Miniforge3 installer"
+    
+    # Initialize conda
+    "$HOME/miniforge3/bin/conda" init
+    check_success "Initializing conda"
+    
+    # Initialize Conda/Mamba
+    eval "$(conda shell.bash hook)"
+    
+    # Source .bashrc to update PATH
+    source ~/.bashrc
+    check_success "Sourcing .bashrc"
+fi
+
+# Install mamba into the base environment
+echo -e "\e[36mInstalling mamba into the base Conda environment...\e[0m"
+conda install -y -c conda-forge mamba
+check_success "Installing mamba"
+
+# Create entheome_env with Python 3.8 using mamba
+echo -e "\e[36mCreating conda environment 'entheome_env' with Python 3.8...\e[0m"
+mamba create -y -n entheome_env python=3.8
+check_success "Creating entheome_env"
+
+# EGAP Installs
+echo -e "\e[36mInstalling system packages via apt-get...\e[0m"
+sudo apt-get update && sudo apt-get install -y openjdk-8-jre-headless racon fastqc
+check_success "Installing system packages"
+
+# Install required conda packages
+echo -e "\e[36mInstalling required conda packages via mamba...\e[0m"
+conda activate entheome_env && mamba install -y -c bioconda -c conda-forge \
+                                                               masurca==4.1.2 \
+                                                               quast==5.2.0 \
+                                                               compleasm==0.2.6 \
+                                                               biopython==1.81 \
+                                                               RagTag==2.1.0 \
+                                                               NanoPlot==1.43.0 \
+                                                               termcolor==2.3.0 \
+                                                               minimap2==2.28 \
+                                                               bwa==0.7.18 \
+                                                               samtools==1.21 \
+                                                               bamtools==2.5.2 \
+                                                               tgsgapcloser==1.2.1 \
+                                                               abyss==2.3.10 \
+                                                               sepp==4.5.1 \
+                                                               psutil==6.0.0 \
+                                                               merqury==1.3 \
+                                                               meryl==1.3 \
+                                                               beautifulsoup4
+
+check_success "Installing conda packages"
+
+# # TODO: Get QUAST follow-up commands to function appropriately
+# # QUAST Support Downloads
+# echo -e "\e[36mDownloading QUAST support data...\e[0m"
+# # Ensure QUAST's bin directory is in PATH
+# export PATH="$HOME/miniforge3/envs/entheome_env/bin:$PATH"
+# quast-download-grids
+# check_success "Downloading QUAST grids"
+# quast-download-silva
+# check_success "Downloading QUAST silva"
+
+echo -e "\n\e[32mEGAP Pipeline Pre-requisites have been successfully installed!\e[0m\n"
+echo -e '\n\e[32mstart by activating the environment "mamba activate entheome_env"\e[0m\n'
+echo -e '\n\e[36Optionally run "quast-download-grids"\e[0m\n'
+echo -e '\n\e[36Optionally run "quast-download-silva"\e[0m\n'
