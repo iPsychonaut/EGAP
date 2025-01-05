@@ -148,6 +148,7 @@ python EGAP.py --input_csv samples.csv
 
 ## References
 This pipeline was modified From two of the following pipelines:
+    
     Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR,
     Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes
     of ecologically and geographically diverse Psilocybe species. Microbiol Resour
