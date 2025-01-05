@@ -14,7 +14,7 @@ check_success() {
 # Check if file "EGAP_installs.zip" is in the current folder, if not download it from the following GitHub link:
 if [ ! -f "EGAP_installs.zip" ]; then
     echo -e "\e[36mDownloading EGAP_installs.zip...\e[0m"
-    wget https://raw.githubusercontent.com/iPsychonaut/EGAP/126930051737949b2565e1daa9d0d40883fb0797/EGAP_installs.zip
+    wget https://github.com/iPsychonaut/EGAP/blob/72897a4be5f3a2125d30c440542eceea1513e63d/EGAP_Installs.zip
     check_success "Downloading EGAP_installs.zip"
 fi
 
