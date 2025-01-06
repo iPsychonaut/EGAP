@@ -145,7 +145,8 @@ mkdir -p EGAP_Processing/ONT EGAP_Processing/Illumina && \
 cd EGAP_Processing
 ```
 
-#### Illumina-Only (with Reference Sequence) Assembly Example: Ps. cubensis var. Golden Teacher assembled with reference to Ps. cubensis var. PE Reference Sequence.
+#### Illumina-Only (with Reference Sequence) Assembly Example:
+#### Ps. cubensis var. Golden Teacher assembled with reference to Ps. cubensis var. PE Reference Sequence.
 
 Download the Reference Sequence into main processing folder:
 
@@ -162,7 +163,7 @@ prefetch SRR13870478 && fastq-dump --gzip --split-files SRR13870478 && rm -rf SR
 cd ..
 ```
 
-##### Illumina-Only (with Reference Sequence) Assembly Command
+#### Illumina-Only (with Reference Sequence) Assembly Command
 
 Adjust the paths to correctly match the downloaded files.
 
@@ -179,7 +180,8 @@ python /mnt/d/EGAP/EGAP.py --raw_illu_reads_1 /mnt/d/EGAP/EGAP_Processing/Illumi
 ```
 
 
-#### ONT/Illumina Hybrid Assembly Example: Ps. caeruleorhiza
+#### ONT/Illumina Hybrid Assembly Example: 
+#### Ps. caeruleorhiza
 
 Download the ONT data into the ONT folder:
 
@@ -201,7 +203,7 @@ rm -rf SRR27945395 && \
 cd ..
 ```
 
-##### Illumina-Only with Reference Sequence Assembly
+#### Illumina-Only with Reference Sequence Assembly
 
 Adjust the paths to correctly match the downloaded files.
 
