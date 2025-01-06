@@ -33,16 +33,19 @@ CLI EXAMPLE: python EGAP.py ...
         --raw_illu_reads_1, -i1 (str): Path to the Raw Forward Illumina Reads. (if -csv = None; else REQUIRED)
         --raw_illu_reads_2, -i2 (str): Path to the Raw Reverse Illumina Reads. (if -csv = None; else REQUIRED)
         --species_id, -ID (str): Species ID formatted: <2-letters of Genus>_<full species name>. (if -csv = None; else REQUIRED)
-        --organism_kingdom, -K (str): Kingdom the current organism data belongs to. (default: Funga)
+        --organism_kingdom, -Kg (str): Phylogenetic Kingdom the current organism data belongs to. (default: Funga)
+        --organism_karyote, -Ka (str): Karyote type of the organism. (default: Eukaryote)
+        --compleasm_1, -c1 (str): Name of the first organism compleasm/BUSCO database to compare to. (default: basidiomycota)
+        --compleasm_2, -c2 (str): Name of the second organism compleasm/BUSCO database to compare to. (default: agaricales)
         --est_size, -es (str): Estimaged size of the genome in Mbp (aka million-base-pairs). (default: 60m)
         --ref_seq, -rf (str): Path to the reference genome for assembly. (default: None)
         --percent_resources, -R (float): Percentage of resources for processing. (default: 1.00)
 
 CSV EXAMPLE:
     
-    ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,EST_SIZE,REF_SEQ
-    None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/SRR25932369.fq.gz,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_1.fq.gz,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_2.fq.gz,Ps_zapotecorum,Funga,60m,None
-    None,/mnt/d/TESTING_SPACE/Ps_gandalfiana/ONT_MinION/SRR27945396.fq.gz,/mnt/d/TESTING_SPACE/Ps_gandalfiana/Illumina_PE150/B1_3,None,None,Ps_gandalfiana,Funga,60m,/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna
+    ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ
+    None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/SRR25932369.fq.gz,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_1.fq.gz,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_2.fq.gz,Ps_zapotecorum,Funga,Eukaryote,basidiomycota,agaricales,60m,None
+    None,/mnt/d/TESTING_SPACE/Ps_gandalfiana/ONT_MinION/SRR27945396.fq.gz,/mnt/d/TESTING_SPACE/Ps_gandalfiana/Illumina_PE150/B1_3,None,None,Ps_gandalfiana,Funga,Eukaryote,basidiomycota,agaricales,60m,/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna
 
 """
 # Python Imports
@@ -204,7 +207,6 @@ def initialize_logging_environment(INPUT_FOLDER):
     else:
         print(f"UNLOGGED ERROR:\tUnsupported OS: {os_name}")
         return
-    print(input_file_path)
     run_log = generate_log_file(input_file_path, use_numerical_suffix=False)
     DEFAULT_LOG_FILE = run_log
 
@@ -1072,6 +1074,7 @@ def get_total_bases(html_file):
     
     return None
 
+
 def process_read_file(read_path):
     """
     Processes an Illumina read file to ensure it has a .fq.gz extension.
@@ -1134,6 +1137,7 @@ def process_read_file(read_path):
         log_print(f"Unrecognized file extension for read file: {read_path}")
         return read_path  # Return as is if extension is unrecognized
 
+
 def gzip_file(input_file, output_file):
     """
     Compresses a file using gzip compression.
@@ -1160,6 +1164,7 @@ def gzip_file(input_file, output_file):
     with open(input_file, "rb") as f_in:  # Open the original file in binary read mode
         with gzip.open(output_file, "wb") as f_out:  # Open the gzip file in binary write mode
             shutil.copyfileobj(f_in, f_out)  # Copy the content to the gzip file
+
 
 def ont_combine_fastq_gz(ONT_FOLDER):
     """
@@ -1199,6 +1204,7 @@ def ont_combine_fastq_gz(ONT_FOLDER):
 
     return combined_ont_fastq_path
 
+
 def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     """
     Run the Entheome Genome Hybrid Assembly Pipeline on a single sample (row of metadata),
@@ -1229,6 +1235,9 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         - "ILLUMINA_RAW_F_READS"/"ILLUMINA_RAW_R_READS": forward/reverse Illumina reads
         - "SPECIES_ID": sample/species identifier
         - "ORGANISM_KINGDOM": e.g., "Funga", "Flora", etc.
+        - "ORGANISM_KARYOTE": e.g., "Prokaryote" or "Eukaryote"
+        - "COMPLEASM_1": e.g., "basidiomycota", "agaricales", etc.
+        - "COMPLEASM_2": e.g., "basidiomycota", "agaricales", etc.
         - "EST_SIZE": estimated genome size (e.g., "50m" for 50 Mb)
         - "REF_SEQ": reference sequence FASTA (if any) or NaN
         (Other keys are also extracted/used within this function.)
@@ -1286,9 +1295,12 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     ...     "ONT_RAW_READS": "/path/to/ONT_reads.fq.gz",
     ...     "ILLUMINA_RAW_DIR": "/path/to/illumina_reads",
     ...     "SPECIES_ID": "SampleX",
+    ...     "ORGANISM_KINGDOM": "Funga",
+    ...     "ORGANISM_KARYOTE": "Eukaryote",
     ...     "ILLUMINA_RAW_F_READS": "/path/to/illumina_F.fq.gz",
     ...     "ILLUMINA_RAW_R_READS": "/path/to/illumina_R.fq.gz",
-    ...     "ORGANISM_KINGDOM": "Funga",
+    ...     "COMPLEASM_1": "basidiomycota",
+    ...     "COMPLEASM_2": "agaricales",
     ...     "EST_SIZE": "50m",
     ...     "REF_SEQ": "/path/to/reference.fna"
     ... }
@@ -1303,9 +1315,12 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     ...     "ONT_RAW_READS": float('nan'),
     ...     "ILLUMINA_RAW_DIR": float('nan'),  # or a valid path if you have multiple Illumina files
     ...     "SPECIES_ID": "SampleY",
+    ...     "ORGANISM_KINGDOM": "Funga",
+    ...     "ORGANISM_KARYOTE": "Eukaryote",
     ...     "ILLUMINA_RAW_F_READS": "/path/to/illuminaY_F.fq.gz",
     ...     "ILLUMINA_RAW_R_READS": "/path/to/illuminaY_R.fq.gz",
-    ...     "ORGANISM_KINGDOM": "Funga",
+    ...     "COMPLEASM_1": "basidiomycota",
+    ...     "COMPLEASM_2": "agaricales",
     ...     "EST_SIZE": "60m",
     ...     "REF_SEQ": float('nan')
     ... }
@@ -1345,7 +1360,6 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Hybrid Assembly Pipeline on: {shared_root}")    
 
-    ORGANISM_KINGDOM = row["ORGANISM_KINGDOM"]
     EST_SIZE = row["EST_SIZE"]
     REF_SEQ = row["REF_SEQ"]
 
@@ -1478,34 +1492,10 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                          "INDELS_PER_100KPB": None, # FROM QUAST if REF_SEQ != None
                             
                          "FINAL_ASSEMBLY": None}
-    
-    if ORGANISM_KINGDOM == "Funga":
-        first_compleasm_odb = "basidiomycota_odb10"
-        second_compleasm_odb = "agaricales_odb10"
-        kingdom_id = "fungus"
-        karyote_id = "eukaryote"
-    # elif ORGANISM_KINGDOM == "Flora":
-    #     first_compleasm_odb = "viridiplantae_odb10"
-    #     second_compleasm_odb = "embryophyta_odb10"
-    #     kingdom_id = "flora"
-    #     karyote_id = "eukaryote"
-    # elif ORGANISM_KINGDOM == "Fauna":
-    #     first_compleasm_odb = "metazoa_odb10"
-    #     second_compleasm_odb = "chordata_odb10 "
-    #     kingdom_id = ""
-    #     karyote_id = "eukaryote"
-    # elif ORGANISM_KINGDOM == "Bacteria":
-    #     first_compleasm_odb = "bacteria_odb10"
-    #     second_compleasm_odb = "_odb10"
-    #     kingdom_id = ""
-    #     karyote_id = ""
-    # elif ORGANISM_KINGDOM == "Archea":
-    #     first_compleasm_odb = "archaea_odb10"
-    #     second_compleasm_odb = "_odb10"
-    #     kingdom_id = ""
-    #     karyote_id = ""
-    else:
-        log_print(f"ERROR:\tUnable to parse Organism Kingdom input: {ORGANISM_KINGDOM}")
+    first_compleasm_odb = f"{row['COMPLEASM_1']}_odb10"
+    second_compleasm_odb = f"{row['COMPLEASM_2']}_odb10"
+    kingdom_id = row["ORGANISM_KINGDOM"].lower()
+    karyote_id = row["ORGANISM_KARYOTE"].lower()
     
 ###############################################################################
     # Pre-Processing Reads Preparation
@@ -1992,7 +1982,6 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                 sample_stats_dict["ASSEMBLY_L50"] = float(line.split("\t")[-1].replace("\n",""))
             elif "GC (%)" in line:
                 sample_stats_dict["ASSEMBLY_GC"] = float(line.split("\t")[-1].replace("\n",""))
-            # TODO: UPDATE "VALUE" with correct REF_SEQ line data
             if REF_SEQ != None:
                 if "# misassemblies" in line:
                     sample_stats_dict["MISASSEMBLIES"] = float(line.split("\t")[-1].replace("\n",""))
@@ -2024,9 +2013,6 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
             sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
             sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
     sample_stats_dict["FINAL_ASSEMBLY"] = final_assembly_path
-
-    print(sample_stats_dict)
-           
     quality_classifications = classify_assembly(sample_stats_dict)
     for metric, classification in quality_classifications.items():
         log_print(f"{metric}: {classification}")
@@ -2055,6 +2041,9 @@ if __name__ == "__main__":
     default_raw_illu_reads_2 = "/mnt/d/TESTING_SPACE/Ps_cubensis/MG_Ps_cubensis_GT/Illumina_PE150/SRR13870478_2.fq.gz"
     default_species_id = "MG_Ps_cubensis_GT" # Format: <2-letters of Genus>_<full species name>
     default_organism_kingdom = "Funga"
+    default_organism_karyote = "Eukaryote"
+    default_compleasm_1 = "basidiomycota"
+    default_compleasm_2 = "agaricales"
     default_estimated_genome_size = "60m"
     default_reference_sequence= "/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna"
     default_percent_resources = 1.0
@@ -2081,9 +2070,18 @@ if __name__ == "__main__":
     parser.add_argument("--species_id", "-ID",
                         type = str, default = default_species_id,
                         help = f"Species ID formatted: <2-letters of Genus>_<full species name>. (default: {default_species_id})")
-    parser.add_argument("--organism_kingdom", "-K",
+    parser.add_argument("--organism_kingdom", "-Kg",
                         type = str, default = default_organism_kingdom,
-                        help = f"Kingdom the current organism data belongs to. (default: {default_organism_kingdom})")
+                        help = f"Phylogenetic Kingdom the organism belongs to. (default: {default_organism_kingdom})")
+    parser.add_argument("--organism_karyote", "-Ka",
+                        type = str, default = default_organism_karyote,
+                        help = f"Karyote type of the organism. (default: {default_organism_karyote})")
+    parser.add_argument("--compleasm_1", "-c1",
+                        type = str, default = default_compleasm_1,
+                        help = f"Name of the first organism compleasm/BUSCO database to compare to. (default: {default_compleasm_1})")
+    parser.add_argument("--compleasm_2", "-c2",
+                        type = str, default = default_compleasm_2,
+                        help = f"Name of the second organism compleasm/BUSCO database to compare to. (default: {default_compleasm_2})")
     parser.add_argument("--est_size", "-es",
                         type = str, default = default_estimated_genome_size,
                         help="Estimaged size of the genome in Mbp (aka million-base-pairs). (default: {default_estimated_genome_size})")
@@ -2107,6 +2105,9 @@ if __name__ == "__main__":
                        "ILLUMINA_RAW_R_READS": [args.raw_illu_reads_2],
                        "SPECIES_ID": [args.species_id],
                        "ORGANISM_KINGDOM": [args.organism_kingdom],
+                       "ORGANISM_KARYOTE": [args.organism_karyote],
+                       "COMPLEASM_1": [args.compleasm_1],
+                       "COMPLEASM_2": [args.compleasm_2],
                        "EST_SIZE": [args.est_size],
                        "REF_SEQ": [args.ref_seq]}
         input_csv_df = pd.DataFrame.from_dict(sample_dict)
