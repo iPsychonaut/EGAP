@@ -95,9 +95,9 @@ To run EGAP with multiple samples, you can provide a CSV file containing the nec
 The CSV file should have the following header and columns:
 
 | ONT_RAW_DIR   | ONT_RAW_READS                  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | SPECIES_ID     | ORGANISM_KINGDOM | EST_SIZE | REF_SEQ                  |
-|---------------|--------------------------------|--------------------|-------------------------------------|-------------------------------------|----------------|------------------|----------|--------------------------|
-| None          | /path/to/ONT/sample1.fq.gz     | None               | /path/to/Illumina/sample1_R1.fq.gz  | /path/to/Illumina/sample1_R2.fq.gz  | AB_sample1     | Funga            | 60m      | /path/to/ref_genome1.fasta |
-| /path/to/ONT  | None                           | /path/to/Illumina  | None                                | None                                | AB_sample2     | Funga            | 55m      | /path/to/ref_genome2.fasta |
+|---------------|--------------------------------|--------------------|------------------------------------|------------------------------------|----------------|------------------|----------|--------------------------|
+| None          | /path/to/ONT/sample1.fq.gz     | None               | /path/to/Illumina/sample1_1.fq.gz  | /path/to/Illumina/sample1_2.fq.gz  | AB_sample1     | Funga            | 60m      | /path/to/ref_genome1.fasta |
+| /path/to/ONT  | None                           | /path/to/Illumina  | None                               | None                               | AB_sample2     | Funga            | 55m      | /path/to/ref_genome2.fasta |
 
 ### Column Descriptions
 
