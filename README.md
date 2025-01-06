@@ -13,7 +13,7 @@ EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline 
 3. [Pipeline Flow](#pipeline-flow)
 4. [Command-Line Usage](#command-line-usage)
 5. [CSV Generation](#csv-generation)
-6. [Example Data & Instructions](#example-data--instructions)
+6. [Example Data & Instructions](#example-data-&-instructions)
 7. [Future Improvements](#future-improvements)
 8. [References](#references)
 
@@ -65,6 +65,9 @@ bash /path/to/EGAP_setup.sh
 - \`--raw_illu_reads_2\`, \`-i2\` (str): Path to the Raw Reverse Illumina Reads. (if \`-csv\` = None; else REQUIRED)
 - \`--species_id\`, \`-ID\` (str): Species ID formatted as \`<2-letters of Genus>_<full species name>\`. (if \`-csv\` = None; else REQUIRED)
 - \`--organism_kingdom\`, \`-K\` (str): Kingdom the current organism data belongs to. (default: Funga)
+- \`--organism_karyote\`, \`-Ka\` (str): Karyote type of the organism. (default: Eukaryote)
+- \`--compleasm_1\`, \`-c1` (str): Name of the first organism compleasm/BUSCO database to compare to. (default: basidiomycota)
+- \`--compleasm_2\`, \`-c2` (str): Name of the second organism compleasm/BUSCO database to compare to. (default: agaricales)
 - \`--est_size\`, \`-es\` (str): Estimated size of the genome in Mbp (million base pairs). (default: 60m)
 - \`--ref_seq\`, \`-rf\` (str): Path to the reference genome for assembly. (default: None)
 - \`--percent_resources\`, \`-R\` (float): Percentage of resources for processing. (default: 1.00)
@@ -76,6 +79,9 @@ python /path/to/EGAP.py --raw_ont_reads /path/to/ont_reads.fq.gz \
                         --raw_illu_dir /path/to/illumina_reads/ \
                         --species_id AB_speciesname \
                         --organism_kingdom Funga \
+                        --organism_karyote Eukaryote \
+                        --compleasm_1 basidiomycota \
+                        --compleasm_2 agaricales \
                         --est_size 60m \
                         --percent_resources 0.8
 ```
@@ -94,10 +100,10 @@ To run EGAP with multiple samples, you can provide a CSV file containing the nec
 
 The CSV file should have the following header and columns:
 
-| ONT_RAW_DIR   | ONT_RAW_READS                  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | SPECIES_ID     | ORGANISM_KINGDOM | EST_SIZE | REF_SEQ                  |
-|---------------|--------------------------------|--------------------|------------------------------------|------------------------------------|----------------|------------------|----------|--------------------------|
-| None          | /path/to/ONT/sample1.fq.gz     | None               | /path/to/Illumina/sample1_1.fq.gz  | /path/to/Illumina/sample1_2.fq.gz  | AB_sample1     | Funga            | 60m      | /path/to/ref_genome1.fasta |
-| /path/to/ONT  | None                           | /path/to/Illumina  | None                               | None                               | AB_sample2     | Funga            | 55m      | /path/to/ref_genome2.fasta |
+| ONT_RAW_DIR   | ONT_RAW_READS                  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | SPECIES_ID     | ORGANISM_KINGDOM | ORGANISM_KARYOTE | COMPLEASM_1   | COMPLEASM_2 | EST_SIZE | REF_SEQ                    |
+|---------------|--------------------------------|--------------------|-------------------------------------|-------------------------------------|----------------|------------------|------------------|---------------|-------------|----------|----------------------------|
+| None          | /path/to/ONT/sample1.fq.gz     | None               | /path/to/Illumina/sample1_R1.fq.gz  | /path/to/Illumina/sample1_R2.fq.gz  | AB_sample1     | Funga            | Eukaryote        | basidiomycota | agaricales  | 60m      | /path/to/ref_genome1.fasta |
+| /path/to/ONT  | None                           | /path/to/Illumina  | None                                | None                                | AB_sample2     | Funga            | Eukaryote        | basidiomycota | agaricales  | 55m      | /path/to/ref_genome2.fasta |
 
 ### Column Descriptions
 
@@ -108,15 +114,18 @@ The CSV file should have the following header and columns:
 - **ILLUMINA_RAW_R_READS**: Path to the Raw Reverse Illumina Reads (e.g., `/path/to/Illumina/sample1_R2.fq.gz`).
 - **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>` (e.g., `AB_sample1`).
 - **ORGANISM_KINGDOM**: Kingdom the current organism data belongs to (default: `Funga`).
+- **ORGANISM_KARYOTE**: Karyote type of the organism. (default: Eukaryote).
+- **COMPLEASM_1**: Name of the first organism compleasm/BUSCO database to compare to. (default: basidiomycota).
+- **COMPLEASM_2**: Name of the second organism compleasm/BUSCO database to compare to. (default: agaricales).
 - **EST_SIZE**: Estimated size of the genome in Mbp (million base pairs) (e.g., `60m`).
 - **REF_SEQ**: Path to the reference genome for assembly. Use `None` if not applicable.
 
 ### Example CSV File (`samples.csv`)
 
 ```csv
-ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,EST_SIZE,REF_SEQ
-None,/mnt/d/EGAP/EGPA_Processing/Ps_zapotecorum/ONT/SRR########.fastq.gz,None,/mnt/d/EGAP/EGAP_Processing/Ps_zapotecorum/Illumina/SRR########_1.fq.gz,/mnt/d/EGAP/EGAP_Processing/Ps_zapotecorum/Illumina/SRR########_2.fq.gz,Ps_zapotecorum,Funga,60m,None
-None,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/ONT/SRR########.fastq.gz,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/Illumina/B1_3,None,None,Ps_gandalfiana,Funga,60m,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/GCF_#########_#.fna
+ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ
+None,/mnt/d/EGAP/EGPA_Processing/Ps_zapotecorum/ONT/SRR########.fastq.gz,None,/mnt/d/EGAP/EGAP_Processing/Ps_zapotecorum/Illumina/SRR########_1.fq.gz,/mnt/d/EGAP/EGAP_Processing/Ps_zapotecorum/Illumina/SRR########_2.fq.gz,Ps_zapotecorum,Funga,Eukaryote,basidiomycota,agaricales,60m,None
+None,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/ONT/SRR########.fastq.gz,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/Illumina/B1_3,None,None,Ps_gandalfiana,Funga,Eukaryote,basidiomycota,agaricales,60m,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/GCF_#########_#.fna
 ```
 
 ### Notes
@@ -149,9 +158,7 @@ Download the Illumina data into the Illumina folder (split into multiple files):
 
 ```bash
 cd Illumina && \
-prefetch SRR13870478 && \
-fastq-dump --gzip --split-files SRR13870478 && \
-rm -rf SRR13870478 && \
+prefetch SRR13870478 && fastq-dump --gzip --split-files SRR13870478 && rm -rf SRR13870478 && \
 cd ..
 ```
 
@@ -164,6 +171,9 @@ python /mnt/d/EGAP/EGAP.py --raw_illu_reads_1 /mnt/d/EGAP/EGAP_Processing/Illumi
                            --raw_illu_reads_2 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR13870478_2.fastq.gz \
                            --species_id Ps_cubensis \
                            --organism_kingdom Funga \
+                           --organism_karyote Eukaryote \
+                           --compleasm_2 basidiomycota \
+                           --compleasm_1 agaricales \
                            --est_size 60m \
                            --ref_seq /mnt/d/EGAP/EGAP_Processing/ncbi_dataset/data/GCF_017499595.1/GCF_017499595.1_MGC_Penvy_1_genomic.fna
 ```
@@ -201,6 +211,9 @@ python /mnt/d/EGAP/EGAP.py --raw_ont_reads /mnt/d/EGAP/EGAP_Processing/ONT/SRR13
                            --raw_illu_reads_2 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR27945395_2.fq.gz \
                            --species_id Ps_caeruleorhiza \
                            --organism_kingdom Funga \
+                           --organism_karyote Eukaryote \
+                           --compleasm_2 basidiomycota \
+                           --compleasm_1 agaricales \
                            --est_size 55m
 ```
 
