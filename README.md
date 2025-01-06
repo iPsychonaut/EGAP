@@ -146,7 +146,7 @@ cd EGAP_Processing
 ```
 
 #### Illumina-Only (with Reference Sequence) Assembly Example:
-#### Ps. cubensis var. Golden Teacher assembled with reference to Ps. cubensis var. PE Reference Sequence.
+Ps. cubensis var. Golden Teacher assembled with reference to Ps. cubensis var. PE Reference Sequence.
 
 Download the Reference Sequence into main processing folder:
 
@@ -181,7 +181,7 @@ python /mnt/d/EGAP/EGAP.py --raw_illu_reads_1 /mnt/d/EGAP/EGAP_Processing/Illumi
 
 
 #### ONT/Illumina Hybrid Assembly Example: 
-#### Ps. caeruleorhiza
+Ps. caeruleorhiza
 
 Download the ONT data into the ONT folder:
 
