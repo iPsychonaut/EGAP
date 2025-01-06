@@ -204,6 +204,7 @@ def initialize_logging_environment(INPUT_FOLDER):
     else:
         print(f"UNLOGGED ERROR:\tUnsupported OS: {os_name}")
         return
+    print(input_file_path)
     run_log = generate_log_file(input_file_path, use_numerical_suffix=False)
     DEFAULT_LOG_FILE = run_log
 
@@ -877,7 +878,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
         config_content = ["DATA\n",
                           f"PE= pe {avg_insert} {std_dev} {clump_f_dedup_path} {clump_r_dedup_path}\n"]
         if ref_seq:
-            config_content.append(f"REFERENCE={ref_seq.replace(".gbff",".fna.gz")}\n")
+            config_content.append(f"REFERENCE={ref_seq.replace('.gbff','.fna.gz')}\n")
         config_content.append("END\n")
         config_content.append("PARAMETERS\n")
         config_content.append("GRAPH_KMER_SIZE=auto\n")
