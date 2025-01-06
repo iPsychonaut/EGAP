@@ -149,7 +149,9 @@ Download the Illumina data into the Illumina folder (split into multiple files):
 
 ```bash
 cd Illumina && \
-prefetch SRR13870478 && fastq-dump --gzip --split-files SRR13870478 && rm -rf SRR13870478 && \
+prefetch SRR13870478 && \
+fastq-dump --gzip --split-files SRR13870478 && \
+rm -rf SRR13870478 && \
 cd ..
 ```
 
