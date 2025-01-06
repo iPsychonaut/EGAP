@@ -64,7 +64,7 @@ bash /path/to/EGAP_setup.sh
 - \`--raw_illu_reads_1\`, \`-i1\` (str): Path to the Raw Forward Illumina Reads. (if \`-csv\` = None; else REQUIRED)
 - \`--raw_illu_reads_2\`, \`-i2\` (str): Path to the Raw Reverse Illumina Reads. (if \`-csv\` = None; else REQUIRED)
 - \`--species_id\`, \`-ID\` (str): Species ID formatted as \`<2-letters of Genus>_<full species name>\`. (if \`-csv\` = None; else REQUIRED)
-- \`--organism_kingdom\`, \`-K\` (str): Kingdom the current organism data belongs to. (default: Funga)
+- \`--organism_kingdom\`, \`-Kg\` (str): Kingdom the current organism data belongs to. (default: Funga)
 - \`--organism_karyote\`, \`-Ka\` (str): Karyote type of the organism. (default: Eukaryote)
 - \`--compleasm_1\`, \`-c1` (str): Name of the first organism compleasm/BUSCO database to compare to. (default: basidiomycota)
 - \`--compleasm_2\`, \`-c2` (str): Name of the second organism compleasm/BUSCO database to compare to. (default: agaricales)
