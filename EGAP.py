@@ -27,6 +27,7 @@ CLI EXAMPLE: python EGAP.py ...
 
     Parameters: 
         --input_csv, -csv (str): Path to a csv containing multiple sample data. (default = None)
+        --raw_ont_dir, -odir (str): Path to a directory containing all Raw ONT Reads. (if -csv = None; else REQUIRED)
         --raw_ont_reads, -i0 (str): Path to the combined Raw ONT fastq reads. (if -csv = None; else REQUIRED)
         --raw_illu_dir, -idir (str): Path to a directory containing all Raw Illumina Reads. (if -csv = None; else REQUIRED)
         --raw_illu_reads_1, -i1 (str): Path to the Raw Forward Illumina Reads. (if -csv = None; else REQUIRED)
@@ -39,13 +40,13 @@ CLI EXAMPLE: python EGAP.py ...
 
 CSV EXAMPLE:
     
-    ONT_RAW_READS,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,ILLUMINA_RAW_DIR,SPECIES_ID,ORGANISM_KINGDOM,EST_SIZE,REF_SEQ
-    /mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/SRR25932369.fq.gz,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_1.fq.gz,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_2.fq.gz,None,Ps_zapotecorum,Funga,60m,None
-    /mnt/d/TESTING_SPACE/Ps_gandalfiana/ONT_MinION/SRR27945396.fq.gz,None,None,/mnt/d/TESTING_SPACE/Ps_gandalfiana/Illumina_PE150/B1_3,Ps_gandalfiana,Funga,60m,/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna
+    ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,EST_SIZE,REF_SEQ
+    None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/SRR25932369.fq.gz,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_1.fq.gz,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_2.fq.gz,Ps_zapotecorum,Funga,60m,None
+    None,/mnt/d/TESTING_SPACE/Ps_gandalfiana/ONT_MinION/SRR27945396.fq.gz,/mnt/d/TESTING_SPACE/Ps_gandalfiana/Illumina_PE150/B1_3,None,None,Ps_gandalfiana,Funga,60m,/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna
 
 """
 # Python Imports
-import math, platform, os, subprocess, multiprocessing, argparse, psutil, shutil, hashlib, re, gzip
+import math, platform, os, subprocess, multiprocessing, argparse, psutil, shutil, hashlib, re, gzip, glob
 from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -138,7 +139,7 @@ def log_print(input_message, log_file=None):
     if log_file is None:
         log_file = DEFAULT_LOG_FILE
     now = datetime.now()
-    message = f'[{now:%Y-%m-%d %H:%M:%S}]\t{input_message}'
+    message = f"[{now:%Y-%m-%d %H:%M:%S}]\t{input_message}"
     message_type_dict = {"NOTE": "blue",
                          "CMD": "cyan",
                          "ERROR": "red",
@@ -242,10 +243,10 @@ def run_subprocess_cmd(cmd_list, shell_check):
         log_print(f"CMD:\t{' '.join(cmd_list)}")    
         process = subprocess.Popen(cmd_list, shell=shell_check, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     for line in process.stdout:
-        print(line, end='')
+        print(line, end="")
     process.wait()
     if process.returncode != 0:
-        log_print(f"ERROR:\tCommand failed with return code {process.returncode}")
+        log_print(f"NOTE:\tCommand failed with return code {process.returncode}")
     else:
         log_print(f"PASS:\tSuccessfully processed command: {' '.join(cmd_list)}" if isinstance(cmd_list, list) else cmd_list)
     return process.returncode
@@ -305,9 +306,9 @@ def find_file(filename):
     global ENVIRONMENT_TYPE
     log_print(f"Looking for {filename}")    
     if ENVIRONMENT_TYPE == "WIN":
-        root_directory = 'C:\\'  # Adjust if necessary for different drives
+        root_directory = "C:\\"  # Adjust if necessary for different drives
     elif ENVIRONMENT_TYPE in ["LINUX/WSL/MAC"]:
-        root_directory = '/'
+        root_directory = "/"
     else:
         raise ValueError("Unknown ENVIRONMENT_TYPE")
     for root, dirs, files in os.walk(root_directory):
@@ -408,7 +409,7 @@ def illumina_extract_and_check(folder_name, SPECIES_ID):
          '/path/to/illumina/../MySpecies_combined_2.fq.gz']
     """
     log_print(f"Running MD5 Checksum Analysis on Raw Illumina FASTQ.GZ files in {folder_name}...")
-    illumina_df = pd.DataFrame(columns=['MD5', 'Filename'])
+    illumina_df = pd.DataFrame(columns=["MD5", "Filename"])
     base_data_dir = os.path.dirname(folder_name)
     combined_1_file = os.path.join(base_data_dir, f"{SPECIES_ID}_combined_1.fq")
     combined_2_file = os.path.join(base_data_dir, f"{SPECIES_ID}_combined_2.fq")
@@ -467,6 +468,15 @@ def classify_metric(value, thresholds):
         return "OK"
     elif value >= thresholds["POOR"]:
         return "POOR"
+    else:
+        if value <= thresholds["AMAZING"]:
+            return "AMAZING"
+        elif value <= thresholds["GREAT"]:
+            return "GREAT"
+        elif value <= thresholds["OK"]:
+            return "OK"
+        elif value <= thresholds["POOR"]:
+            return "POOR"
 
 
 def classify_assembly(sample_stats):
@@ -501,7 +511,7 @@ def classify_assembly(sample_stats):
     contigs_thresholds = {"AMAZING": 100, "GREAT": 1000, "OK": 10000, "POOR": 100000}
     results["FIRST_COMPLEASM_C"] = classify_metric(sample_stats["FIRST_COMPLEASM_C"], busco_thresholds)
     results["SECOND_COMPLEASM_C"] = classify_metric(sample_stats["SECOND_COMPLEASM_C"], busco_thresholds)
-    results['ASSEMBLY_N50'] = classify_metric(sample_stats["ASSEMBLY_N50"], n50_thresholds)
+    results["ASSEMBLY_N50"] = classify_metric(sample_stats["ASSEMBLY_N50"], n50_thresholds)
     results["ASSEMBLY_CONTIGS"] = classify_metric(sample_stats["ASSEMBLY_CONTIGS"], contigs_thresholds)
     if all(value == "AMAZING" for value in results.values()):
         results["OVERALL"] = "AMAZING"
@@ -752,15 +762,15 @@ def skip_gap_closing_section(assembly_sh_path):
     #      Captures the part from `else` down to the `fi` as group 3, preserving that code
     #
     # We use DOTALL so that `.` also matches newlines.
-    pattern = re.compile(r'(if \[ -s \$CA_DIR/9-terminator/genome\.scf\.fasta \];then)'
-                         r'(.*?)'
-                         r'(else\s+fail "Assembly stopped or failed, see \$CA_DIR\.log"\nfi)',
+    pattern = re.compile(r"(if \[ -s \$CA_DIR/9-terminator/genome\.scf\.fasta \];then)"
+                         r"(.*?)"
+                         r"(else\s+fail 'Assembly stopped or failed, see \$CA_DIR\.log'\nfi)",
                          re.DOTALL)
-    replacement_snippet = (r'\1\n'
-                           r'  # Force the final terminator to remain "9-terminator"\n'
-                           r'  log \'Skipping gap closing step; using 9-terminator as final.\'\n'
-                           r'  TERMINATOR="9-terminator"\n'
-                           r'\3')
+    replacement_snippet = (r"\1\n"
+                           r"  # Force the final terminator to remain '9-terminator'\n"
+                           r"  log \"Skipping gap closing step; using 9-terminator as final.\"\n"
+                           r"  TERMINATOR='9-terminator'\n"
+                           r"\3")
     modified_text = re.sub(pattern, replacement_snippet, original_script)        
     with open("assemble_skip_gap.sh", "w") as f_out:
         f_out.write(modified_text)
@@ -867,7 +877,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
         config_content = ["DATA\n",
                           f"PE= pe {avg_insert} {std_dev} {clump_f_dedup_path} {clump_r_dedup_path}\n"]
         if ref_seq:
-            config_content.append(f"REFERENCE={ref_seq.replace('.gbff','.fna.gz')}\n")
+            config_content.append(f"REFERENCE={ref_seq.replace(".gbff",".fna.gz")}\n")
         config_content.append("END\n")
         config_content.append("PARAMETERS\n")
         config_content.append("GRAPH_KMER_SIZE=auto\n")
@@ -881,7 +891,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
         config_content.append(f"SOAP_ASSEMBLY={illu_only_soap}\n") # IF ILLUMINA ONLY SET TO 0, ELSE 1
         config_content.append("END\n")
         config_path = f"{output_folder}/masurca_config_file.txt"
-        with open(config_path, 'w') as file:
+        with open(config_path, "w") as file:
             for entry in config_content:
                 file.write(entry)
         masurca_config_cmd = ["masurca", "masurca_config_file.txt"]
@@ -937,9 +947,9 @@ def bbduk_map(trimmo_f_pair_path, trimmo_r_pair_path):
         >>> print(f_mapped, r_mapped)
         sample_forward_mapped.fastq sample_reverse_mapped.fastq
     """
-    file_extension = trimmo_f_pair_path.split('_1_paired.')[1]
-    bbduk_f_map_path = trimmo_f_pair_path.replace(f'_1_paired.{file_extension}', f'_forward_mapped.{file_extension}')
-    bbduk_r_map_path = trimmo_r_pair_path.replace(f'_2_paired.{file_extension}', f'_reverse_mapped.{file_extension}')
+    file_extension = trimmo_f_pair_path.split("_1_paired.")[1]
+    bbduk_f_map_path = trimmo_f_pair_path.replace(f"_1_paired.{file_extension}", f"_forward_mapped.{file_extension}")
+    bbduk_r_map_path = trimmo_r_pair_path.replace(f"_2_paired.{file_extension}", f"_reverse_mapped.{file_extension}")
     if os.path.exists(bbduk_f_map_path) and os.path.exists(bbduk_r_map_path):
         log_print(f"SKIP:\tbbduk Mapped outputs already exist: {bbduk_f_map_path}; {bbduk_r_map_path}.")
     else:
@@ -992,9 +1002,9 @@ def clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path):
         >>> print(f_dedup, r_dedup)
         sample_forward_dedup.fastq sample_reverse_dedup.fastq
     """
-    file_extension = bbduk_f_map_path.split('_forward_mapped.')[1]
-    clump_f_dedup_path = bbduk_f_map_path.replace(f'_forward_mapped.{file_extension}', f'_forward_dedup.{file_extension}')
-    clump_r_dedup_path = bbduk_r_map_path.replace(f'_reverse_mapped.{file_extension}', f'_reverse_dedup.{file_extension}')
+    file_extension = bbduk_f_map_path.split("_forward_mapped.")[1]
+    clump_f_dedup_path = bbduk_f_map_path.replace(f"_forward_mapped.{file_extension}", f"_forward_dedup.{file_extension}")
+    clump_r_dedup_path = bbduk_r_map_path.replace(f"_reverse_mapped.{file_extension}", f"_reverse_dedup.{file_extension}")
     if os.path.exists(clump_f_dedup_path) and os.path.exists(clump_r_dedup_path):
         log_print(f"SKIP:\tclumpify deduplicated outputs already exist: {clump_f_dedup_path}.")
     else:
@@ -1044,18 +1054,18 @@ def get_total_bases(html_file):
         ...     print("Total Bases entry not found.")
     """
     # Open and read the contents of the HTML file
-    with open(html_file, 'r', encoding='utf-8') as f:
+    with open(html_file, "r", encoding="utf-8") as f:
         contents = f.read()
     
     # Parse the HTML contents with BeautifulSoup
-    soup = BeautifulSoup(contents, 'html.parser')
+    soup = BeautifulSoup(contents, "html.parser")
     
     # Find the table cell that contains the text "Total Bases"
     # Then get its sibling (the next <td>), which contains the value (e.g., "4.8 Gbp")
-    total_bases_td = soup.find('td', string='Total Bases')
+    total_bases_td = soup.find("td", string="Total Bases")
     
     if total_bases_td:
-        value_td = total_bases_td.find_next_sibling('td')
+        value_td = total_bases_td.find_next_sibling("td")
         if value_td:
             return value_td.get_text(strip=True)
     
@@ -1084,36 +1094,36 @@ def process_read_file(read_path):
     new_read_path = read_path  # Initialize with original path
 
     # Handle double extensions like .fastq.gz
-    if ext == '.gz':
+    if ext == ".gz":
         basename, ext1 = os.path.splitext(basename)
-        ext = ext1 + ext  # e.g., '.fq.gz' or '.fastq.gz'
+        ext = ext1 + ext  # e.g., ".fq.gz" or ".fastq.gz"
 
-    if read_path.endswith('.fq.gz'):
+    if read_path.endswith(".fq.gz"):
         # Correct extension; do nothing
         log_print(f"Read file already in .fq.gz format: {read_path}")
         return read_path
     
-    elif read_path.endswith('.fq'):
+    elif read_path.endswith(".fq"):
         # Gzip the file
-        new_read_path = os.path.join(dir_path, basename + '.fq.gz')
-        with open(read_path, 'rb') as f_in, gzip.open(new_read_path, 'wb') as f_out:
+        new_read_path = os.path.join(dir_path, basename + ".fq.gz")
+        with open(read_path, "rb") as f_in, gzip.open(new_read_path, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
         os.remove(read_path)  # Remove the original .fq file
         log_print(f"Gzipped .fq to {new_read_path}")
         return new_read_path
     
-    elif read_path.endswith('.fastq.gz'):
+    elif read_path.endswith(".fastq.gz"):
         # Rename to .fq.gz
-        new_read_path = os.path.join(dir_path, basename + '.fq.gz')
+        new_read_path = os.path.join(dir_path, basename + ".fq.gz")
         os.rename(read_path, new_read_path)
         log_print(f"Renamed .fastq.gz to .fq.gz: {new_read_path}")
         return new_read_path
     
-    elif read_path.endswith('.fastq'):
+    elif read_path.endswith(".fastq"):
         # Rename to .fq and gzip
-        temp_path = os.path.join(dir_path, basename + '.fq')
+        temp_path = os.path.join(dir_path, basename + ".fq")
         os.rename(read_path, temp_path)
-        with open(temp_path, 'rb') as f_in, gzip.open(new_read_path, 'wb') as f_out:
+        with open(temp_path, "rb") as f_in, gzip.open(new_read_path, "wb") as f_out:
             shutil.copyfileobj(f_in, f_out)
         os.remove(temp_path)  # Remove the intermediate .fq file
         log_print(f"Renamed .fastq to .fq and gzipped to {new_read_path}")
@@ -1123,6 +1133,70 @@ def process_read_file(read_path):
         log_print(f"Unrecognized file extension for read file: {read_path}")
         return read_path  # Return as is if extension is unrecognized
 
+def gzip_file(input_file, output_file):
+    """
+    Compresses a file using gzip compression.
+
+    Parameters:
+    - input_file (str): Path to the input file to be compressed.
+    - output_file (str): Path to the output gzip file.
+
+    Returns:
+    - None
+
+    Considerations:
+    - The function overwrites the output file if it already exists.
+    - Ensure the input file exists and the program has permission to read it.
+    - Ensure the program has permission to write to the output file's directory.
+    - Gzipping is best suited for text or binary files and may not significantly reduce the size of already compressed files.
+
+    Example:
+    >>> input_file = "example.txt"
+    >>> output_file = "example.txt.gz"
+    >>> gzip_file(input_file, output_file)
+    >>> print(f"{input_file} has been compressed to {output_file}")
+    """
+    with open(input_file, "rb") as f_in:  # Open the original file in binary read mode
+        with gzip.open(output_file, "wb") as f_out:  # Open the gzip file in binary write mode
+            shutil.copyfileobj(f_in, f_out)  # Copy the content to the gzip file
+
+def ont_combine_fastq_gz(ONT_FOLDER):
+    """
+    Combine multiple ONT FASTQ.GZ files into a single FASTQ file.
+
+    Args:
+        ONT_FOLDER (str): Path to the folder containing ONT FASTQ.GZ files.
+
+    Returns:
+        combined_ont_fastq_path (str): Path to the combined FASTQ file.
+    """
+    log_print("Combining ONT FASTQ.GZ files...")
+    ont_raw_data_dir = next((subdir for subdir in glob.glob(os.path.join(ONT_FOLDER, "*"))
+                            if os.path.isdir(subdir) and any(file.endswith(".gz") for file in os.listdir(subdir))), None)
+    if ont_raw_data_dir is None:
+        log_print(f"NOTE:\tNo directory containing '.gz' files found within '{ONT_FOLDER}'...Attempting with ONT_FOLDER '{ONT_FOLDER}'")
+        ont_raw_data_dir = ONT_FOLDER
+    base_name = ONT_FOLDER.split("/")[-3]
+    if base_name == "ENTHEOME":
+        base_name  = ONT_FOLDER.split("/")[-2]
+    combined_ont_fastq_path = os.path.join(ONT_FOLDER, f"{base_name}_ont_combined.fastq")
+    raw_file_list = glob.glob(os.path.join(ont_raw_data_dir, "*.fastq.gz"))
+    if os.path.isfile(combined_ont_fastq_path):
+        log_print(f"NOTE:\tSkipping extraction & combination: Combined fastq file: {combined_ont_fastq_path} already exists")
+        return combined_ont_fastq_path
+    with open(combined_ont_fastq_path, "w") as combined_file:
+        for filename in raw_file_list:
+            with gzip.open(filename, "rt") as gz_file:
+                for record in SeqIO.parse(gz_file, "fastq"):
+                    try:
+                        SeqIO.write(record, combined_file, "fastq")
+                    except Exception as e:
+                        log_print(f"ERROR:\tFound in FASTQ record: {e}")
+                        raise e
+
+    log_print(f"PASS: Successfully created combined fastq file: {combined_ont_fastq_path}")
+
+    return combined_ont_fastq_path
 
 def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     """
@@ -1148,10 +1222,11 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     -----------
     row : pandas.Series or dict
         A metadata row describing the sample. Must contain keys such as:
+        - "ONT_RAW_DIR": path to a directory with raw ONT files (string or NaN)       
         - "ONT_RAW_READS": path to ONT raw reads (string or NaN if none)
         - "ILLUMINA_RAW_DIR": path to a directory with raw Illumina files (string or NaN)
-        - "SPECIES_ID": sample/species identifier
         - "ILLUMINA_RAW_F_READS"/"ILLUMINA_RAW_R_READS": forward/reverse Illumina reads
+        - "SPECIES_ID": sample/species identifier
         - "ORGANISM_KINGDOM": e.g., "Funga", "Flora", etc.
         - "EST_SIZE": estimated genome size (e.g., "50m" for 50 Mb)
         - "REF_SEQ": reference sequence FASTA (if any) or NaN
@@ -1241,19 +1316,25 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
 
     """
     cwd = os.getcwd()
+    ONT_RAW_DIR = row["ONT_RAW_DIR"]
     ONT_RAW_READS = row["ONT_RAW_READS"]
     ILLU_RAW_DIR = row["ILLUMINA_RAW_DIR"]
-    SPECIES_ID = row["SPECIES_ID"]
     ILLUMINA_RAW_F_READS = row["ILLUMINA_RAW_F_READS"]
     ILLUMINA_RAW_R_READS = row["ILLUMINA_RAW_R_READS"]
-        
+    SPECIES_ID = row["SPECIES_ID"]
+
+    if type(ONT_RAW_DIR) == str:
+        shared_root = os.path.commonpath([ONT_RAW_DIR, ILLU_RAW_DIR])
+        initialize_logging_environment(shared_root)
+        log_print(f"Running Entheome Genome Hybrid Assembly Pipeline on: {shared_root}")
+        ONT_RAW_READS = ont_combine_fastq_gz(ONT_RAW_DIR)
     if type(ILLU_RAW_DIR) == str:
         shared_root = os.path.commonpath([ONT_RAW_READS, ILLU_RAW_DIR])
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Hybrid Assembly Pipeline on: {shared_root}")
-        combined_files = illumina_extract_and_check(ILLU_RAW_DIR, SPECIES_ID)
-        ILLUMINA_RAW_F_READS = combined_files[0]
-        ILLUMINA_RAW_R_READS = combined_files[1]
+        illu_combined_files = illumina_extract_and_check(ILLU_RAW_DIR, SPECIES_ID)
+        ILLUMINA_RAW_F_READS = illu_combined_files[0]
+        ILLUMINA_RAW_R_READS = illu_combined_files[1]
     elif type(ONT_RAW_READS) == str:    
         shared_root = os.path.commonpath([ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
         initialize_logging_environment(shared_root)
@@ -1291,7 +1372,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                     REF_SEQ = new_ref_path  # Update REF_SEQ in the row
                     log_print(f"Renamed REF_SEQ from {ref_seq_path} to {new_ref_path}")
                 except Exception as e:
-                    log_print(f"Error renaming {ref_seq_path} to {new_ref_path}: {e}")
+                    log_print(f"ERROR:\tUnable to rename {ref_seq_path} to {new_ref_path}: {e}")
             else:
                 # If .fna.gz does not exist, try using existing .fa.gz
                 fa_gz_path = os.path.join(ref_dir, ref_basename + '.fa.gz')
@@ -1312,7 +1393,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                     REF_SEQ = new_ref_path  # Update REF_SEQ in the row
                     log_print(f"Renamed REF_SEQ from {ref_seq_path} to {new_ref_path}")
                 except Exception as e:
-                    log_print(f"Error renaming {ref_seq_path} to {new_ref_path}: {e}")
+                    log_print(f"ERROR:\tUnable to rename {ref_seq_path} to {new_ref_path}: {e}")
             else:
                 # If .fna does not exist, try using existing .fa
                 fa_path = os.path.join(ref_dir, ref_basename + '.fa')
@@ -1487,14 +1568,17 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     
     # FastQC Illumina Deduplicated Reads
     dedup_fastqc_dir = "/".join(clump_f_dedup_path.split("/")[:-1]) + "/dedup_fastqc_analysis"
+    print(dedup_fastqc_dir)
     if not os.path.exists(dedup_fastqc_dir):
         os.makedirs(dedup_fastqc_dir)
     fastqc_dedup_F_out_file = os.path.join(dedup_fastqc_dir, clump_f_dedup_path.split("/")[-1].replace(".fq.gz","_fastqc.html")).replace("trimmed","dedup")
     fastqc_dedup_R_out_file = os.path.join(dedup_fastqc_dir, clump_r_dedup_path.split("/")[-1].replace(".fq.gz","_fastqc.html")).replace("trimmed","dedup")
+    print(fastqc_dedup_F_out_file)
+    print(fastqc_dedup_R_out_file)
     if os.path.exists(fastqc_dedup_F_out_file) and os.path.exists(fastqc_dedup_R_out_file):
         log_print(f"SKIP:\tTrimmed FastQC outputs already exist: {fastqc_dedup_F_out_file}; {fastqc_dedup_R_out_file}.")
     else:
-        fastqc_cmd = ["fastqc", "-o", trimmed_fastqc_dir, "-t", str(CPU_THREADS), clump_f_dedup_path, clump_r_dedup_path]
+        fastqc_cmd = ["fastqc", "-o", dedup_fastqc_dir, "-t", str(CPU_THREADS), clump_f_dedup_path, clump_r_dedup_path]
         _ = run_subprocess_cmd(fastqc_cmd, shell_check = False)
     sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] =  round((float(get_total_bases(fastqc_dedup_F_out_file).split(" ")[0]) + float(get_total_bases(fastqc_dedup_R_out_file).split(" ")[0])) / 2, 2)
 
@@ -1531,8 +1615,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         else:    
             filtlong_cmd = f"filtlong --min_length 1000 --min_mean_q 8 --target_bases 500000000 --trim -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} {ONT_RAW_READS} > {filtered_ONT_reads}"
             _ = run_subprocess_cmd(filtlong_cmd, shell_check = True)
-            gzip_cmd = ["gzip", filtered_ONT_reads]
-            _ = run_subprocess_cmd(gzip_cmd, shell_check = False)
+            gzip_file(filtered_ONT_reads, gzipped_filtered_ONT_reads)
         
         # NanoPlot ONT Filtered Reads
         filtered_nanoplot_dir = raw_nanoplot_dir.replace("raw","filtered")
@@ -1784,7 +1867,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         output_prefix = "/".join(shared_root.split("/")[:-1]) + f"/{ragtag_ref_assembly.split('/')[-1]}_sealed"
         sealer_output_file = f"{output_prefix}_scaffold.fa"        
         if os.path.isfile(sealer_output_file):        
-            log_print("PASS:\tSkipping ABySS sealer, output file already exists")
+            log_print(f"SKIP:\tABySS sealer output file already exists: {sealer_output_file}.")
         else:
             kmer_sizes = [55,75,95]
             abyss_sealer_cmd = ["abyss-sealer", "-o", output_prefix, "-S", ragtag_ref_assembly,
@@ -1862,9 +1945,8 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                          f"--{kingdom_id}", f"--{karyote_id}",
                          "-o", quast_dir, final_assembly_path]
         _ = run_subprocess_cmd(quast_cmd, shell_check = False)
-    gzip_cmd = ["gzip", final_assembly_path]
-    final_assembly_path = final_assembly_path + ".gz"
-    _ = run_subprocess_cmd(gzip_cmd, shell_check = False)
+    final_gz_assembly_path = final_assembly_path + ".gz"
+    gzip_file(final_assembly_path, final_gz_assembly_path)
 
 ###############################################################################
 # Assessment of Input Reads, Process, & Final Assembly
@@ -1911,27 +1993,27 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                 sample_stats_dict["ASSEMBLY_GC"] = float(line.split("\t")[-1].replace("\n",""))
             # TODO: UPDATE "VALUE" with correct REF_SEQ line data
             if REF_SEQ != None:
-                if "VALUE" in line:
+                if "# misassemblies" in line:
                     sample_stats_dict["MISASSEMBLIES"] = float(line.split("\t")[-1].replace("\n",""))
-                elif "VALUE" in line:
+                elif "# N's per 100 kbp" in line:
                     sample_stats_dict["N_PER_100KBP"] = float(line.split("\t")[-1].replace("\n",""))
-                elif "VALUE" in line:
+                elif "# mismatches per 100 kbp" in line:
                     sample_stats_dict["MIS_PER_100KBP"] = float(line.split("\t")[-1].replace("\n",""))
-                elif "VALUE" in line:
+                elif "# indels per 100 kbp" in line:
                     sample_stats_dict["INDELS_PER_100KPB"] = float(line.split("\t")[-1].replace("\n",""))
 
     # Calculate Coverage Based on if REF_SEQ != None then use final_assembly
     if not pd.isna(REF_SEQ):
-        print("Needs to parse Coverage with REF_SEQ")
         ref_total_bases = 0
         for record in SeqIO.parse(REF_SEQ, "fasta"):
             ref_total_bases += len(record.seq)
         sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
         sample_stats_dict["TRIMMED_ILLU_COVERAGE"] = round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
         sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
-        sample_stats_dict["RAW_ONT_COVERAGE"] = round(sample_stats_dict["RAW_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
-        sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
-        sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
+        if not pd.isna(ONT_RAW_READS):
+            sample_stats_dict["RAW_ONT_COVERAGE"] = round(sample_stats_dict["RAW_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
+            sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
+            sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
     else:
         sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
         sample_stats_dict["TRIMMED_ILLU_COVERAGE"] =  round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
@@ -1941,6 +2023,8 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
             sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
             sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
     sample_stats_dict["FINAL_ASSEMBLY"] = final_assembly_path
+
+    print(sample_stats_dict)
            
     quality_classifications = classify_assembly(sample_stats_dict)
     for metric, classification in quality_classifications.items():
@@ -1951,8 +2035,8 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         input_csv_df.loc[index, key] = value
     log_print(f"Assessment of Final Hybrid Assembly: {final_assembly_path}")
     log_print(f"PASS:\tEGAP Final Hybrid Assembly Complete: {final_assembly_path}")
-    log_print("\nThis was produced with the help of the Entheogen Genome (Entheome) Foundation\n")
-    log_print("\nIf this was useful, please support us at https://entheome.org/\n")
+    log_print("This was produced with the help of the Entheogen Genome (Entheome) Foundation\n")
+    log_print("If this was useful, please support us at https://entheome.org/\n")
     print("\n\n\n")    
     return final_assembly_path, results_df
 
@@ -1963,6 +2047,7 @@ if __name__ == "__main__":
 
     # Default values
     default_input_csv = None
+    default_raw_ont_dir = None
     default_ont_reads = None
     default_raw_illu_dir = None
     default_raw_illu_reads_1 = "/mnt/d/TESTING_SPACE/Ps_cubensis/MG_Ps_cubensis_GT/Illumina_PE150/SRR13870478_1.fq.gz"
@@ -1977,6 +2062,9 @@ if __name__ == "__main__":
     parser.add_argument("--input_csv", "-csv",
                         type = str, default = default_input_csv,
                         help = f"Path to a csv containing multiple sample data. (default: {default_input_csv})")
+    parser.add_argument("--raw_ont_dir", "-odir",
+                        type = str, default = default_raw_ont_dir,
+                        help = f"Path to a directory containing all Raw ONT Reads. (default: {default_raw_ont_dir})")
     parser.add_argument("--raw_ont_reads", "-i0",
                         type = str, default = default_ont_reads,
                         help = f"Path to the combined Raw ONT fastq reads. (default: {default_ont_reads})")
@@ -2011,7 +2099,8 @@ if __name__ == "__main__":
     if INPUT_CSV != None:
         input_csv_df = pd.read_csv(INPUT_CSV)
     else:
-        sample_dict = {"ONT_RAW_READS": [args.raw_ont_reads],
+        sample_dict = {"ONT_RAW_DIR": [args.raw_ont_dir],
+                       "ONT_RAW_READS": [args.raw_ont_reads],
                        "ILLUMINA_RAW_DIR": [args.raw_illu_dir],
                        "ILLUMINA_RAW_F_READS": [args.raw_illu_reads_1],
                        "ILLUMINA_RAW_R_READS": [args.raw_illu_reads_2],
