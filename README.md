@@ -1,6 +1,7 @@
 # EGAP Pipeline
-
-![EGAP Banner](EGAP_banner.png)
+<div align="center">
+  <img src="EGAP_banner.png" alt="EGAP Banner" width="400">
+</div>
 
 ## Overview
 EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline developed for assembling high-quality hybrid genomes using Oxford Nanopore Technologies (ONT) and Illumina sequencing data. It also supports de novo and reference-based assemblies using Illumina data alone. The pipeline encompasses comprehensive steps for read quality control, trimming, genome assembly, polishing, and scaffolding. While optimized for fungal genomes, EGAP can be customized to work with other types of organisms.
@@ -44,9 +45,9 @@ bash EGAP_setup.sh
 ```
 
 ## Pipeline Flow
-
-![EGAP Pipeline](EGAP_pipeline.png)
-
+<div align="center">
+  <img src="EGAP_pipeline.png" alt="EGAP Pipeline" width="400">
+</div>
 ## Command-Line Usage
 
 ### Parameters:
