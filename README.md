@@ -1,7 +1,6 @@
 # EGAP Pipeline
-<div align="center">
-  <img src="EGAP_banner.png" alt="EGAP Banner" width="400">
-</div>
+
+![EGAP Banner](EGAP_banner.png)
 
 ## Overview
 EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline developed for assembling high-quality hybrid genomes using Oxford Nanopore Technologies (ONT) and Illumina sequencing data. It also supports de novo and reference-based assemblies using Illumina data alone. The pipeline encompasses comprehensive steps for read quality control, trimming, genome assembly, polishing, and scaffolding. While optimized for fungal genomes, EGAP can be customized to work with other types of organisms.
@@ -41,18 +40,19 @@ Ensure you have Python 3.8 installed. The pipeline has dependencies on a variety
 You can install pre-requisites using the shell script:
 
 ```bash
-bash EGAP_setup.sh
+bash /path/to/EGAP_setup.sh
 ```
 
 ## Pipeline Flow
-<div align="center">
-  <img src="EGAP_pipeline.png" alt="EGAP Pipeline" width="400">
-</div>
+
+![EGAP Pipeline](EGAP_pipeline.png)
+
 ## Command-Line Usage
 
 ### Parameters:
 
 - \`--input_csv\`, \`-csv\` (str): Path to a CSV containing multiple sample data. (default = None)
+- \`--raw_ont_dir\`, \`-odir\` (str): PPath to a directory containing all Raw ONT Reads. (if \`-csv\` = None; else REQUIRED)
 - \`--raw_ont_reads\`, \`-i0\` (str): Path to the combined Raw ONT FASTQ reads. (if \`-csv\` = None; else REQUIRED)
 - \`--raw_illu_dir\`, \`-idir\` (str): Path to a directory containing all Raw Illumina Reads. (if \`-csv\` = None; else REQUIRED)
 - \`--raw_illu_reads_1\`, \`-i1\` (str): Path to the Raw Forward Illumina Reads. (if \`-csv\` = None; else REQUIRED)
@@ -66,18 +66,18 @@ bash EGAP_setup.sh
 ### Example Command:
 
 ```bash
-python EGAP.py --raw_ont_reads /path/to/ont_reads.fq.gz \
-               --raw_illu_dir /path/to/illumina_reads/ \
-               --species_id AB_speciesname \
-               --organism_kingdom Funga \
-               --est_size 60m \
-               --percent_resources 0.8
+python /path/to/EGAP.py --raw_ont_reads /path/to/ont_reads.fq.gz \
+                        --raw_illu_dir /path/to/illumina_reads/ \
+                        --species_id AB_speciesname \
+                        --organism_kingdom Funga \
+                        --est_size 60m \
+                        --percent_resources 0.8
 ```
 
 Alternatively, using a CSV file for multiple samples:
 
 ```bash
-python EGAP.py --input_csv samples.csv
+python /path/to/EGAP.py --input_csv /path/to/samples.csv
 ```
 
 ## CSV Generation
@@ -88,17 +88,18 @@ To run EGAP with multiple samples, you can provide a CSV file containing the nec
 
 The CSV file should have the following header and columns:
 
-| ONT_RAW_READS                  | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | ILLUMINA_RAW_DIR | SPECIES_ID     | ORGANISM_KINGDOM | EST_SIZE | REF_SEQ                  |
-|--------------------------------|-------------------------------------|-------------------------------------|-------------------|----------------|------------------|----------|--------------------------|
-| /path/to/ONT/sample1.fq.gz     | /path/to/Illumina/sample1_R1.fq.gz  | /path/to/Illumina/sample1_R2.fq.gz  | None              | AB_sample1     | Funga            | 60m      | /path/to/ref_genome1.fasta |
-| /path/to/ONT/sample2.fq.gz     | /path/to/Illumina/sample2_R1.fq.gz  | /path/to/Illumina/sample2_R2.fq.gz  | None              | AB_sample2     | Funga            | 55m      | /path/to/ref_genome2.fasta |
+| ONT_RAW_DIR | ONT_RAW_READS                  | ILLUMINA_RAW_DIR | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | SPECIES_ID     | ORGANISM_KINGDOM | EST_SIZE | REF_SEQ                  |
+|-------------|--------------------------------|------------------|-------------------------------------|-------------------------------------|----------------|------------------|----------|--------------------------|
+| None        | /path/to/ONT/sample1.fq.gz     | None             | /path/to/Illumina/sample1_R1.fq.gz  | /path/to/Illumina/sample1_R2.fq.gz  | AB_sample1     | Funga            | 60m      | /path/to/ref_genome1.fasta |
+| None        | /path/to/ONT/sample2.fq.gz     | None             | /path/to/Illumina/sample2_R1.fq.gz  | /path/to/Illumina/sample2_R2.fq.gz  | AB_sample2     | Funga            | 55m      | /path/to/ref_genome2.fasta |
 
 ### Column Descriptions
 
+- **ONT_RAW_DIR**: Path to the directory containing all Raw ONT Reads. Use `None` if specifying individual read files.
 - **ONT_RAW_READS**: Path to the combined Raw ONT FASTQ reads (e.g., `/path/to/ONT/sample1.fq.gz`).
+- **ILLUMINA_RAW_DIR**: Path to the directory containing all Raw Illumina Reads. Use `None` if specifying individual read files.
 - **ILLUMINA_RAW_F_READS**: Path to the Raw Forward Illumina Reads (e.g., `/path/to/Illumina/sample1_R1.fq.gz`).
 - **ILLUMINA_RAW_R_READS**: Path to the Raw Reverse Illumina Reads (e.g., `/path/to/Illumina/sample1_R2.fq.gz`).
-- **ILLUMINA_RAW_DIR**: Path to the directory containing all Raw Illumina Reads. Use `None` if specifying individual read files.
 - **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>` (e.g., `AB_sample1`).
 - **ORGANISM_KINGDOM**: Kingdom the current organism data belongs to (default: `Funga`).
 - **EST_SIZE**: Estimated size of the genome in Mbp (million base pairs) (e.g., `60m`).
@@ -107,14 +108,14 @@ The CSV file should have the following header and columns:
 ### Example CSV File (`samples.csv`)
 
 ```csv
-ONT_RAW_READS,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,ILLUMINA_RAW_DIR,SPECIES_ID,ORGANISM_KINGDOM,EST_SIZE,REF_SEQ
-/path/to/ONT/sample1.fq.gz,/path/to/Illumina/sample1_R1.fq.gz,/path/to/Illumina/sample1_R2.fq.gz,None,AB_sample1,Funga,60m,/path/to/ref_genome1.fasta
-/path/to/ONT/sample2.fq.gz,/path/to/Illumina/sample2_R1.fq.gz,/path/to/Illumina/sample2_R2.fq.gz,None,AB_sample2,Funga,55m,/path/to/ref_genome2.fasta
+ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,EST_SIZE,REF_SEQ
+None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/SRR25932369.fq.gz,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_1.fq.gz,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/SRR25932370_2.fq.gz,Ps_zapotecorum,Funga,60m,None
+None,/mnt/d/TESTING_SPACE/Ps_gandalfiana/ONT_MinION/SRR27945396.fq.gz,/mnt/d/TESTING_SPACE/Ps_gandalfiana/Illumina_PE150/B1_3,None,None,Ps_gandalfiana,Funga,60m,/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna
 ```
 
 ### Notes
 
-- If you provide a value for `ILLUMINA_RAW_DIR`, set `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS` to `None`. EGAP will automatically detect and process all paired-end reads within the specified directory.
+- If you provide a value for `ILLUMINA_RAW_DIR`, set `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS` to `None`. EGAP will automatically detect and process all paired-end reads within the specified directory. This is also True if for if you provide `ONT_RAW_DIR`.
 - Ensure that all file paths are correct and accessible.
 - The CSV file should not contain any extra spaces or special characters in the headers.
 
@@ -149,7 +150,6 @@ python EGAP.py --input_csv samples.csv
 
 ## References
 This pipeline was modified From two of the following pipelines:
-    
     Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR,
     Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes
     of ecologically and geographically diverse Psilocybe species. Microbiol Resour
