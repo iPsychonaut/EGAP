@@ -13,7 +13,7 @@ EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline 
 3. [Pipeline Flow](#pipeline-flow)
 4. [Command-Line Usage](#command-line-usage)
 5. [CSV Generation](#csv-generation)
-6. [Example Data & Instructions](#example-data-&-instructions)
+6. [Example Data & Instructions](#example-data--instructions)
 7. [Future Improvements](#future-improvements)
 8. [References](#references)
 
