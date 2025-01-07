@@ -138,14 +138,15 @@ None,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/ONT/SRR########.fastq.gz,/mnt/d/
 
 ### Create the Folder Structure
 
-First, create the main processing folder with the required sub-folders:
+First, create the main processing folder with the required sub-folders; change "EGAP_Processing" or add your own organism specific folder as needed:
 
 ```bash
 mkdir -p EGAP_Processing/ONT EGAP_Processing/Illumina && \
 cd EGAP_Processing
 ```
 
-#### Illumina-Only (with Reference Sequence) Assembly Example:
+### Illumina-Only (with Reference Sequence) Assembly Example:
+
 Ps. cubensis var. Golden Teacher assembled with reference to Ps. cubensis var. PE Reference Sequence.
 
 Download the Reference Sequence into main processing folder:
@@ -165,7 +166,7 @@ rm -rf SRR13870478 && \
 cd ..
 ```
 
-#### Illumina-Only (with Reference Sequence) Assembly Command
+### Illumina-Only (with Reference Sequence) Assembly Command:
 
 Adjust the paths to correctly match the downloaded files.
 
@@ -182,7 +183,8 @@ python /mnt/d/EGAP/EGAP.py --raw_illu_reads_1 /mnt/d/EGAP/EGAP_Processing/Illumi
 ```
 
 
-#### ONT/Illumina Hybrid Assembly Example: 
+### ONT/Illumina Hybrid Assembly Example: 
+
 Ps. caeruleorhiza
 
 Download the ONT data into the ONT folder:
@@ -205,20 +207,20 @@ rm -rf SRR27945395 && \
 cd ..
 ```
 
-#### Illumina-Only with Reference Sequence Assembly
+###  ONT/Illumina Hybrid Assembly Command:
 
 Adjust the paths to correctly match the downloaded files.
 
 ```bash
-python /mnt/d/EGAP/EGAP.py --raw_ont_reads /mnt/d/EGAP/EGAP_Processing/ONT/SRR13870478.fq.gz \
-                           --raw_illu_reads_1 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR27945395_1.fq.gz \
-                           --raw_illu_reads_2 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR27945395_2.fq.gz \
+python /mnt/d/EGAP/EGAP.py --raw_ont_reads /mnt/d/EGAP/EGAP_Processing/ONT/SRR27945394.fastq.gz \
+                           --raw_illu_reads_1 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR27945395_1.fastq.gz \
+                           --raw_illu_reads_2 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR27945395_2.fastq.gz \
                            --species_id Ps_caeruleorhiza \
                            --organism_kingdom Funga \
                            --organism_karyote Eukaryote \
                            --compleasm_2 basidiomycota \
                            --compleasm_1 agaricales \
-                           --est_size 55m
+                           --est_size 60m
 ```
 
 ## Future Improvements
