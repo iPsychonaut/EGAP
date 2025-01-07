@@ -1797,6 +1797,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         else:
             purge_dupes_cmd = ["python", find_file("run_purge_dups.py"),
                                pd_json, pd_path, SPECIES_ID, "-p", "bash"]
+            print(purge_dupes_cmd)
             _ = run_subprocess_cmd(purge_dupes_cmd, shell_check = False)       
         os.chdir(cwd)
     else:
@@ -1928,13 +1929,13 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     else:
         if pd.isna(REF_SEQ):
             quast_cmd = ["quast", "--threads", str(CPU_THREADS),
-                         f"--{kingdom_id}", f"--{karyote_id}",
-                         "-o", quast_dir, final_assembly_path]
+                         f"--{karyote_id}", "-o", quast_dir, final_assembly_path]
         else:
             quast_cmd = ["quast", "--threads", str(CPU_THREADS),
-                         "-r", REF_SEQ,
-                         f"--{kingdom_id}", f"--{karyote_id}",
+                         "-r", REF_SEQ, f"--{karyote_id}",
                          "-o", quast_dir, final_assembly_path]
+        if kingdom_id == "Funga":
+            quast_cmd.append("--fungus")
         _ = run_subprocess_cmd(quast_cmd, shell_check = False)
     final_gz_assembly_path = final_assembly_path + ".gz"
     gzip_file(final_assembly_path, final_gz_assembly_path)
