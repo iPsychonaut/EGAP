@@ -696,19 +696,18 @@ def bbmap_stats(input_folder, reads_list):
     else:
         log_print("Processing fastq files for bbmap stats...")
         bbmerge_path = find_file(default_bbmerge_path)
-        if len(reads_list) == 2:
+        print(reads_list)
+        if len(reads_list) == 3:
+            bbmerge_cmd = [bbmerge_path,
+                           f"in1={reads_list[1]}",
+                           f"in2={reads_list[2]}",
+                           f"out={bbmap_out_path}",
+                           f"ihist={input_folder}/insert_size_histogram.txt"]
+        elif len(reads_list) == 2:
             bbmerge_cmd = [bbmerge_path,
                            f"in1={reads_list[0]}",
                            f"in2={reads_list[1]}",
                            f"out={bbmap_out_path}",
-                           f"outu1={bbmap_out_path.replace('.fq.gz','_unused_fwd.fg.gz')}",
-                           f"outu2={bbmap_out_path.replace('.fq.gz','_unused_rev.fg.gz')}",
-                           f"ihist={input_folder}/insert_size_histogram.txt"]
-        else:
-            bbmerge_cmd = [bbmerge_path,
-                           f"in={reads_list[0]}",
-                           f"out={bbmap_out_path}",
-                           f"outu={bbmap_out_path.replace('.fq.gz','_unused.fg.gz')}",
                            f"ihist={input_folder}/insert_size_histogram.txt"]
         _ = run_subprocess_cmd(bbmerge_cmd, False)
         try:
@@ -864,7 +863,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
         illu_only_mates = 1
         illu_only_gaps = 1
         illu_only_soap = 0
-    elif len(input_fq_list) == 2:
+    elif len(input_fq_list) >= 2:
         illu_only_mates = 0
         illu_only_gaps = 0
         illu_only_soap = 1
@@ -1101,7 +1100,7 @@ def process_read_file(read_path):
     if ext == ".gz":
         basename, ext1 = os.path.splitext(basename)
         ext = ext1 + ext  # e.g., ".fq.gz" or ".fastq.gz"
-
+    print(read_path)
     if read_path.endswith(".fq.gz"):
         # Correct extension; do nothing
         log_print(f"Read file already in .fq.gz format: {read_path}")
@@ -1498,7 +1497,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     karyote_id = row["ORGANISM_KARYOTE"].lower()
     
 ###############################################################################
-    # Pre-Processing Reads Preparation
+    # Reads Pre-Processing
 ###############################################################################
 
     # FastQC Illumina Raw Reads
@@ -1676,14 +1675,14 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         log_print(f"Highest Mean Quality ONT reads: {highest_mean_qual_ont_reads}")
         
 ###############################################################################
-    # De Novo Assembly
+    # Assembly
 ###############################################################################   
     
     # MaSuRCA de Novo Assembly based on input Reads     
-    masurca_out_dir = os.path.join("/".join(shared_root.split("/")[:-1]), "masurca_assembly")
+    masurca_out_dir = os.path.join(shared_root, "masurca_assembly")
     if not os.path.exists(masurca_out_dir):
         os.makedirs(masurca_out_dir)
-    final_masurca_path = os.path.join("/".join(shared_root.split("/")[:-1]), f"{SPECIES_ID}_masurca.fasta")
+    final_masurca_path = os.path.join(shared_root, f"{SPECIES_ID}_masurca.fasta")
     if not pd.isna(ONT_RAW_READS):
         default_assembly_path, assembly_path, ref_assembly_path = masurca_config_gen(shared_root, masurca_out_dir,
                                                                                  [highest_mean_qual_ont_reads,
@@ -1771,9 +1770,10 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         _ = run_subprocess_cmd(pilon_cmd, shell_check = False)
     
 ###############################################################################
-    # Polished Assembly Curation
+    # Assembly Curation
 ###############################################################################    
-    # Purge haplotigs and overlaps with purge_dups (if ONT Reads exist)
+    
+# Purge haplotigs and overlaps with purge_dups (if ONT Reads exist)
     if not pd.isna(ONT_RAW_READS):
         pd_work_dir = os.path.join(shared_root,"purge_dups_work")
         if not os.path.exists(pd_work_dir):
@@ -1871,7 +1871,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         final_assembly_path = sealer_output_file
 
 ###############################################################################
-    # Quality Control Checks of Final Assembly
+    # Final Assembly Assessment
 ###############################################################################
 
     # Use Illumina Reads with Merqury
