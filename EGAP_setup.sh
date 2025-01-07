@@ -51,6 +51,32 @@ make
 check_success "Building purge_dups"
 cd ~ # Return to home directory
 
+if [ ! -d "runner" ]; then
+    echo -e "\e[36m\nCloning runner repository...\e[0m"
+    git clone https://github.com/dfguan/runner.git
+    check_success "Cloning runner repository"
+else
+    echo -e "\e[33mDirectory 'runner' already exists. Skipping clone.\e[0m"
+fi
+
+cd runner || { echo "Failed to change to runner directory."; exit 1; }
+python3 setup.py install --user
+check_success "Installing runner"
+cd ~ # Return to home directory
+
+if [ ! -d "KMC" ]; then
+    echo -e "\e[36m\nCloning KMC repository...\e[0m"
+    git clone https://github.com/dfguan/KMC.git
+    check_success "Cloning KMC repository"
+else
+    echo -e "\e[33mDirectory 'KMC' already exists. Skipping clone.\e[0m"
+fi
+
+cd KMC || { echo "Failed to change to KMC directory."; exit 1; }
+make -j 16
+check_success "Installing KMC"
+cd ~ # Return to home directory
+
 # Download and install Miniforge3 if not already installed
 if [ -d "$HOME/miniforge3" ]; then
     echo -e "\e[33mMiniforge3 is already installed at $HOME/miniforge3. Skipping installation.\e[0m"
