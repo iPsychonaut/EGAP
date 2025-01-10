@@ -141,45 +141,45 @@ None,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/ONT/SRR########.fastq.gz,/mnt/d/
 First, create the main processing folder with the required sub-folders; change "EGAP_Processing" or add your own organism specific folder as needed:
 
 ```bash
-mkdir -p EGAP_Processing/ONT EGAP_Processing/Illumina && \
-cd EGAP_Processing
+mkdir -p /path/to/EGAP/EGAP_Processing/ONT /path/to/EGAP/EGAP_Processing/Illumina && \
+cd /path/to/EGAP/EGAP_Processing
 ```
 
 ### Illumina-Only (with Reference Sequence) Assembly Example:
 
-Ps. cubensis var. Golden Teacher assembled with reference to Ps. cubensis var. PE Reference Sequence.
+My. speciosa assembled with reference to the same organism's Reference Sequence.
 
 Download the Reference Sequence into main processing folder:
 
 ```bash
-datasets download genome accession GCF_017499595.1 --include genome,seq-report && \
+datasets download genome accession GCA_024721245.1 --include genome && \
 unzip ncbi_dataset
 ```
 
 Download the Illumina data into the Illumina folder (split into multiple files):
 
 ```bash
-cd Illumina && \
-prefetch SRR13870478 && \
-fastq-dump --gzip --split-files SRR13870478 && \
-rm -rf SRR13870478 && \
+cd Illumina/ && \
+prefetch SRR5602600 && \
+fastq-dump --gzip --split-files SRR5602600 && \
+rm -rf SRR5602600 && \
 cd ..
 ```
 
-### Illumina-Only (with Reference Sequence) Assembly Command:
+##### Illumina-Only (with Reference Sequence) Assembly Command:
 
 Adjust the paths to correctly match the downloaded files.
 
 ```bash
-python /mnt/d/EGAP/EGAP.py --raw_illu_reads_1 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR13870478_1.fastq.gz \
-                           --raw_illu_reads_2 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR13870478_2.fastq.gz \
-                           --species_id Ps_cubensis \
-                           --organism_kingdom Funga \
+python /mnt/d/EGAP/EGAP.py --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_1.fq.gz \
+                           --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_2.fq.gz \
+                           --species_id My_speciosa \
+                           --organism_kingdom Flora \
                            --organism_karyote Eukaryote \
-                           --compleasm_2 basidiomycota \
-                           --compleasm_1 agaricales \
-                           --est_size 60m \
-                           --ref_seq /mnt/d/EGAP/EGAP_Processing/ncbi_dataset/data/GCF_017499595.1/GCF_017499595.1_MGC_Penvy_1_genomic.fna
+                           --compleasm_1 embryophyta \
+                           --compleasm_2 eudicots \
+                           --est_size 693m \
+                           --ref_seq /path/to/EGAP/EGAP_Processing/My_speciosa/ncbi_dataset/data/GCA_024721245.1/GCA_024721245.1_ASM2472124v1_genomic.fna
 ```
 
 
@@ -207,14 +207,14 @@ rm -rf SRR27945395 && \
 cd ..
 ```
 
-###  ONT/Illumina Hybrid Assembly Command:
+#####  ONT/Illumina Hybrid Assembly Command:
 
 Adjust the paths to correctly match the downloaded files.
 
 ```bash
-python /mnt/d/EGAP/EGAP.py --raw_ont_reads /mnt/d/EGAP/EGAP_Processing/ONT/SRR27945394.fastq.gz \
-                           --raw_illu_reads_1 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR27945395_1.fastq.gz \
-                           --raw_illu_reads_2 /mnt/d/EGAP/EGAP_Processing/Illumina/SRR27945395_2.fastq.gz \
+python /mnt/d/EGAP/EGAP.py --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR27945394.fastq.gz \
+                           --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/Illumina/SRR27945395_1.fastq.gz \
+                           --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/Illumina/SRR27945395_2.fastq.gz \
                            --species_id Ps_caeruleorhiza \
                            --organism_kingdom Funga \
                            --organism_karyote Eukaryote \
@@ -222,6 +222,24 @@ python /mnt/d/EGAP/EGAP.py --raw_ont_reads /mnt/d/EGAP/EGAP_Processing/ONT/SRR27
                            --compleasm_1 agaricales \
                            --est_size 60m
 ```
+
+## Example Graphical Outputs
+
+<div align="center">
+  <img src="My_speciosa_embryophyta_odb10_busco.png" alt="My. speciosa embryophyta BUSCO plot" width="500">
+</div>
+
+<div align="center">
+  <img src="My_speciosa_eudicots_odb10_busco.png" alt="My. speciosa eudicots BUSCO plot" width="500">
+</div>
+
+<div align="center">
+  <img src="Ps_caeruleorhiza_agaricales_odb10_busco.png" alt="Ps. caeruleorhiza basidiomycota BUSCO plot" width="500">
+</div>
+
+<div align="center">
+  <img src="Ps_caeruleorhiza_basidiomycota_odb10_busco.png" alt="Ps. caeruleorhiza agaricales BUSCO plot" width="500">
+</div>
 
 ## Future Improvements
 - **Docker Integration**: Generate a Dockerfile for alternative installation option.
@@ -237,7 +255,7 @@ This pipeline was modified From two of the following pipelines:
     Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR,
     Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes
     of ecologically and geographically diverse Psilocybe species. Microbiol Resour
-    Announc 0:e00250-24. https://doi.org/10.1128/mra.00250-24
+    Announc 0:e00250-24; doi: https://doi.org/10.1128/mra.00250-24
     
     Muñoz-Barrera A, Rubio-Rodríguez LA, Jáspez D, Corrales A , Marcelino-Rodriguez I,
     Lorenzo-Salazar JM, González-Montelongo R, Flores C. Benchmarking of bioinformatics
@@ -249,11 +267,15 @@ The example data are published in:
     Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR,
     Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes
     of ecologically and geographically diverse Psilocybe species. Microbiol Resour
-    Announc 0:e00250-24. https://doi.org/10.1128/mra.00250-24
+    Announc 0:e00250-24; doi: https://doi.org/10.1128/mra.00250-24
 
     McKernan K, Kane L, Helbert Y, Zhang L, Houde N, McLaughlin S. A whole genome
     atlas of 81 Psilocybe genomes as a resource for psilocybin production. F1000Research
     2021, 10:961; doi: https://doi.org/10.12688/f1000research.55301.2
+    
+    Grassa CJ, Wenger JP, Dabney C, Poplawski SG, Motley ST, Michael TP, Schwartz
+    CJ, Weiblen GD. A complete Cannabis chromosome assembly and adaptive admixture
+    for elevated cannabidiol (CBD) content. BioRxiv, 458083; doi:https://doi.org/10.1101/458083.
 
 ## Contribution
 If you would like to contribute to the EGAP Pipeline, please submit a pull request or open an issue on GitHub. For major changes, please discuss them with us first via an issue.
