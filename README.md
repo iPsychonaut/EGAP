@@ -225,6 +225,7 @@ python /mnt/d/EGAP/EGAP.py --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR
 
 ## Example Graphical Outputs
 
+##### Illumina-Only (with Reference Sequence) Assembly BUSCO Plots:
 <div align="center">
   <img src="My_speciosa_embryophyta_odb10_busco.png" alt="My. speciosa embryophyta BUSCO plot" width="500">
 </div>
@@ -233,6 +234,7 @@ python /mnt/d/EGAP/EGAP.py --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR
   <img src="My_speciosa_eudicots_odb10_busco.png" alt="My. speciosa eudicots BUSCO plot" width="500">
 </div>
 
+#####  ONT/Illumina Hybrid Assembly BUSCO Plots:
 <div align="center">
   <img src="Ps_caeruleorhiza_agaricales_odb10_busco.png" alt="Ps. caeruleorhiza basidiomycota BUSCO plot" width="500">
 </div>
