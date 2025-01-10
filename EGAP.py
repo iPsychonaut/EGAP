@@ -1203,6 +1203,73 @@ def ont_combine_fastq_gz(ONT_FOLDER):
 
     return combined_ont_fastq_path
 
+def plot_busco(compleasm_odb, input_busco_tsv, input_fasta):
+    log_print(f"Generating BUSCO plot for {input_busco_tsv}...")
+    # Load the BUSCO TSV into a pandas DataFrame
+    busco_df = pd.read_csv(input_busco_tsv, sep="\t", header=0, dtype=str)
+    
+    busco_genes = len(busco_df)
+    
+    # Replace "Complete" with "Single" in the "Status" column
+    busco_df['Status'] = busco_df['Status'].replace("Complete", "Single")
+    
+    # Create a pivot table to count Status values for each Sequence
+    status_counts = busco_df.pivot_table(index='Sequence', columns='Status', aggfunc='size', fill_value=0)
+    
+    # Reorder the columns to maintain the original order
+    desired_order = ['Single', 'Duplicated', 'Incomplete', 'Fragmented']
+    status_counts = status_counts.reindex(columns=desired_order, fill_value=0)
+    
+    # Count total sequences and sequences to exclude
+    total_sequences = len(status_counts)
+    excluded_sequences = len(status_counts.loc[status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) == 0])
+    included_sequences = total_sequences - excluded_sequences
+    
+    # Remove sequences containing only Duplicated statuses
+    filtered_status_counts = status_counts.loc[status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) > 0]
+    
+    # Sort sequences by the total count of all statuses (optional)
+    filtered_status_counts = filtered_status_counts.loc[filtered_status_counts.sum(axis=1).sort_values(ascending=False).index]
+    
+    # Calculate the total counts for each status for the legend
+    status_totals = busco_df['Status'].value_counts()
+    
+    # Plot the data as a stacked bar chart with specified colors
+    colors = {'Single': 'limegreen', 'Duplicated': 'cyan', 'Incomplete': 'gold', 'Fragmented': 'yellow'}
+    ax = filtered_status_counts.plot(
+        kind='bar',
+        stacked=True,
+        figsize=(12, 8),
+        color=[colors[col] for col in filtered_status_counts.columns])
+    
+    # Update the legend with totals and percentages
+    legend_labels = [f"{status} ({round((status_totals.get(status, 0)/busco_genes)*100, 2)}%)" 
+                     for status in filtered_status_counts.columns]
+    
+    completeness_values = [round((status_totals.get(status, 0)/busco_genes)*100, 2) 
+                           for status in filtered_status_counts.columns]
+    completeness_calc = round(completeness_values[0] + completeness_values[1],2)
+    
+    # Add chart labels and title with n and x counts
+    plt.title(f"Distribution of {compleasm_odb} BUSCO Status per Sequence\nCompleteness: {completeness_calc}%")
+    plt.xlabel(f"Sequences (Contig/Scaffold/Chromosome)\nIncluded={included_sequences}, Excluded={excluded_sequences}")
+    plt.ylabel(f"Number of BUSCO Matches (out of {busco_genes})")
+    plt.xticks(rotation=45, ha='right')  # Tilt x-axis labels for readability
+    
+    ax.legend(legend_labels, title="BUSCO Status", loc='upper right')
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save the file as an svg based on input_fasta
+    output_busco_svg = input_fasta.replace(".fasta", "").replace(".fa", f"_{compleasm_odb}_busco.svg")
+    plt.savefig(output_busco_svg, format="svg")
+    output_busco_png = input_fasta.replace(".fasta", "").replace(".fa", f"_{compleasm_odb}_busco.png")
+    plt.savefig(output_busco_png, format="png")
+    
+    log_print(f"PASS:\tBUSCO {compleasm_odb} plot saved: {output_busco_svg} & output_busco_png")
+
+
 
 def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     """
@@ -1897,7 +1964,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     first_compleasm_dir = os.path.join(shared_root, f"{first_compleasm_odb}_compleasm")
     if not os.path.exists(first_compleasm_dir):
         os.makedirs(first_compleasm_dir)
-    first_compleasm_summary = os.path.join(first_compleasm_dir, "summary.txt")
+    first_compleasm_summary = os.path.join(first_compleasm_dir, first_compleasm_odb, "full_table_busco_format.tsv")
     if os.path.exists(first_compleasm_summary):
         log_print(f"SKIP\tFirst Compleasm Summary already exists: {first_compleasm_summary}.")
     else:
@@ -1905,12 +1972,14 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                        "-o", first_compleasm_dir,
                        "--lineage", first_compleasm_odb, "-t", str(CPU_THREADS)]
         _ = run_subprocess_cmd(first_compleasm_cmd, shell_check = False)
+    plot_busco(first_compleasm_odb, first_compleasm_summary, final_assembly_path)
+
 
     # Run Compelasm using second_odb10
     second_compleasm_dir = os.path.join(shared_root, f"{second_compleasm_odb}_compleasm")
     if not os.path.exists(second_compleasm_dir):
         os.makedirs(second_compleasm_dir)
-    second_compleasm_summary = os.path.join(second_compleasm_dir, "summary.txt")
+    second_compleasm_summary = os.path.join(second_compleasm_dir, second_compleasm_odb, "full_table_busco_format.tsv")
     if os.path.exists(second_compleasm_summary):
         log_print(f"SKIP\tSecond Compleasm Summary already exists: {second_compleasm_summary}.")
     else:
@@ -1918,6 +1987,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                                 "-o", second_compleasm_dir,
                                 "--lineage", second_compleasm_odb, "-t", str(CPU_THREADS)]
         _ = run_subprocess_cmd(second_compleasm_cmd, shell_check = False)
+    plot_busco(second_compleasm_odb, second_compleasm_summary, final_assembly_path)
 
     # Run Quast
     quast_dir = os.path.join(shared_root, f"{SPECIES_ID}_quast")
