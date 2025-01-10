@@ -145,7 +145,8 @@ mamba install -y -c bioconda -c conda-forge \
                                 merqury==1.3 \
                                 meryl==1.3 \
                                 beautifulsoup4==4.12.3 \
-                                ncbi-datasets-cli== 16.39.0
+                                ncbi-datasets-cli==16.39.0 \
+                                matplotlib==3.7.3
 
 check_success "Installing conda packages"
 
