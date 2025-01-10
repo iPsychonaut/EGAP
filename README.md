@@ -223,25 +223,56 @@ python /mnt/d/EGAP/EGAP.py --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR
                            --est_size 60m
 ```
 
-## Example Graphical Outputs
+## Quality Control Output Review
+EGAP Will rate the final assembly based on QUAST & BUSCO statistics. The final assessment will be on of the following:
+- AMAZING
+- GREAT
+- OK
+- POOR
 
-##### Illumina-Only (with Reference Sequence) Assembly BUSCO Plots:
-<div align="center">
-  <img src="My_speciosa_embryophyta_odb10_busco.png" alt="My. speciosa embryophyta BUSCO plot" width="500">
-</div>
+### QUAST Statistics
+(TBD)
+contigs_thresholds = {"AMAZING": 100, "GREAT": 1000, "OK": 10000, "POOR": 100000}
+n50_thresholds = {"AMAZING": 1000000, "GREAT": 100000, "OK": 1000, "POOR": 100}
+l50_thresholds = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #}
 
-<div align="center">
-  <img src="My_speciosa_eudicots_odb10_busco.png" alt="My. speciosa eudicots BUSCO plot" width="500">
-</div>
+### Compleasm BUSCO Plots 
+When assessing BUSCO outputs we desire to see >98.5% Completion (Sum of Single and Duplicated genes) in an AMAZING GREAT Assembly; >95% Completion in a Good Assembly; >90% Completion in an OK Assembly; and <90% Completion in a POOR Assembly. Along with High Completion, it is desired to see very few contigs that the genes align to; these sequences can be indiciative of chromsome-candidates.
 
-#####  ONT/Illumina Hybrid Assembly BUSCO Plots:
-<div align="center">
-  <img src="Ps_caeruleorhiza_agaricales_odb10_busco.png" alt="Ps. caeruleorhiza basidiomycota BUSCO plot" width="500">
-</div>
+#### Illumina-Only (with Reference Sequence) Assembly BUSCO Plots:
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="My_speciosa_eudicots_odb10_busco.png" alt="My. speciosa eudicots BUSCO plot" width="400">
+      <br>
+      <b>My. speciosa eudicots BUSCO</b>
+    </td>
+    <td align="center">
+      <img src="My_speciosa_embryophyta_odb10_busco.png" alt="My. speciosa embryophyta BUSCO plot" width="400">
+      <br>
+      <b>My. speciosa embryophyta BUSCO</b>
+    </td>
+  </tr>
+</table>
+Flora are known to have large amounts of duplicated genes.
 
-<div align="center">
-  <img src="Ps_caeruleorhiza_basidiomycota_odb10_busco.png" alt="Ps. caeruleorhiza agaricales BUSCO plot" width="500">
-</div>
+#### ONT/Illumina Hybrid Assembly BUSCO Plots:
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="Ps_caeruleorhiza_agaricales_odb10_busco.png" alt="Ps. caeruleorhiza agaricales BUSCO plot" width="400">
+      <br>
+      <b>Ps. caeruleorhiza agaricales BUSCO</b>
+    </td>
+    <td align="center">
+      <img src="Ps_caeruleorhiza_basidiomycota_odb10_busco.png" alt="Ps. caeruleorhiza basidiomycota BUSCO plot" width="400">
+      <br>
+      <b>Ps. caeruleorhiza basidiomycota BUSCO</b>
+    </td>
+  </tr>
+</table>
+Funga are known to have multi-nucleate cells, and thus have a higher possibility of duplicated genes, but not to the same degree as Flora. 
+
 
 ## Future Improvements
 - **Docker Integration**: Generate a Dockerfile for alternative installation option.
