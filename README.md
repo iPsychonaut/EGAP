@@ -237,7 +237,7 @@ EGAP Will rate the final assembly based on QUAST & BUSCO statistics. The final a
 - **l50_thresholds** = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #}
 
 ### Compleasm BUSCO Plots 
-When assessing BUSCO outputs we desire to see >98.5% Completion (Sum of Single and Duplicated genes) in an AMAZING GREAT Assembly; >95% Completion in a Good Assembly; >90% Completion in an OK Assembly; and <90% Completion in a POOR Assembly. Along with High Completion, it is desired to see very few contigs that the genes align to; these sequences can be indiciative of chromsome-candidates.
+When assessing BUSCO outputs we desire to see >98.5% Completion (Sum of Single and Duplicated genes) in an AMAZING GREAT Assembly; >95% Completion in a Good Assembly; >90% Completion in an OK Assembly; and <90% Completion in a POOR Assembly. Along with High Completion, it is desired to see very few contigs that the genes align to; these sequences can be indiciative of chromsome-candidates. Any sequences that only matched Duplicated genes were excluded from the plot (but noted in the x-axis label).
 
 #### Illumina-Only (with Reference Sequence) Assembly BUSCO Plots:
 <table align="center">
