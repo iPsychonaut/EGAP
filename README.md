@@ -224,17 +224,17 @@ python /mnt/d/EGAP/EGAP.py --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR
 ```
 
 ## Quality Control Output Review
-EGAP Will rate the final assembly based on QUAST & BUSCO statistics. The final assessment will be on of the following:
-- AMAZING
-- GREAT
-- OK
-- POOR
+EGAP Will rate the final assembly based on QUAST & BUSCO statistics. The final assessment will be one of the following:
+- **AMAZING**
+- **GREAT**
+- **OK**
+- **POOR**
 
 ### QUAST Statistics
 (TBD)
-contigs_thresholds = {"AMAZING": 100, "GREAT": 1000, "OK": 10000, "POOR": 100000}
-n50_thresholds = {"AMAZING": 1000000, "GREAT": 100000, "OK": 1000, "POOR": 100}
-l50_thresholds = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #}
+- **contigs_thresholds** = {"AMAZING": 100, "GREAT": 1000, "OK": 10000, "POOR": 100000}
+- **n50_thresholds** = {"AMAZING": 1000000, "GREAT": 100000, "OK": 1000, "POOR": 100}
+- **l50_thresholds** = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #}
 
 ### Compleasm BUSCO Plots 
 When assessing BUSCO outputs we desire to see >98.5% Completion (Sum of Single and Duplicated genes) in an AMAZING GREAT Assembly; >95% Completion in a Good Assembly; >90% Completion in an OK Assembly; and <90% Completion in a POOR Assembly. Along with High Completion, it is desired to see very few contigs that the genes align to; these sequences can be indiciative of chromsome-candidates.
