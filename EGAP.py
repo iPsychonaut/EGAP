@@ -1533,7 +1533,6 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     
     else:
         log_print("NOTE:\tNo REF_SEQ provided; skipping REF_SEQ processing.")
-        return REF_SEQ
 
     # Process input read files
     if pd.notna(ONT_RAW_READS):
