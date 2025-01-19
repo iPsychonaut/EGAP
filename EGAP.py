@@ -848,6 +848,12 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
          "/path/to/input_data/primary.genome.scf.fasta",
          "/path/to/input_data/primary.genome.ref.fasta")
     """
+    # If clump_f_dedup_path and/or clump_r_dedup_path contain ".gz" in their name, unzip them with gzip
+    dedup_unzip_list = [input_file.replace(".gz","") for input_file in [clump_f_dedup_path, clump_r_dedup_path]]
+    for input_file in [clump_f_dedup_path, clump_r_dedup_path]:
+        if ".gz" in input_file:
+            gunzip_file(input_file, input_file.replace(".gz",""))
+    
     avg_insert, std_dev = bbmap_stats(input_folder, input_fq_list)
     os.chdir(output_folder)
     jf_size = 2500000000 # BASED ON estimated_genome_size*20
@@ -877,7 +883,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
         log_print(f"SKIP:\tMaSuRCA Assembly, scaffolded assembly already exists: {assembly_path}.")
     else:
         config_content = ["DATA\n",
-                          f"PE= pe {avg_insert} {std_dev} {clump_f_dedup_path} {clump_r_dedup_path}\n"]
+                          f"PE= pe {avg_insert} {std_dev} {clump_f_dedup_path.replace('.gz','')} {clump_r_dedup_path.replace('.gz','')}\n"]
         if ref_seq:
             config_content.append(f"REFERENCE={ref_seq.replace('.gbff','.fna.gz')}\n")
         config_content.append("END\n")
@@ -902,6 +908,16 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
     skip_gap_closing_section(assemble_sh_path)
     masurca_assemble_cmd = ["bash", assemble_sh_path]
     return_code = run_subprocess_cmd(masurca_assemble_cmd, False)    
+    for output_file in dedup_unzip_list:
+        try:
+            os.remove(output_file)  # Remove the file
+            print(f"Removed: {output_file}")
+        except FileNotFoundError:
+            print(f"File not found: {output_file}")
+        except PermissionError:
+            print(f"Permission denied: {output_file}")
+        except Exception as e:
+            print(f"Error removing {output_file}: {e}")
     if return_code == 1:
         log_print("NOTE:\tMaSuRCA assembly interrupted intentionally; Gap Closing will be performed later.")
         ca_folder = find_ca_folder(input_folder)
@@ -1100,7 +1116,6 @@ def process_read_file(read_path):
     if ext == ".gz":
         basename, ext1 = os.path.splitext(basename)
         ext = ext1 + ext  # e.g., ".fq.gz" or ".fastq.gz"
-    print(read_path)
     if read_path.endswith(".fq.gz"):
         # Correct extension; do nothing
         log_print(f"Read file already in .fq.gz format: {read_path}")
@@ -1163,6 +1178,33 @@ def gzip_file(input_file, output_file):
     with open(input_file, "rb") as f_in:  # Open the original file in binary read mode
         with gzip.open(output_file, "wb") as f_out:  # Open the gzip file in binary write mode
             shutil.copyfileobj(f_in, f_out)  # Copy the content to the gzip file
+
+def gunzip_file(input_file, output_file):
+    """
+    Decompresses a gzip file back to its original format.
+
+    Parameters:
+    - input_file (str): Path to the gzip file to be decompressed.
+    - output_file (str): Path to the output decompressed file.
+
+    Returns:
+    - None
+
+    Considerations:
+    - The function overwrites the output file if it already exists.
+    - Ensure the input file exists and the program has permission to read it.
+    - Ensure the program has permission to write to the output file's directory.
+    - The function assumes the input file is a valid gzip file.
+
+    Example:
+    >>> input_file = "example.txt.gz"
+    >>> output_file = "example.txt"
+    >>> gunzip_file(input_file, output_file)
+    >>> print(f"{input_file} has been decompressed to {output_file}")
+    """    
+    with gzip.open(input_file, "rb") as f_in:  # Open the gzip file in binary read mode
+        with open(output_file, "wb") as f_out:  # Open the output file in binary write mode
+            shutil.copyfileobj(f_in, f_out)  # Copy the decompressed content to the output file
 
 
 def ont_combine_fastq_gz(ONT_FOLDER):
@@ -1235,7 +1277,7 @@ def plot_busco(compleasm_odb, input_busco_tsv, input_fasta):
     status_totals = busco_df['Status'].value_counts()
     
     # Plot the data as a stacked bar chart with specified colors
-    colors = {'Single': 'limegreen', 'Duplicated': 'cyan', 'Incomplete': 'gold', 'Fragmented': 'yellow'}
+    colors = {'Single': '#619B8AFF', 'Duplicated': '#A1C181FF', 'Incomplete': '#FE7F2DFF', 'Fragmented': '#FCCA46FF'}
     ax = filtered_status_counts.plot(
         kind='bar',
         stacked=True,
@@ -1408,23 +1450,23 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     if type(ONT_RAW_DIR) == str:
         shared_root = os.path.commonpath([ONT_RAW_DIR, ILLU_RAW_DIR])
         initialize_logging_environment(shared_root)
-        log_print(f"Running Entheome Genome Hybrid Assembly Pipeline on: {shared_root}")
+        log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
         ONT_RAW_READS = ont_combine_fastq_gz(ONT_RAW_DIR)
     if type(ILLU_RAW_DIR) == str:
         shared_root = os.path.commonpath([ONT_RAW_READS, ILLU_RAW_DIR])
         initialize_logging_environment(shared_root)
-        log_print(f"Running Entheome Genome Hybrid Assembly Pipeline on: {shared_root}")
+        log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
         illu_combined_files = illumina_extract_and_check(ILLU_RAW_DIR, SPECIES_ID)
         ILLUMINA_RAW_F_READS = illu_combined_files[0]
         ILLUMINA_RAW_R_READS = illu_combined_files[1]
     elif type(ONT_RAW_READS) == str:    
         shared_root = os.path.commonpath([ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
         initialize_logging_environment(shared_root)
-        log_print(f"Running Entheome Genome Hybrid Assembly Pipeline on: {shared_root}")
+        log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
     else:
         shared_root = os.path.commonpath([ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
         initialize_logging_environment(shared_root)
-        log_print(f"Running Entheome Genome Hybrid Assembly Pipeline on: {shared_root}")    
+        log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")    
 
     EST_SIZE = row["EST_SIZE"]
     REF_SEQ = row["REF_SEQ"]
@@ -1451,7 +1493,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                 try:
                     os.rename(ref_seq_path, new_ref_path)
                     REF_SEQ = new_ref_path  # Update REF_SEQ in the row
-                    log_print(f"Renamed REF_SEQ from {ref_seq_path} to {new_ref_path}")
+                    log_print(f"NOTE:\tRenamed REF_SEQ from {ref_seq_path} to {new_ref_path}")
                 except Exception as e:
                     log_print(f"ERROR:\tUnable to rename {ref_seq_path} to {new_ref_path}: {e}")
             else:
@@ -1459,9 +1501,9 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                 fa_gz_path = os.path.join(ref_dir, ref_basename + '.fa.gz')
                 if os.path.exists(fa_gz_path):
                     REF_SEQ = fa_gz_path
-                    log_print(f"Original file {ref_seq_path} not found. Using existing .fa.gz file: {fa_gz_path}")
+                    log_print(f"NOTE:\tOriginal file {ref_seq_path} not found. Using existing .fa.gz file: {fa_gz_path}")
                 else:
-                    log_print(f"Neither {ref_seq_path} nor {fa_gz_path} exists. REF_SEQ cannot be processed.")
+                    log_print(f"NOTE:\tNeither {ref_seq_path} nor {fa_gz_path} exists. REF_SEQ cannot be processed.")
         
         # Case 2: .fna
         elif ref_seq_path.endswith('.fna'):
@@ -1472,7 +1514,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                 try:
                     os.rename(ref_seq_path, new_ref_path)
                     REF_SEQ = new_ref_path  # Update REF_SEQ in the row
-                    log_print(f"Renamed REF_SEQ from {ref_seq_path} to {new_ref_path}")
+                    log_print(f"NOTE:\tRenamed REF_SEQ from {ref_seq_path} to {new_ref_path}")
                 except Exception as e:
                     log_print(f"ERROR:\tUnable to rename {ref_seq_path} to {new_ref_path}: {e}")
             else:
@@ -1480,17 +1522,17 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                 fa_path = os.path.join(ref_dir, ref_basename + '.fa')
                 if os.path.exists(fa_path):
                     REF_SEQ = fa_path
-                    log_print(f"Original file {ref_seq_path} not found. Using existing .fa file: {fa_path}")
+                    log_print(f"NOTE:\tOriginal file {ref_seq_path} not found. Using existing .fa file: {fa_path}")
                 else:
-                    log_print(f"Neither {ref_seq_path} nor {fa_path} exists. REF_SEQ cannot be processed.")
+                    log_print(f"NOTE:\tNeither {ref_seq_path} nor {fa_path} exists. REF_SEQ cannot be processed.")
         
         # Handle other extensions if necessary
         else:
-            log_print(f"REF_SEQ file {ref_seq_path} does not match expected extensions (.fna or .fna.gz). Skipping renaming.")
+            log_print(f"NOTE:\tREF_SEQ file {ref_seq_path} does not match expected extensions (.fna or .fna.gz). Skipping renaming.")
         
     
     else:
-        log_print("No REF_SEQ provided; skipping REF_SEQ processing.")
+        log_print("NOTE:\tNo REF_SEQ provided; skipping REF_SEQ processing.")
         return REF_SEQ
 
     # Process input read files
@@ -1585,7 +1627,6 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     fwd_unpaired_out = trimmo_f_pair_path.replace("paired","unpaired")
     trimmo_r_pair_path = ILLUMINA_RAW_R_READS.replace(".fq.gz", "_paired.fq.gz")
     rev_unpaired_out = trimmo_r_pair_path.replace("paired","unpaired")
-    ILLUMINACLIP = f"ILLUMINACLIP:{find_file('TruSeq3-PE.fa')}:2:30:10:11"
     HEADCROP = "HEADCROP:10"
     CROP = "CROP:145"
     SLIDINGWINDOW = "SLIDINGWINDOW:50:25"
@@ -1593,12 +1634,12 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     if os.path.exists(trimmo_f_pair_path) and os.path.exists(trimmo_r_pair_path):
         log_print("SKIP:\tTrimmomatic Paired outputs already exist: {trimmo_f_pair_path}; {trimmo_r_pair_path}")
     else:
-        trimmomatic_cmd = ["java", f"-Xmx{RAM_GB}G", "-jar", find_file("trimmomatic-0.39.jar"), 
-                            "PE", "-threads", str(CPU_THREADS), "-phred33",
+        trimmomatic_cmd = ["trimmomatic", "PE", "-threads", str(CPU_THREADS), "-phred33",
                             ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, 
                             trimmo_f_pair_path, fwd_unpaired_out,
                             trimmo_r_pair_path, rev_unpaired_out,
-                            ILLUMINACLIP, HEADCROP, CROP, SLIDINGWINDOW, MINLEN]
+                            f"ILLUMINACLIP:{find_file('TruSeq3-PE.fa')}:2:30:10:11",
+                            HEADCROP, CROP, SLIDINGWINDOW, MINLEN]
         _ = run_subprocess_cmd(trimmomatic_cmd, shell_check = False)
     if trimmo_f_pair_path == None and trimmo_r_pair_path == None:
         trimmo_f_pair_path = ILLUMINA_RAW_F_READS
@@ -1625,13 +1666,10 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     
     # FastQC Illumina Deduplicated Reads
     dedup_fastqc_dir = "/".join(clump_f_dedup_path.split("/")[:-1]) + "/dedup_fastqc_analysis"
-    print(dedup_fastqc_dir)
     if not os.path.exists(dedup_fastqc_dir):
         os.makedirs(dedup_fastqc_dir)
     fastqc_dedup_F_out_file = os.path.join(dedup_fastqc_dir, clump_f_dedup_path.split("/")[-1].replace(".fq.gz","_fastqc.html")).replace("trimmed","dedup")
     fastqc_dedup_R_out_file = os.path.join(dedup_fastqc_dir, clump_r_dedup_path.split("/")[-1].replace(".fq.gz","_fastqc.html")).replace("trimmed","dedup")
-    print(fastqc_dedup_F_out_file)
-    print(fastqc_dedup_R_out_file)
     if os.path.exists(fastqc_dedup_F_out_file) and os.path.exists(fastqc_dedup_R_out_file):
         log_print(f"SKIP:\tTrimmed FastQC outputs already exist: {fastqc_dedup_F_out_file}; {fastqc_dedup_R_out_file}.")
     else:
@@ -1824,10 +1862,11 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     pilon_out_prefix = "pilon_assembly"
     pilon_out_dir = os.path.join(shared_root, "pilon_polished_assembly")
     pilon_out_fasta = os.path.join(pilon_out_dir, "pilon_assembly.fasta")
+    pilon_renamed_fasta = de_novo_assembly.replace("_masurca.fasta","_pilon.fasta")
     if os.path.exists(pilon_out_fasta):
         log_print(f"SKIP:\tPilon Polished Assembly already exists: {pilon_out_fasta}.")
     else:
-        pilon_cmd = ["java", f"-Xmx{RAM_GB}G", "-jar", find_file("pilon.jar"),
+        pilon_cmd = ["pilon", f"-Xmx{RAM_GB}g",
                      "--genome", pilon_polish_target,
                      "--frags", polish_bam,
                      "--output", pilon_out_prefix,
@@ -1835,6 +1874,11 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                      "--changes", "--vcf",
                      "--chunksize", str(5000000)]
         _ = run_subprocess_cmd(pilon_cmd, shell_check = False)
+    if os.path.exists(pilon_renamed_fasta):
+        log_print(f"SKIP:\tPolished Assembly already exists: {pilon_renamed_fasta}.")
+    else:        
+        shutil.copyfile(pilon_out_fasta, pilon_renamed_fasta)
+    pilon_out_fasta = pilon_renamed_fasta
     
 ###############################################################################
     # Assembly Curation
@@ -1868,36 +1912,42 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
             _ = run_subprocess_cmd(purge_dupes_cmd, shell_check = False)       
         os.chdir(cwd)
     else:
-        dup_purged_assembly = None
+        dup_purged_assembly = pilon_out_fasta
 
     # RagTag Correct Reads (if REF_SEQ exists)
-    ragtag_patched = "/".join(pilon_out_fasta.split("/")[:-3]) + f"/{SPECIES_ID}_ragtag_patched"
-    ragtag_ref_assembly = os.path.join(ragtag_patched, "ragtag.patch.fasta")
-    ragtag_scaff = ragtag_patched.replace("patched","scaff")
+    ragtag_ref_assembly = os.path.join("/".join(os.path.dirname(dup_purged_assembly).split("/")[:-1]), os.path.basename(dup_purged_assembly).replace(".fasta","_ragtag_final.fasta"))
+    ragtag_patched = ragtag_ref_assembly.replace("_pilon_ragtag_final.fasta","_patched")
+    patch_fasta = os.path.join(ragtag_patched, "ragtag.patch.fasta")
+    ragtag_scaff = ragtag_patched.replace("patched","scaffold")
     scaff_fasta = os.path.join(ragtag_scaff, "ragtag.scaffold.fasta")
     ragtag_corr = ragtag_patched.replace("patched","corrected")
     corr_fasta = os.path.join(ragtag_corr, "ragtag.correct.fasta")
     if not pd.isna(REF_SEQ):
+        if not os.path.exists(ragtag_patched):
+            os.mkdir(ragtag_patched)
+        if not os.path.exists(ragtag_scaff):
+            os.mkdir(ragtag_scaff)
+        if not os.path.exists(ragtag_corr):
+            os.mkdir(ragtag_corr)
         if os.path.exists(ragtag_ref_assembly):
             log_print(f"SKIP:\tRagTag Reference Corrected Assembly already exists: {ragtag_ref_assembly}")
         else:
-            if os.path.exists(ragtag_scaff):
-                log_print("SKIP:\tRagTag Scaffolded Assembly already exists: {ragtag_scaff}")
+            if os.path.exists(scaff_fasta):
+                log_print(f"SKIP:\tRagTag Scaffolded Assembly already exists: {scaff_fasta}")
             else:
-                ragscaf_cmd = ["ragtag.py", "scaffold", REF_SEQ, pilon_out_fasta, "-o", ragtag_scaff, "-t", str(CPU_THREADS), "-C", "-u"]
+                ragscaf_cmd = ["ragtag.py", "scaffold", REF_SEQ, dup_purged_assembly, "-o", ragtag_scaff, "-t", str(CPU_THREADS), "-C", "-u"]
                 _ = run_subprocess_cmd(ragscaf_cmd, shell_check = False)
-            if os.path.exists(ragtag_corr):
-                log_print("SKIP:\tRagTag Corrected Assembly already exists: {ragtag_corr}")
+            if os.path.exists(corr_fasta):
+                log_print(f"SKIP:\tRagTag Corrected Assembly already exists: {corr_fasta}")
             else:
                 ragcorr_cmd = ["ragtag.py", "correct", REF_SEQ, scaff_fasta, "-o", ragtag_corr, "-t", str(CPU_THREADS), "-u"]
                 _ = run_subprocess_cmd(ragcorr_cmd, shell_check = False)
             ragpatch_cmd = ["ragtag.py", "patch", REF_SEQ, corr_fasta, "-o", ragtag_patched, "-t", str(CPU_THREADS), "-u"]
-            _ = run_subprocess_cmd(ragpatch_cmd, shell_check = False)
+            _ = run_subprocess_cmd(ragpatch_cmd, shell_check = False)         
+        
+            shutil.copyfile(patch_fasta, ragtag_ref_assembly)
     else:
-        if dup_purged_assembly == None:
-            ragtag_ref_assembly = pilon_out_fasta
-        else:
-            ragtag_ref_assembly = dup_purged_assembly
+        ragtag_ref_assembly = dup_purged_assembly
 
     # Close Gaps with TGS-GapCloser (if ONT Reads exist) or Abyss-Sealer
     if not pd.isna(ONT_RAW_READS):
@@ -1923,7 +1973,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         else:        
             shutil.copyfile(closed_gaps_path, final_assembly_path)
     else:
-        output_prefix = "/".join(shared_root.split("/")[:-1]) + f"/{ragtag_ref_assembly.split('/')[-1]}_sealed"
+        output_prefix = "/".join(shared_root.split("/")[:-1]) + f"/{ragtag_ref_assembly.split('/')[-1].replace('_pilon_ragtag_final.fasta','_sealed')}"
         sealer_output_file = f"{output_prefix}_scaffold.fa"        
         if os.path.isfile(sealer_output_file):        
             log_print(f"SKIP:\tABySS sealer output file already exists: {sealer_output_file}.")
@@ -1931,7 +1981,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
             kmer_sizes = [55,75,95]
             abyss_sealer_cmd = ["abyss-sealer", "-o", output_prefix, "-S", ragtag_ref_assembly,
                                 "-L", str(400), "-G", str(1000),
-                                "-j", str(CPU_THREADS), "-C", str(200000), "-b", "500M"]            
+                                "-j", str(CPU_THREADS), "-b", "500M"]            
             for k in kmer_sizes:
                 abyss_sealer_cmd.extend(["-k", str(k)])
             abyss_sealer_cmd.extend([clump_f_dedup_path, clump_r_dedup_path])
@@ -1944,7 +1994,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
 
     # Use Illumina Reads with Merqury
     os.chdir(shared_root)
-    meryl_db_out = os.path.join(shared_root, f"{SPECIES_ID}.meryl")
+    meryl_db_out = os.path.join(os.path.dirname(shared_root), f"{SPECIES_ID}.meryl")
     if os.path.exists(meryl_db_out):
         log_print(f"SKIP:\tMeryl Database already exists: {meryl_db_out}.")
     else:
@@ -1960,37 +2010,37 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     os.chdir(cwd)
     
     # Run Compelasm using first_odb10
-    compleasm_path = find_file("compleasm.py")
-    first_compleasm_dir = os.path.join(shared_root, f"{first_compleasm_odb}_compleasm")
+    first_compleasm_dir = os.path.join(os.path.dirname(shared_root), f"{SPECIES_ID}_{first_compleasm_odb}_compleasm")
     if not os.path.exists(first_compleasm_dir):
         os.makedirs(first_compleasm_dir)
-    first_compleasm_summary = os.path.join(first_compleasm_dir, first_compleasm_odb, "full_table_busco_format.tsv")
+    first_compleasm_summary = os.path.join(first_compleasm_dir, "summary.txt")
+    first_compleasm_tsv = os.path.join(first_compleasm_dir, first_compleasm_odb, "full_table_busco_format.tsv")
     if os.path.exists(first_compleasm_summary):
         log_print(f"SKIP\tFirst Compleasm Summary already exists: {first_compleasm_summary}.")
     else:
-        first_compleasm_cmd = ["python", compleasm_path, "run", "-a", final_assembly_path,
-                       "-o", first_compleasm_dir,
-                       "--lineage", first_compleasm_odb, "-t", str(CPU_THREADS)]
+        first_compleasm_cmd = ["compleasm", "run", "-a", final_assembly_path,
+                               "-o", first_compleasm_dir,
+                               "--lineage", first_compleasm_odb, "-t", str(CPU_THREADS)]
         _ = run_subprocess_cmd(first_compleasm_cmd, shell_check = False)
-    plot_busco(first_compleasm_odb, first_compleasm_summary, final_assembly_path)
-
+    plot_busco(first_compleasm_odb, first_compleasm_tsv, final_assembly_path)
 
     # Run Compelasm using second_odb10
-    second_compleasm_dir = os.path.join(shared_root, f"{second_compleasm_odb}_compleasm")
+    second_compleasm_dir = os.path.join(os.path.dirname(shared_root), f"{SPECIES_ID}_{second_compleasm_odb}_compleasm")
     if not os.path.exists(second_compleasm_dir):
         os.makedirs(second_compleasm_dir)
-    second_compleasm_summary = os.path.join(second_compleasm_dir, second_compleasm_odb, "full_table_busco_format.tsv")
+    second_compleasm_summary = os.path.join(second_compleasm_dir, "summary.txt")
+    second_compleasm_tsv = os.path.join(second_compleasm_dir, second_compleasm_odb, "full_table_busco_format.tsv")
     if os.path.exists(second_compleasm_summary):
         log_print(f"SKIP\tSecond Compleasm Summary already exists: {second_compleasm_summary}.")
     else:
-        second_compleasm_cmd = ["python", compleasm_path, "run", "-a", final_assembly_path,
+        second_compleasm_cmd = ["compleasm", "run", "-a", final_assembly_path,
                                 "-o", second_compleasm_dir,
                                 "--lineage", second_compleasm_odb, "-t", str(CPU_THREADS)]
         _ = run_subprocess_cmd(second_compleasm_cmd, shell_check = False)
-    plot_busco(second_compleasm_odb, second_compleasm_summary, final_assembly_path)
+    plot_busco(second_compleasm_odb, second_compleasm_tsv, final_assembly_path)
 
     # Run Quast
-    quast_dir = os.path.join(shared_root, f"{SPECIES_ID}_quast")
+    quast_dir = os.path.join(os.path.dirname(shared_root), f"{SPECIES_ID}_quast")
     if not os.path.exists(quast_dir):
         os.makedirs(quast_dir)
     quast_report_tsv = os.path.join(quast_dir, "report.tsv")
@@ -2091,8 +2141,8 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     results_df = pd.concat([results_df, result_row])
     for key, value in sample_stats_dict.items():
         input_csv_df.loc[index, key] = value
-    log_print(f"Assessment of Final Hybrid Assembly: {final_assembly_path}")
-    log_print(f"PASS:\tEGAP Final Hybrid Assembly Complete: {final_assembly_path}")
+    log_print(f"Assessment of Final Assembly: {final_assembly_path}")
+    log_print(f"PASS:\tEGAP Final Assembly Complete: {final_assembly_path}")
     log_print("This was produced with the help of the Entheogen Genome (Entheome) Foundation\n")
     log_print("If this was useful, please support us at https://entheome.org/\n")
     print("\n\n\n")    
@@ -2101,23 +2151,23 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
 
 if __name__ == "__main__":
     # Argument Parsing
-    parser = argparse.ArgumentParser(description="Run Entheome Genome Hybrid Assembly Pipeline (EGAP)")
+    parser = argparse.ArgumentParser(description="Run Entheome Genome Assembly Pipeline (EGAP)")
 
     # Default values
     default_input_csv = None
     default_raw_ont_dir = None
     default_ont_reads = None
     default_raw_illu_dir = None
-    default_raw_illu_reads_1 = "/mnt/d/TESTING_SPACE/Ps_cubensis/MG_Ps_cubensis_GT/Illumina_PE150/SRR13870478_1.fq.gz"
-    default_raw_illu_reads_2 = "/mnt/d/TESTING_SPACE/Ps_cubensis/MG_Ps_cubensis_GT/Illumina_PE150/SRR13870478_2.fq.gz"
-    default_species_id = "MG_Ps_cubensis_GT" # Format: <2-letters of Genus>_<full species name>
+    default_raw_illu_reads_1 = "/mnt/d/TESTING_SPACE/Ps_cubensis/Ps_cubensis_var_P_Envy-2-SW/Illumina_PE150/SRR15031315_1.fq.gz"
+    default_raw_illu_reads_2 = "/mnt/d/TESTING_SPACE/Ps_cubensis/Ps_cubensis_var_P_Envy-2-SW/Illumina_PE150/SRR15031315_2.fq.gz"
+    default_species_id = "MG_Ps_cubensis_PE-2-SW" # Format: <2-letters of Genus>_<full species name>
     default_organism_kingdom = "Funga"
     default_organism_karyote = "Eukaryote"
     default_compleasm_1 = "basidiomycota"
     default_compleasm_2 = "agaricales"
     default_estimated_genome_size = "60m"
     default_reference_sequence= "/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna"
-    default_percent_resources = 1.0
+    default_percent_resources = 0.75
     
     # Add arguments with default values
     parser.add_argument("--input_csv", "-csv",
