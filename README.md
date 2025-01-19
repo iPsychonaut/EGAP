@@ -46,6 +46,23 @@ You can install pre-requisites using the shell script:
 ```bash
 bash /path/to/EGAP_setup.sh
 ```
+This creates a conda environment named "EGAP_env".
+
+Alternatively you can install the Entheome Ecosystem via Docker. Open a (Linux) terminal in the directory where the "Dockerfile" is located.
+```bash
+docker build -t entheome_ecosystem .
+```
+
+Run the Container, change "path/to/data" to match appropriate pathing.
+```bash
+docker run -it -v /path/to/data:/path/to/data entheome_ecosystem bash
+```
+
+In the Docker Image, load the pre-generated EGAP_env.
+```bash
+source /EGAP_env/bin/activate
+```
+
 
 ## Pipeline Flow
 
@@ -275,7 +292,6 @@ Funga are known to have multi-nucleate cells, and thus have a higher possibility
 
 
 ## Future Improvements
-- **Docker Integration**: Generate a Dockerfile for alternative installation option.
 - **Automated Quality Assessment Reports**: Generate comprehensive quality reports post-assembly for easier analysis.
 - **Improved Data Management**: Removal of excess files once pipeline complete.
 - **Enhanced Support for Diverse Genomes**: Optimize pipeline parameters for non-fungal genomes to improve versatility.
