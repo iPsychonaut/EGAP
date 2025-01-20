@@ -84,7 +84,6 @@ mamba install -y -c bioconda -c conda-forge \
                                 trimmomatic==0.39 \
                                 pilon==1.22 \
                                 fastqc==0.12.1 \
-                                ratatosk==0.9.0 \
                                 bbmap==39.15 \
                                 racon==1.5.0 \
                                 kmc==3.2.4 \
@@ -105,6 +104,24 @@ fi
 cd purge_dups/src || { echo "Failed to change to purge_dups/src directory."; exit 1; }
 make
 check_success "Building purge_dups"
+cd ~ # Return to home directory
+
+# Clone Ratatosk repository if it doesn't exist
+if [ ! -d "Ratatosk" ]; then
+    echo -e "\e[36m\nCloning Ratatosk repository...\e[0m"
+    git clone --recursive https://github.com/DecodeGenetics/Ratatosk.git
+    check_success "Cloning Ratatosk repository"
+else
+    echo -e "\e[33mDirectory 'Ratatosk' already exists. Skipping clone.\e[0m"
+fi
+
+# Build Ratatosk
+cd Ratatosk || { echo "Failed to change to Ratatosk directory."; exit 1; }
+mkdir -p build && cd build
+cmake .. || { echo "CMake configuration failed."; exit 1; }
+make || { echo "Make failed."; exit 1; }
+sudo make install || { echo "Make install failed."; exit 1; }
+check_success "Building Ratatosk"
 cd ~ # Return to home directory
 
 echo -e "\n\e[32mEGAP Pipeline Pre-requisites have been successfully installed!\e[0m\n"
