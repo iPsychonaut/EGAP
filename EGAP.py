@@ -608,6 +608,43 @@ def find_ca_folder(input_folder):
             break
     return ca_folder
 
+def find_soap_folder(input_folder):
+    """
+    Determine the specific location of the MaSuRCA output folder named `CA`.
+
+    Parameters:
+        input_folder (str):
+            Path to the folder containing MaSuRCA outputs. It may have subdirectories, 
+            one of which might begin with "CA" (e.g., "CA", "CA_12345", etc.).
+
+    Returns:
+        str:
+            The path to the first subfolder starting with "CA". If none is found, 
+            returns a default path `<input_folder>/CA`.
+
+    Notes:
+        - This function scans the immediate subfolders of `input_folder` and returns 
+          the one that starts with "CA".
+        - If no subfolder starts with "CA", it defaults to `<input_folder>/CA`.
+
+    Considerations:
+        - Ensure `input_folder` is a valid path containing directories. 
+        - If multiple folders begin with "CA", it returns the first one found.
+
+    Examples:
+        >>> # Example usage:
+        >>> ca_path = find_soap_folder("/path/to/masurca_outputs")
+        >>> print(ca_path)
+        "/path/to/masurca_outputs/CA_20230101"
+    """
+    subfolders = [f.path for f in os.scandir(input_folder) if f.is_dir()]
+    soap_folder = f"{input_folder}/SOAP_assembly"
+    for folder in subfolders:
+        if os.path.basename(folder).startswith("CA"):
+            soap_folder = folder
+            break
+    return soap_folder
+
 
 def parse_bbmerge_output(insert_size_histogram_txt):
     """
@@ -862,6 +899,8 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
         adjustment_ratio = ram_gb / max_ram_tested
         jf_size = int(round(jf_size * adjustment_ratio, 0))
     ca_folder = find_ca_folder(input_folder)
+    soap_folder = find_soap_folder(input_folder)
+    data_output_folder = ca_folder
     default_assembly_path = os.path.join(ca_folder, "primary.genome.scf.fasta")
     assembly_path = os.path.join(input_folder, "primary.genome.scf.fasta")
     ref_assembly_path = os.path.join(input_folder, "primary.genome.ref.fasta")
@@ -872,7 +911,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
     elif len(input_fq_list) >= 2:
         illu_only_mates = 0
         illu_only_gaps = 0
-        illu_only_soap = 1
+        illu_only_soap = 0
     if os.path.exists(default_assembly_path):
         log_print("PASS:\tSkipping MaSuRCA, moving output files")
         if ref_seq:
@@ -920,8 +959,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
             print(f"Error removing {output_file}: {e}")
     if return_code == 1:
         log_print("NOTE:\tMaSuRCA assembly interrupted intentionally; Gap Closing will be performed later.")
-        ca_folder = find_ca_folder(input_folder)
-        default_assembly_path = os.path.join(ca_folder, os.path.basename(default_assembly_path))
+        default_assembly_path = os.path.join(data_output_folder, os.path.basename(default_assembly_path))
         return default_assembly_path, assembly_path, ref_assembly_path if ref_seq else None
     return default_assembly_path, assembly_path, ref_assembly_path if ref_seq else None
 
@@ -1534,6 +1572,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     else:
         log_print("NOTE:\tNo REF_SEQ provided; skipping REF_SEQ processing.")
 
+
     # Process input read files
     if pd.notna(ONT_RAW_READS):
         ONT_RAW_READS = process_read_file(ONT_RAW_READS)
@@ -1798,8 +1837,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                                                                                  [ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS],
                                                                                  clump_f_dedup_path, clump_r_dedup_path,
                                                                                  CPU_THREADS, RAM_GB, REF_SEQ)
-    ca_folder = find_ca_folder(masurca_out_dir)
-    gap_assembly = os.path.join(ca_folder, "9-terminator", "genome.scf.fasta")
+    gap_assembly = os.path.join(find_ca_folder(masurca_out_dir), "9-terminator", "genome.scf.fasta")
     shutil.copyfile(gap_assembly, final_masurca_path)
     de_novo_assembly = final_masurca_path
     assembly_out_dir = masurca_out_dir
@@ -1893,7 +1931,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         with open(pd_fofn, "w") as f:
             f.write(highest_mean_qual_ont_reads)
         pd_json = os.path.join(pd_work_dir, "purge_dups_config.json")
-        dup_purged_assembly = os.path.join(pd_work_dir, "pilon_assembly/seqs/pilon_assembly.purged.fa")
+        dup_purged_assembly = os.path.join(pd_work_dir, f"{SPECIES_ID}_pilon/seqs/{SPECIES_ID}_pilon.purged.fa")
         pd_config_path = find_file("pd_config.py")
         if os.path.exists(pd_json):
             log_print(f"SKIP:\tPurge Dupes JSON already exists: {pd_json}.")
@@ -2155,17 +2193,17 @@ if __name__ == "__main__":
     # Default values
     default_input_csv = None
     default_raw_ont_dir = None
-    default_ont_reads = None
+    default_ont_reads = "/mnt/d/ENTHEOME/Ps_semilanceata/ONT_MinION/SRR25920759.fq.gz" # None
     default_raw_illu_dir = None
-    default_raw_illu_reads_1 = "/mnt/d/TESTING_SPACE/Ps_cubensis/Ps_cubensis_var_P_Envy-2-SW/Illumina_PE150/SRR15031315_1.fq.gz"
-    default_raw_illu_reads_2 = "/mnt/d/TESTING_SPACE/Ps_cubensis/Ps_cubensis_var_P_Envy-2-SW/Illumina_PE150/SRR15031315_2.fq.gz"
-    default_species_id = "MG_Ps_cubensis_PE-2-SW" # Format: <2-letters of Genus>_<full species name>
+    default_raw_illu_reads_1 = "/mnt/d/ENTHEOME/Ps_semilanceata/Illumina_PE150/SRR25920760_1.fq.gz" #  "/mnt/d/ENTHEOME/Ps_mexicana/IlluminaPE150/SRR22434202_1.fastq.gz"
+    default_raw_illu_reads_2 = "/mnt/d/ENTHEOME/Ps_semilanceata/Illumina_PE150/SRR25920760_2.fq.gz" # "/mnt/d/ENTHEOME/Ps_mexicana/IlluminaPE150/SRR22434202_2.fastq.gz"
+    default_species_id = "Ps_semilanceata" # Format: <2-letters of Genus>_<full species name>
     default_organism_kingdom = "Funga"
     default_organism_karyote = "Eukaryote"
     default_compleasm_1 = "basidiomycota"
     default_compleasm_2 = "agaricales"
     default_estimated_genome_size = "60m"
-    default_reference_sequence= "/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna"
+    default_reference_sequence= None # "/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna"
     default_percent_resources = 0.75
     
     # Add arguments with default values
@@ -2236,6 +2274,7 @@ if __name__ == "__main__":
 
     # Parse samples in sample_dict & input_csv_df
     results_df = pd.DataFrame()
+    print(input_csv_df)
     for index, row in input_csv_df.iterrows():
         final_assembly_path, results_df = egap_sample(row, results_df, CPU_THREADS, RAM_GB)
     
