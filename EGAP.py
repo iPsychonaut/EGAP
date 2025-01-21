@@ -509,13 +509,38 @@ def classify_assembly(sample_stats):
         # Output: {"FIRST_COMPLEASM_C": "AMAZING", "SECOND_COMPLEASM_C": "AMAZING", "ASSEMBLY_N50": "AMAZING", "ASSEMBLY_CONTIGS": "AMAZING", "OVERALL": "AMAZING"}
     """
     results = {}
-    busco_thresholds = {"AMAZING": 98.5, "GREAT": 95.0, "OK": 90.0, "POOR": 80.0}
-    n50_thresholds = {"AMAZING": 1000000, "GREAT": 100000, "OK": 1000, "POOR": 100}
-    contigs_thresholds = {"AMAZING": 100, "GREAT": 1000, "OK": 10000, "POOR": 100000}
-    results["FIRST_COMPLEASM_C"] = classify_metric(sample_stats["FIRST_COMPLEASM_C"], busco_thresholds)
-    results["SECOND_COMPLEASM_C"] = classify_metric(sample_stats["SECOND_COMPLEASM_C"], busco_thresholds)
-    results["ASSEMBLY_N50"] = classify_metric(sample_stats["ASSEMBLY_N50"], n50_thresholds)
-    results["ASSEMBLY_CONTIGS"] = classify_metric(sample_stats["ASSEMBLY_CONTIGS"], contigs_thresholds)
+    if sample_stats["FIRST_COMPLEASM_C"] <= 80.0:
+        results["FIRST_COMPLEASM_C"] = "POOR"
+    elif sample_stats["FIRST_COMPLEASM_C"] <= 90.0:
+        results["FIRST_COMPLEASM_C"] = "OK"
+    elif sample_stats["FIRST_COMPLEASM_C"] <= 95.0:
+        results["FIRST_COMPLEASM_C"] = "GREAT"
+    elif sample_stats["FIRST_COMPLEASM_C"] <= 98.5:
+        results["FIRST_COMPLEASM_C"] = "AMAZING"
+    if sample_stats["SECOND_COMPLEASM_C"] <= 80.0:
+        results["SECOND_COMPLEASM_C"] = "POOR"
+    elif sample_stats["SECOND_COMPLEASM_C"] <= 90.0:
+        results["SECOND_COMPLEASM_C"] = "OK"
+    elif sample_stats["SECOND_COMPLEASM_C"] <= 95.0:
+        results["SECOND_COMPLEASM_C"] = "GREAT"
+    elif sample_stats["SECOND_COMPLEASM_C"] <= 98.5:
+        results["SECOND_COMPLEASM_C"] = "AMAZING"
+    if sample_stats["ASSEMBLY_CONTIGS"] <= 100:
+        results["ASSEMBLY_CONTIGS"] = "AMAZING"
+    elif sample_stats["ASSEMBLY_CONTIGS"] <= 1000:
+        results["ASSEMBLY_CONTIGS"] = "GREAT"
+    elif sample_stats["ASSEMBLY_CONTIGS"] <= 10000:
+        results["ASSEMBLY_CONTIGS"] = "OK"
+    elif sample_stats["ASSEMBLY_CONTIGS"] <= 100000:
+        results["ASSEMBLY_CONTIGS"] = "POOR"
+    if sample_stats["ASSEMBLY_N50"] <= 100:
+        results["ASSEMBLY_N50"] = "POOR"
+    elif sample_stats["ASSEMBLY_N50"] <= 1000:
+        results["ASSEMBLY_N50"] = "OK"
+    elif sample_stats["ASSEMBLY_N50"] <= 10000:
+        results["ASSEMBLY_N50"] = "GREAT"
+    elif sample_stats["ASSEMBLY_N50"] <= 100000:
+        results["ASSEMBLY_N50"] = "AMAZING"
     if all(value == "AMAZING" for value in results.values()):
         results["OVERALL"] = "AMAZING"
     elif any(value == "POOR" for value in results.values()):
@@ -2193,17 +2218,17 @@ if __name__ == "__main__":
     # Default values
     default_input_csv = None
     default_raw_ont_dir = None
-    default_ont_reads = "/mnt/d/ENTHEOME/Ps_semilanceata/ONT_MinION/SRR25920759.fq.gz" # None
+    default_ont_reads = None
     default_raw_illu_dir = None
-    default_raw_illu_reads_1 = "/mnt/d/ENTHEOME/Ps_semilanceata/Illumina_PE150/SRR25920760_1.fq.gz" #  "/mnt/d/ENTHEOME/Ps_mexicana/IlluminaPE150/SRR22434202_1.fastq.gz"
-    default_raw_illu_reads_2 = "/mnt/d/ENTHEOME/Ps_semilanceata/Illumina_PE150/SRR25920760_2.fq.gz" # "/mnt/d/ENTHEOME/Ps_mexicana/IlluminaPE150/SRR22434202_2.fastq.gz"
-    default_species_id = "Ps_semilanceata" # Format: <2-letters of Genus>_<full species name>
+    default_raw_illu_reads_1 = "/mnt/d/ENTHEOME/Ps_mexicana/IlluminaPE150/SRR22434202_1.fq.gz"
+    default_raw_illu_reads_2 = "/mnt/d/ENTHEOME/Ps_mexicana/IlluminaPE150/SRR22434202_2.fq.gz"
+    default_species_id = "Ps_mexicana" # Format: <2-letters of Genus>_<full species name>
     default_organism_kingdom = "Funga"
     default_organism_karyote = "Eukaryote"
     default_compleasm_1 = "basidiomycota"
     default_compleasm_2 = "agaricales"
     default_estimated_genome_size = "60m"
-    default_reference_sequence= None # "/mnt/d/TESTING_SPACE/Ps_cubensis/GCF_017499595_1_MGC_Penvy_REF_SEQ/GCF_017499595_1_MGC_Penvy_1_genomic.fna"
+    default_reference_sequence= None
     default_percent_resources = 0.75
     
     # Add arguments with default values
