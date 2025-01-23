@@ -87,7 +87,9 @@ mamba install -y -c bioconda -c conda-forge \
                                 bbmap==39.15 \
                                 racon==1.5.0 \
                                 kmc==3.2.4 \
-                                runner==1.3
+                                runner==1.3 \
+                                flye==2.9.5-b1801 \
+                                spades==4.0.0
 
 check_success "Installing conda packages"
 
