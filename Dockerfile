@@ -23,7 +23,7 @@ RUN conda run -n EGAP_env mamba install -y -c conda-forge -c bioconda -c prkreke
     bamtools==2.5.2 tgsgapcloser==1.2.1 psutil==6.0.0 pilon==1.22 trimmomatic==0.39 \
     merqury==1.3 meryl==1.3 beautifulsoup4==4.12.3 ncbi-datasets-cli==16.39.0 \
     samtools==1.21 fastqc==0.12.1 abyss==2.0.2 bbmap==39.15 ratatosk==0.9.0 racon==1.5.0 \
-    kmc==3.2.4 runner==1.3&& \
+    kmc==3.2.4 runner==1.3 flye==2.9.5-b1801 spades==4.0.0 && \
     conda clean -a -y
 
 # Download required resources for quast
@@ -37,6 +37,16 @@ RUN apt-get update && apt-get install -y make build-essential zlib1g-dev
 RUN conda run -n EGAP_env git clone https://github.com/dfguan/purge_dups.git && \
                           cd purge_dups/src && \
     conda run -n EGAP_env make && \
+                          cd ~
+
+# Clone Ratatosk repository if it doesn't exist
+RUN conda run -n EGAP_env git clone https://github.com/DecodeGenetics/Ratatosk.git && \
+                          cd Ratatosk && \
+                          mkdir build && \
+                          cd build && \
+    conda run -n EGAP_env cmake .. && \
+    conda run -n EGAP_env make && \
+    conda run -n EGAP_env make install && \
                           cd ~
 
 # package with conda-pack
@@ -114,10 +124,11 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
     QUARRY_PATH="/EGEP_env/opt/codingquarry-2.0/QuarryFiles" \
     ZOE="/usr/share/snap" \
     USER="me" \
-    FUNANNOTATE_DB="/opt/databases"
+    FUNANNOTATE_DB="/opt/databases" \
+    GENEMARK_PATH="/mnt/d/EGEP" # REQUIRES USER TO DOWNLOAD AND UPDATE PATH
+
+RUN conda run -n EGEP_env funannotate setup -d "/opt/databases"
 
 # SHELL ["/bin/bash", "-c"]
 # source /EGAP_env/bin/activate
 # source /EGEP_env/bin/activate
-
-###############################################################################
