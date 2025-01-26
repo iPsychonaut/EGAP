@@ -5,9 +5,38 @@
 </div>
 
 ## Overview
-EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline developed for assembling high-quality hybrid genomes using Oxford Nanopore Technologies (ONT) and Illumina sequencing data. It also supports de novo and reference-based assemblies using Illumina data alone. The pipeline encompasses comprehensive steps for read quality control, trimming, genome assembly, polishing, and scaffolding. While optimized for fungal genomes, EGAP can be customized to work with other types of organisms.
+
+EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline designed to produce high-quality genome assemblies from **Oxford Nanopore Technologies (ONT)** and/or **Illumina** sequencing data. It can:
+
+1. **Preprocess & QC Reads**  
+   - Merge or detect multiple FASTQ files.  
+   - Perform read trimming and adapter removal (Trimmomatic, BBDuk).  
+   - Deduplicate reads (Clumpify).  
+   - Filter and correct ONT reads (Filtlong, Ratatosk).  
+   - Generate read metrics (FastQC, NanoPlot, BBMap-based insert-size checks).  
+
+2. **Assembly**  
+   - Hybrid or Illumina-only assembly (MaSuRCA), optionally skipping gap closure in MaSuRCA.  
+   - If ONT data are available, it also tries Flye or SPAdes, then compares key metrics to pick the best initial assembly.  
+
+3. **Assembly Polishing**
+   - Polishes assemblies with Racon (ONT) and Pilon (Illumina).  
+   - Optionally removes haplotigs with purge_dups.  
+
+4. **Assembly Curation**
+   - Scaffolds and patches using RagTag against a reference genome (if provided).  
+   - Performs final gap-closing with either TGS-GapCloser (if ONT) or ABySS-Sealer (if Illumina-only).  
+
+5. **Quality Assessments & Classification**  
+   - Runs QUAST for contiguity statistics (N50, L50, GC%, etc.).  
+   - Runs Compleasm (BUSCO) on two lineages to measure completeness.  
+   - Rates the final assembly as **AMAZING**, **GREAT**, **OK**, or **POOR** based on combined metrics.  
+   - (Optional) Integrates coverage calculations against a reference or final assembly size.  
+
+Though optimized for fungal genomes, EGAP can be adapted to many other organisms by switching up lineages, reference sequences, or default thresholds.
 
 ## Table of Contents
+
 1. [Overview](#overview)
 2. [Installation](#installation)
 3. [Pipeline Flow](#pipeline-flow)
@@ -16,10 +45,16 @@ EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline 
 6. [Example Data & Instructions](#example-data--instructions)
 7. [Future Improvements](#future-improvements)
 8. [References](#references)
+9. [Contribution](#contribution)
+10. [License](#license)
 
 ## Installation
 
-The shell script will ensure that Python 3.8 and required libraries are installed. The pipeline has dependencies on a variety of bioinformatics tools, including but not limited to:
+A shell script (e.g., `EGAP_setup.sh`) can install most dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
+
+1. **Run**:
+   ```bash
+   bash /path/to/EGAP_setup.sh
 
 - [Trimmomatic](https://github.com/usadellab/Trimmomatic)
 - [BBMap](https://sourceforge.net/projects/bbmap/)
@@ -39,14 +74,6 @@ The shell script will ensure that Python 3.8 and required libraries are installe
 - [ABYSS-Sealer](https://github.com/bcgsc/abyss/blob/master/Sealer/sealer.cc)
 - [QUAST](https://github.com/ablab/quast)
 - [CompleAsm](https://github.com/bioinformatics-centre/compleasm)
-- [Merqury](https://github.com/marbl/merqury)
-
-You can install pre-requisites using the shell script:
-
-```bash
-bash /path/to/EGAP_setup.sh
-```
-This creates a conda environment named "EGAP_env".
 
 Alternatively you can install the Entheome Ecosystem via Docker. Open a (Linux) terminal in the directory where the "Dockerfile" is located.
 ```bash
@@ -75,8 +102,10 @@ source /EGAP_env/bin/activate
 ### Parameters:
 
 - \`--input_csv\`, \`-csv\` (str): Path to a CSV containing multiple sample data. (default = None)
-- \`--raw_ont_dir\`, \`-odir\` (str): PPath to a directory containing all Raw ONT Reads. (if \`-csv\` = None; else REQUIRED)
+- \`--ont_sra\`, \`-osra\` (str): Oxford Nanopore Sequence Read Archive (SRA) Acession number. (default = 'SRR27945394')
+- \`--raw_ont_dir\`, \`-odir\` (str): Path to a directory containing all Raw ONT Reads. (if \`-csv\` = None; else REQUIRED)
 - \`--raw_ont_reads\`, \`-i0\` (str): Path to the combined Raw ONT FASTQ reads. (if \`-csv\` = None; else REQUIRED)
+- \`--illu_sra\`, \`-isra\` (str): Illumina Sequence Read Archive (SRA) Acession number. (default = 'SRR27945395')
 - \`--raw_illu_dir\`, \`-idir\` (str): Path to a directory containing all Raw Illumina Reads. (if \`-csv\` = None; else REQUIRED)
 - \`--raw_illu_reads_1\`, \`-i1\` (str): Path to the Raw Forward Illumina Reads. (if \`-csv\` = None; else REQUIRED)
 - \`--raw_illu_reads_2\`, \`-i2\` (str): Path to the Raw Reverse Illumina Reads. (if \`-csv\` = None; else REQUIRED)
@@ -86,6 +115,7 @@ source /EGAP_env/bin/activate
 - \`--compleasm_1\`, \`-c1` (str): Name of the first organism compleasm/BUSCO database to compare to. (default: basidiomycota)
 - \`--compleasm_2\`, \`-c2` (str): Name of the second organism compleasm/BUSCO database to compare to. (default: agaricales)
 - \`--est_size\`, \`-es\` (str): Estimated size of the genome in Mbp (million base pairs). (default: 60m)
+- \`--ref_seq_gca\`, \`-rgca\` (str): Curated Genome Assembly (GCA) Acession number. (default = None)
 - \`--ref_seq\`, \`-rf\` (str): Path to the reference genome for assembly. (default: None)
 - \`--percent_resources\`, \`-R\` (float): Percentage of resources for processing. (default: 1.00)
 
@@ -103,6 +133,22 @@ python /path/to/EGAP.py --raw_ont_reads /path/to/ont_reads.fq.gz \
                         --percent_resources 0.8
 ```
 
+Or, providing SRA numbers, which will download the files into the current workding directory:
+
+```bash
+python /path/to/EGAP.py --ont_sra SRR######## \
+                        --illu_sra SRR######## \
+                        --species_id AB_speciesname \
+                        --organism_kingdom Funga \
+                        --organism_karyote Eukaryote \
+                        --compleasm_1 basidiomycota \
+                        --compleasm_2 agaricales \
+                        --est_size 60m \
+                        --percent_resources 0.8
+```
+
+While you can mix and match files, directories, and SRAs between each of the data inputs, do not use multiple for the same input; meaning do NOT use illu_sra AND raw_illu_dir, NOR raw_illu_dir AND raw_illu_reads_1, etc.
+
 Alternatively, using a CSV file for multiple samples:
 
 ```bash
@@ -117,15 +163,18 @@ To run EGAP with multiple samples, you can provide a CSV file containing the nec
 
 The CSV file should have the following header and columns:
 
-| ONT_RAW_DIR   | ONT_RAW_READS                  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | SPECIES_ID     | ORGANISM_KINGDOM | ORGANISM_KARYOTE | COMPLEASM_1   | COMPLEASM_2 | EST_SIZE | REF_SEQ                    |
-|---------------|--------------------------------|--------------------|-------------------------------------|-------------------------------------|----------------|------------------|------------------|---------------|-------------|----------|----------------------------|
-| None          | /path/to/ONT/sample1.fq.gz     | None               | /path/to/Illumina/sample1_R1.fq.gz  | /path/to/Illumina/sample1_R2.fq.gz  | AB_sample1     | Funga            | Eukaryote        | basidiomycota | agaricales  | 60m      | /path/to/ref_genome1.fasta |
-| /path/to/ONT  | None                           | /path/to/Illumina  | None                                | None                                | AB_sample2     | Funga            | Eukaryote        | basidiomycota | agaricales  | 55m      | /path/to/ref_genome2.fasta |
+| ONT_SRA       | ONT_RAW_DIR  | ONT_RAW_READS               | ILLUMINA_SRA  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | SPECIES_ID  | ORGANISM_KINGDOM  | ORGANISM_KARYOTE  | COMPLEASM_1    | COMPLEASM_2  | EST_SIZE  | REF_SEQ_GCA  | REF_SEQ                    |
+|---------------|--------------|-----------------------------|---------------|--------------------|-------------------------------------|-------------------------------------|-------------|-------------------|-------------------|----------------|--------------|-----------|--------------|----------------------------|
+| None          | None         | /path/to/ONT/sample1.fq.gz  | None          | None               | /path/to/Illumina/sample1_R1.fq.gz  | /path/to/Illumina/sample1_R2.fq.gz  | AB_sample1  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 60m       | None         | None                       |
+| None          | None         | None                        | None          | /path/to/Illumina  | None                                | None                                | AB_sample2  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | None         | /path/to/ref_genome.fasta  |
+| SRA2########  | None         | None                        | SRA########   | None               | None                                | None                                | AB_sample3  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 70m       | None         | None                       |
 
 ### Column Descriptions
 
+- **ONT_SRA**: Oxford Nanopore Sequence Read Archive (SRA) Acession number. Use `None` if specifying individual read files or directory.
 - **ONT_RAW_DIR**: Path to the directory containing all Raw ONT Reads. Use `None` if specifying individual read files.
 - **ONT_RAW_READS**: Path to the combined Raw ONT FASTQ reads (e.g., `/path/to/ONT/sample1.fq.gz`).
+- **ILLUMINA_SRA**: Illumina Sequence Read Archive (SRA) Acession number. Use `None` if specifying individual read files or directory.
 - **ILLUMINA_RAW_DIR**: Path to the directory containing all Raw Illumina Reads. Use `None` if specifying individual read files.
 - **ILLUMINA_RAW_F_READS**: Path to the Raw Forward Illumina Reads (e.g., `/path/to/Illumina/sample1_R1.fq.gz`).
 - **ILLUMINA_RAW_R_READS**: Path to the Raw Reverse Illumina Reads (e.g., `/path/to/Illumina/sample1_R2.fq.gz`).
@@ -135,14 +184,16 @@ The CSV file should have the following header and columns:
 - **COMPLEASM_1**: Name of the first organism compleasm/BUSCO database to compare to. (default: basidiomycota).
 - **COMPLEASM_2**: Name of the second organism compleasm/BUSCO database to compare to. (default: agaricales).
 - **EST_SIZE**: Estimated size of the genome in Mbp (million base pairs) (e.g., `60m`).
+- **REF_SEQ_GCA**: Curated Genome Assembly (GCA) Acession number. Use `None` if not applicable.
 - **REF_SEQ**: Path to the reference genome for assembly. Use `None` if not applicable.
 
 ### Example CSV File (`samples.csv`)
 
 ```csv
-ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ
-None,/mnt/d/EGAP/EGPA_Processing/Ps_zapotecorum/ONT/SRR########.fastq.gz,None,/mnt/d/EGAP/EGAP_Processing/Ps_zapotecorum/Illumina/SRR########_1.fq.gz,/mnt/d/EGAP/EGAP_Processing/Ps_zapotecorum/Illumina/SRR########_2.fq.gz,Ps_zapotecorum,Funga,Eukaryote,basidiomycota,agaricales,60m,None
-None,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/ONT/SRR########.fastq.gz,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/Illumina/B1_3,None,None,Ps_gandalfiana,Funga,Eukaryote,basidiomycota,agaricales,60m,/mnt/d/EGAP/EGAP_Processing/Ps_gandalfiana/GCF_#########_#.fna
+ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
+None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/,None,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/,None,None,Ps_zapotecorum,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
+SRR27945394,None,None,SRR27945395,None,None,None,Ps_caeruleorhiza,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
+None,None,None,SRR5602600,None,None,None,My_speciosa,Flora,Eukaryote,embryophyta,eudicots,200m,GCA_024721245.1,None
 ```
 
 ### Notes
@@ -241,20 +292,21 @@ python /mnt/d/EGAP/EGAP.py --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR
 ```
 
 ## Quality Control Output Review
-EGAP Will rate the final assembly based on QUAST & BUSCO statistics. The final assessment will be one of the following:
-- **AMAZING**
-- **GREAT**
-- **OK**
-- **POOR**
+EGAP generates final assemblies along with:
+- **QUAST** metrics (contig count, N50, L50, GC%, coverage)
+- **Compleasm (BUSCO)** plots showing Single, Duplicated, Fragmented & Missing scores.
+- Final assembly classification: **AMAZING, GREAT, OK,** or **POOR**
 
-### QUAST Statistics
-(TBD)
+### Statistics Thresholds
+The following are the current thresholds for each metric classification (subject to change:
+- **first_compleasm_c** = {"AMAZING": >98.5, "GREAT": >95.0, "OK": >80.0, "POOR": <80.0}
+- **second_compleasm_c** = {"AMAZING": >98.5, "GREAT": >95.0, "OK": >80.0, "POOR": <80.0}
 - **contigs_thresholds** = {"AMAZING": 100, "GREAT": 1000, "OK": 10000, "POOR": 100000}
 - **n50_thresholds** = {"AMAZING": 1000000, "GREAT": 100000, "OK": 1000, "POOR": 100}
 - **l50_thresholds** = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #}
 
 ### Compleasm BUSCO Plots 
-When assessing BUSCO outputs we desire to see >98.5% Completion (Sum of Single and Duplicated genes) in an AMAZING GREAT Assembly; >95% Completion in a Good Assembly; >90% Completion in an OK Assembly; and <90% Completion in a POOR Assembly. Along with High Completion, it is desired to see very few contigs that the genes align to; these sequences can be indiciative of chromsome-candidates. Any sequences that only matched Duplicated genes were excluded from the plot (but noted in the x-axis label).
+When assessing BUSCO outputs we desire to see >98.5% Completion (Sum of Single and Duplicated genes) in an AMAZING GREAT Assembly; >95.0% Completion in a Good Assembly; >80% Completion in an OK Assembly; and <80% Completion in a POOR Assembly. Along with High Completion, it is desired to see very few contigs that the genes align to; these sequences can be indiciative of chromsome-candidates. Any sequences that only matched Duplicated genes were excluded from the plot (but noted in the x-axis label).
 
 #### Illumina-Only (with Reference Sequence) Assembly BUSCO Plots:
 <table align="center">
