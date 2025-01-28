@@ -53,6 +53,7 @@ CSV EXAMPLE:
 """
 # Python Imports
 import math, platform, os, subprocess, multiprocessing, argparse, psutil, shutil, hashlib, re, gzip, glob
+import numpy as np
 from datetime import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -876,7 +877,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
     elif len(input_fq_list) >= 2:
         illu_only_mates = 0
         illu_only_gaps = 0
-        illu_only_soap = 1
+        illu_only_soap = 0 # Turning off SOAP assembly for now, replace with 1 when fixed
         data_output_folder = find_soap_folder(input_folder)
         default_assembly_path = os.path.join(data_output_folder, "asm.scafSeq")
     if os.path.exists(default_assembly_path):
@@ -889,7 +890,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
         log_print(f"SKIP:\tMaSuRCA Assembly, scaffolded assembly already exists: {assembly_path}.")
     else:
         config_content = ["DATA\n",
-                          f"PE= pe {avg_insert} {std_dev} {clump_f_dedup_path.replace('.gz','')} {clump_r_dedup_path.replace('.gz','')}\n"]
+                          f"PE= pe {int(avg_insert)} {int(std_dev)} {clump_f_dedup_path.replace('.gz','')} {clump_r_dedup_path.replace('.gz','')}\n"]
         if ref_seq:
             config_content.append(f"REFERENCE={ref_seq.replace('.gbff','.fna.gz')}\n")
         config_content.append("END\n")
@@ -1357,6 +1358,129 @@ def plot_busco(compleasm_odb, input_busco_tsv, input_fasta):
     plt.savefig(output_busco_png, format="png")
     
     log_print(f"PASS:\tBUSCO {compleasm_odb} plot saved: {output_busco_svg} & {output_busco_png}")
+
+
+def comparative_plots(comparative_plot_dict, shared_root):
+    """
+    Creates a 2x2 grid of bar charts showing the following stats:
+      Top-left: First Compleasm C (largest bar gets asterisk)
+      Top-right: Second Compleasm C (largest bar gets asterisk)
+      Bottom-left: N50 (largest bar gets asterisk)
+      Bottom-right: Contig Count (smallest bar gets asterisk)
+    
+    The first two subplots have y-axis limited to 0–100.
+    N50 and Contig Count subplots use automatic scaling.
+    
+    The asterisk is placed just below the bar's top:
+      * If bar is MaSuRCA: asterisk is white
+      * Otherwise: asterisk color is (42, 32, 53) in RGB
+    """
+    # Extract stats (each list is in the order: [comp1, comp2, n50, contig_count])
+    masurca_stats = comparative_plot_dict["MaSuRCA"]
+    flye_stats    = comparative_plot_dict["Flye"]
+    spades_stats  = comparative_plot_dict["SPAdes"]
+    
+    # Define bar colors (normalized to [0, 1])
+    masurca_color = (35/255, 61/255, 77/255)
+    flye_color    = (161/255, 193/255, 129/255)
+    spades_color  = (254/255, 127/255, 45/255)
+    
+    # Asterisk colors
+    #   - If bar is MaSuRCA -> white
+    #   - Else -> (42, 32, 53)
+    asterisk_color_for = [
+        (1.0, 1.0, 1.0),        # for MaSuRCA
+        (42/255, 32/255, 53/255),  # for Flye
+        (42/255, 32/255, 53/255)   # for SPAdes
+    ]
+    
+    # Prepare a figure with a 2x2 grid of subplots (white background)
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8), facecolor='white')
+    
+    def plot_stat(ax, title, stat_index, y_max=None, highlight_smallest=False):
+        """
+        Plots three bars (one per assembler) for a given statistic index,
+        and places an asterisk on the "largest" or "smallest" bar.
+        
+        :param ax:               The Axes object to plot on.
+        :param title:            The title of the subplot.
+        :param stat_index:       Index of the statistic in each assembler's list.
+        :param y_max:            If not None, sets the y-limit to 0..y_max.
+        :param highlight_smallest: If False, highlight the largest bar;
+                                   If True, highlight the smallest bar.
+        """
+        # The corresponding values for each assembler
+        values = [
+            masurca_stats[stat_index],
+            flye_stats[stat_index],
+            spades_stats[stat_index]
+        ]
+        
+        # X positions for the bars
+        x = np.arange(3)
+        
+        # Colors for the bars
+        colors = [masurca_color, flye_color, spades_color]
+        
+        # Plot the bars
+        ax.bar(x, values, color=colors, width=0.6)
+        ax.set_title(title)
+        
+        # Label x-ticks with assembler names
+        ax.set_xticks(x)
+        ax.set_xticklabels(['MaSuRCA', 'Flye', 'SPAdes'])
+        
+        # Set y-limit if requested (e.g., for completeness stats at 100)
+        if y_max is not None:
+            ax.set_ylim([0, y_max])
+        
+        # Determine which bar to highlight
+        if highlight_smallest:
+            highlighted_value = min(values)
+            idx = values.index(highlighted_value)
+        else:
+            highlighted_value = max(values)
+            idx = values.index(highlighted_value)
+        
+        # Calculate position for the asterisk just below the bar's top
+        offset = 0.02 * highlighted_value  # offset based on the bar's own height
+        asterisk_y = highlighted_value - offset  # place it below
+        
+        # Choose asterisk color
+        asterisk_color = asterisk_color_for[idx]
+        
+        # Add a text object (asterisk) near the top of the chosen bar
+        ax.text(
+            x[idx],              # x-position
+            asterisk_y,          # y-position
+            '*',                 # the text
+            color=asterisk_color,
+            ha='center', 
+            va='top',
+            fontsize=16, 
+            fontweight='bold'
+        )
+    
+    # Top-left: First Compleasm C (0–100), largest gets asterisk
+    plot_stat(axes[0, 0], 'First Compleasm C', stat_index=0, y_max=100, highlight_smallest=False)
+    
+    # Top-right: Second Compleasm C (0–100), largest gets asterisk
+    plot_stat(axes[0, 1], 'Second Compleasm C', stat_index=1, y_max=100, highlight_smallest=False)
+    
+    # Bottom-left: N50 (autoscale), largest gets asterisk
+    plot_stat(axes[1, 0], 'N50', stat_index=2, y_max=None, highlight_smallest=False)
+    
+    # Bottom-right: Contig Count (autoscale), smallest gets asterisk
+    plot_stat(axes[1, 1], 'Contig Count', stat_index=3, y_max=None, highlight_smallest=True)
+    
+    # Tidy layout
+    plt.tight_layout()
+    
+    # Save the file as an svg based on input_fasta
+    output_comparative_svg = os.path.join(shared_root, "comparative_stats.svg")
+    plt.savefig(output_comparative_svg, format="svg")
+    output_comparative_png =os.path.join(shared_root, "comparative_stats.png")
+    plt.savefig(output_comparative_png, format="png")
 
 
 def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, SPECIES_ID, clump_f_dedup_path, clump_r_dedup_path, first_compleasm_odb, second_compleasm_odb, REF_SEQ, karyote_id, kingdom_id, sample_stats_dict, results_df):
@@ -2063,15 +2187,16 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
             default_assembly_path, assembly_path, ref_assembly_path = masurca_config_gen(shared_root, masurca_out_dir,
                                                                                       [ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS],
                                                                                       clump_f_dedup_path, clump_r_dedup_path,
-                                                                                      CPU_THREADS, RAM_GB, REF_SEQ)
-        if not pd.isna(ONT_RAW_READS):
-            gap_assembly = os.path.join(find_soap_folder(masurca_out_dir), "asm.scafSeq")
-            renamed_gap_assembly = gap_assembly.replace("asm.scafSeq", "genome.scf.fasta")
-            if os.path.exists(gap_assembly):
-                shutil.move(gap_assembly, renamed_gap_assembly)
-        else:
-            gap_assembly = os.path.join(find_ca_folder(masurca_out_dir), "9-terminator", "genome.scf.fasta")
-        shutil.move(renamed_gap_assembly, final_masurca_path)
+                                                                                      CPU_THREADS, RAM_GB, REF_SEQ)       
+        # Currently SOAP denovo is broken, disabling for now
+        # if not pd.isna(ONT_RAW_READS):
+        #     gap_assembly = os.path.join(find_soap_folder(masurca_out_dir), "asm.scafSeq")
+        #     renamed_gap_assembly = gap_assembly.replace("asm.scafSeq", "genome.scf.fasta")
+        #     if os.path.exists(gap_assembly):
+        #         shutil.move(gap_assembly, renamed_gap_assembly)
+        # else:
+        gap_assembly = os.path.join(find_ca_folder(masurca_out_dir), "9-terminator", "genome.scf.fasta")
+        shutil.move(gap_assembly, final_masurca_path)
     
     final_masurca_path, masurca_stats_list, _ = qc_assembly(final_masurca_path, shared_root, cwd,
                                         ONT_RAW_READS, SPECIES_ID,
@@ -2153,9 +2278,15 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         method_counts = {}
         for method in custom_stats:
             method_counts[method] = method_counts.get(method, 0) + 1
+        shared_root
         
         # Find the most represented method
         most_represented_method = max(method_counts, key=method_counts.get)
+        comparative_plot_dict = {"MaSuRCA": masurca_stats_list,
+                                 "Flye": flye_stats_list,
+                                 "SPAdes": spades_stats_list}
+
+        comparative_plots(comparative_plot_dict, os.path.commonpath([final_masurca_path, final_flye_path, final_spades_path]))
         
         # Display the results
         log_print(f"Best Initial Assembly: {most_represented_method}.")
@@ -2473,14 +2604,14 @@ if __name__ == "__main__":
 
     # Default values
     default_input_csv = None
-    default_ont_sra = "SRR27945394" 
+    default_ont_sra = "SRR25932369" 
     default_raw_ont_dir = None
     default_ont_reads = None
-    default_illu_sra = "SRR27945395" # "SRR5602600"
+    default_illu_sra = "SRR25932370" # "SRR5602600"
     default_raw_illu_dir = None
     default_raw_illu_reads_1 = None
     default_raw_illu_reads_2 = None
-    default_species_id = "Ps_caeruleorhiza" # "My_speciosa" # Format: <2-letters of Genus>_<full species name>
+    default_species_id = "Ps_zapotecorum" # "My_speciosa" # Format: <2-letters of Genus>_<full species name>
     default_organism_kingdom = "Funga" # "Flora"
     default_organism_karyote = "Eukaryote"
     default_compleasm_1 = "basidiomycota" # "embryophyta"
@@ -2488,7 +2619,7 @@ if __name__ == "__main__":
     default_estimated_genome_size = "60m"
     default_reference_sequence= None
     default_reference_sequence_gca = None # "GCA_024721245.1"
-    default_percent_resources = 0.75
+    default_percent_resources = 0.90
     
     # Add arguments with default values
     parser.add_argument("--input_csv", "-csv",
@@ -2570,14 +2701,14 @@ if __name__ == "__main__":
 
     # Parse samples in sample_dict & input_csv_df
     results_df = pd.DataFrame()
-    print(input_csv_df)
     for index, row in input_csv_df.iterrows():
         final_assembly_path, results_df = egap_sample(row, results_df, CPU_THREADS, RAM_GB)
     
-    # plot_classification_table(results_df)
+    # TODO: remove those rows in input_csv_df that are partially duplicated but with less data (they represent the original input and are outdated once the main function completes)
+    # TODO: plot_classification_table(results_df)
 
     if not pd.isna(INPUT_CSV):
         final_csv_filename = INPUT_CSV.replace(".csv", "_final_assembly_stats.csv")
-    else:
-        final_csv_filename = os.path.join("/".join(os.path.dirname(default_raw_illu_reads_1).split("/")[:-1]), f"{args.species_id}_final_assembly_stats.csv")
+    else:        
+        final_csv_filename =input_csv_df.iloc[1]["FINAL_ASSEMBLY"].replace(".fasta","_stats.csv") # os.path.join("/".join(os.path.dirname(default_raw_illu_reads_1).split("/")[:-1]), f"{args.species_id}_final_assembly_stats.csv")
     input_csv_df.to_csv(final_csv_filename, index=False)
