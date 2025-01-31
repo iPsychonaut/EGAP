@@ -60,7 +60,7 @@ check_success "Installing system packages"
 
 # Install required conda packages
 echo -e "\e[36m\nInstalling required conda packages via mamba...\e[0m"
-mamba install -y -c bioconda -c conda-forge \
+conda install -y -c bioconda -c conda-forge \
                                 masurca==4.1.2 \
                                 quast==5.2.0 \
                                 compleasm==0.2.6 \
