@@ -21,9 +21,9 @@ RUN conda run -n EGAP_env mamba install -y -c conda-forge -c bioconda -c prkreke
     masurca==4.1.2 quast==5.2.0 compleasm==0.2.6 biopython==1.81 RagTag==2.1.0 \
     NanoPlot==1.43.0 termcolor==2.3.0 minimap2==2.28 bwa==0.7.18 matplotlib==3.7.3 \
     bamtools==2.5.2 tgsgapcloser==1.2.1 psutil==6.0.0 pilon==1.22 trimmomatic==0.39 \
-    merqury==1.3 meryl==1.3 beautifulsoup4==4.12.3 ncbi-datasets-cli==16.39.0 \
-    samtools==1.21 fastqc==0.12.1 abyss==2.0.2 bbmap==39.15 ratatosk==0.9.0 racon==1.5.0 \
-    kmc==3.2.4 runner==1.3 flye==2.9.5-b1801 spades==4.0.0 && \
+    beautifulsoup4==4.12.3 ncbi-datasets-cli==16.39.0 samtools==1.21 fastqc==0.12.1 \
+    abyss==2.0.2 bbmap==39.15 ratatosk==0.9.0 racon==1.5.0 kmc==3.2.4 runner==1.3 \
+    spades==4.0.0 flye && \
     conda clean -a -y
 
 # Download required resources for quast
