@@ -76,8 +76,6 @@ mamba install -y -c bioconda -c conda-forge \
                                 abyss==2.0.2 \
                                 sepp==4.5.1 \
                                 psutil==6.0.0 \
-                                merqury==1.3 \
-                                meryl==1.3 \
                                 beautifulsoup4==4.12.3 \
                                 ncbi-datasets-cli==16.39.0 \
                                 matplotlib==3.7.3 \
@@ -88,8 +86,8 @@ mamba install -y -c bioconda -c conda-forge \
                                 racon==1.5.0 \
                                 kmc==3.2.4 \
                                 runner==1.3 \
-                                flye==2.9.5-b1801 \
-                                spades==4.0.0
+                                spades==4.0.0 \
+                                flye
 
 check_success "Installing conda packages"
 
