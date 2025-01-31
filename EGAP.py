@@ -891,7 +891,7 @@ def masurca_config_gen(input_folder, output_folder, input_fq_list, clump_f_dedup
     else:
         config_content = ["DATA\n",
                           f"PE= pe {int(avg_insert)} {int(std_dev)} {clump_f_dedup_path.replace('.gz','')} {clump_r_dedup_path.replace('.gz','')}\n"]
-        if ref_seq:
+        if not pd.isna(ref_seq):
             config_content.append(f"REFERENCE={ref_seq.replace('.gbff','.fna.gz')}\n")
         config_content.append("END\n")
         config_content.append("PARAMETERS\n")
@@ -1126,7 +1126,7 @@ def process_read_file(read_path):
     dir_path, filename = os.path.split(read_path)
     basename_list = filename.split(".")
     basename = basename_list[0]
-    ext = "." + ".".join(basename_list[1:])
+    # ext = "." + ".".join(basename_list[1:])
     new_read_path = read_path  # Initialize with original path
 
     # Handle double extensions like .fq.gz
@@ -1267,223 +1267,190 @@ def ont_combine_fastq_gz(ONT_FOLDER):
 
 
 def plot_busco(compleasm_odb, input_busco_tsv, input_fasta):
-    """
-    Generates a stacked bar chart of BUSCO statuses (Single, Duplicated, Incomplete, Fragmented) 
-    for each sequence in the provided BUSCO TSV file, and saves the plot as both SVG and PNG.
-
-    Parameters:
-        compleasm_odb (str):
-            The name of the BUSCO lineage or database used (e.g., "basidiomycota_odb10").
-        input_busco_tsv (str):
-            Path to the 'full_table_busco_format.tsv' produced by Compleasm or BUSCO.
-        input_fasta (str):
-            Path to the assembly FASTA file being assessed, used only to help name the output files.
-
-    Returns:
-        None
-            Saves the figure in two formats: `<input_fasta>_<compleasm_odb>_busco.svg` 
-            and `<input_fasta>_<compleasm_odb>_busco.png`.
-
-    Notes:
-        - The function reads the TSV into a pandas DataFrame, processes the statuses, 
-          and plots them as a stacked bar chart with color-coded statuses.
-        - Requires matplotlib and pandas.
-
-    Examples:
-        >>> plot_busco("basidiomycota_odb10", "/path/to/full_table_busco_format.tsv", "/path/to/assembly.fasta")
-        >>> # Outputs: /path/to/assembly_basidiomycota_odb10_busco.svg and .png
-    """
-    
     log_print(f"Generating BUSCO plot for {input_busco_tsv}...")
+    
     # Load the BUSCO TSV into a pandas DataFrame
     busco_df = pd.read_csv(input_busco_tsv, sep="\t", header=0, dtype=str)
+
+    if busco_df.empty:
+        log_print("WARNING: BUSCO input file is empty. Skipping plot generation.")
+        return
     
     busco_genes = len(busco_df)
-    
-    # Replace "Complete" with "Single" in the "Status" column
+
+    # Replace "Complete" with "Single"
     busco_df['Status'] = busco_df['Status'].replace("Complete", "Single")
-    
+
     # Create a pivot table to count Status values for each Sequence
     status_counts = busco_df.pivot_table(index='Sequence', columns='Status', aggfunc='size', fill_value=0)
-    
-    # Reorder the columns to maintain the original order
+
+    # Reorder columns to maintain the original order
     desired_order = ['Single', 'Duplicated', 'Incomplete', 'Fragmented']
     status_counts = status_counts.reindex(columns=desired_order, fill_value=0)
-    
+
     # Count total sequences and sequences to exclude
     total_sequences = len(status_counts)
     excluded_sequences = len(status_counts.loc[status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) == 0])
     included_sequences = total_sequences - excluded_sequences
-    
+
     # Remove sequences containing only Duplicated statuses
     filtered_status_counts = status_counts.loc[status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) > 0]
-    
-    # Sort sequences by the total count of all statuses (optional)
+
+    # If no valid data remains, create a placeholder plot
+    if filtered_status_counts.empty:
+        log_print("WARNING: No valid BUSCO data available for plotting. Using default autorange.")
+        plt.figure(figsize=(12, 8))
+        plt.text(0.5, 0.5, "No valid BUSCO data to plot", fontsize=14, ha='center', va='center')
+        plt.xticks([])
+        plt.yticks([])
+        plt.title("BUSCO Status Plot - No Data Available")
+        
+        output_busco_svg = input_fasta.replace(".fasta", f"_{compleasm_odb}_busco.svg")
+        plt.savefig(output_busco_svg, format="svg")
+        output_busco_png = input_fasta.replace(".fasta", f"_{compleasm_odb}_busco.png")
+        plt.savefig(output_busco_png, format="png")
+        plt.close()
+        return
+
+    # Sort sequences by total count of all statuses
     filtered_status_counts = filtered_status_counts.loc[filtered_status_counts.sum(axis=1).sort_values(ascending=False).index]
-    
+
     # Calculate the total counts for each status for the legend
     status_totals = busco_df['Status'].value_counts()
-    
-    # Plot the data as a stacked bar chart with specified colors
+
+    # Plot settings
     colors = {'Single': '#619B8AFF', 'Duplicated': '#A1C181FF', 'Incomplete': '#FE7F2DFF', 'Fragmented': '#FCCA46FF'}
     ax = filtered_status_counts.plot(
         kind='bar',
         stacked=True,
         figsize=(12, 8),
         color=[colors[col] for col in filtered_status_counts.columns])
-    
-    # Update the legend with totals and percentages
+
+    # Update legend with totals and percentages
     legend_labels = [f"{status} ({round((status_totals.get(status, 0)/busco_genes)*100, 2)}%)" 
                      for status in filtered_status_counts.columns]
-    
+
     completeness_values = [round((status_totals.get(status, 0)/busco_genes)*100, 2) 
                            for status in filtered_status_counts.columns]
-    completeness_calc = round(completeness_values[0] + completeness_values[1],2)
-    
+    completeness_calc = round(completeness_values[0] + completeness_values[1], 2)
+
     # Add chart labels and title with n and x counts
     plt.title(f"Distribution of {compleasm_odb} BUSCO Status per Sequence\nCompleteness: {completeness_calc}%")
     plt.xlabel(f"Sequences (Contig/Scaffold/Chromosome)\nIncluded={included_sequences}, Excluded={excluded_sequences}")
     plt.ylabel(f"Number of BUSCO Matches (out of {busco_genes})")
     plt.xticks(rotation=45, ha='right')  # Tilt x-axis labels for readability
-    
+
     ax.legend(legend_labels, title="BUSCO Status", loc='upper right')
-    
+
     # Adjust layout
     plt.tight_layout()
-    
-    # Save the file as an svg based on input_fasta
+
+    # Save output
     output_busco_svg = input_fasta.replace(".fasta", f"_{compleasm_odb}_busco.svg")
     plt.savefig(output_busco_svg, format="svg")
     output_busco_png = input_fasta.replace(".fasta", f"_{compleasm_odb}_busco.png")
     plt.savefig(output_busco_png, format="png")
-    
+
     log_print(f"PASS:\tBUSCO {compleasm_odb} plot saved: {output_busco_svg} & {output_busco_png}")
+    plt.close()
 
 
 def comparative_plots(comparative_plot_dict, shared_root):
     """
-    Creates a 2x2 grid of bar charts showing the following stats:
-      Top-left: First Compleasm C (largest bar gets asterisk)
-      Top-right: Second Compleasm C (largest bar gets asterisk)
-      Bottom-left: N50 (largest bar gets asterisk)
-      Bottom-right: Contig Count (smallest bar gets asterisk)
-    
-    The first two subplots have y-axis limited to 0–100.
-    N50 and Contig Count subplots use automatic scaling.
-    
-    The asterisk is placed just below the bar's top:
-      * If bar is MaSuRCA: asterisk is white
-      * Otherwise: asterisk color is (42, 32, 53) in RGB
+    Generates a 2x2 comparative bar chart for assembly statistics.
+    Automatically handles missing data and adjusts plot behavior accordingly.
     """
-    # Extract stats (each list is in the order: [comp1, comp2, n50, contig_count])
-    masurca_stats = comparative_plot_dict["MaSuRCA"]
-    flye_stats    = comparative_plot_dict["Flye"]
-    spades_stats  = comparative_plot_dict["SPAdes"]
+    log_print("Generating comparative plots...")
+
+    # Check if comparative_plot_dict is empty
+    if not comparative_plot_dict:
+        log_print("WARNING: Comparative plot data is missing. Skipping plot generation.")
+        return
     
-    # Define bar colors (normalized to [0, 1])
+    # Extract stats (ensure default values to prevent crashes)
+    masurca_stats = comparative_plot_dict.get("MaSuRCA", [0, 0, 0, 0])
+    flye_stats    = comparative_plot_dict.get("Flye", [0, 0, 0, 0])
+    spades_stats  = comparative_plot_dict.get("SPAdes", [0, 0, 0, 0])
+    
+    # Ensure paths exist and filter out None values
+    shared_root = os.path.commonpath([p for p in [shared_root] if p is not None])
+    
+    # Define bar colors
     masurca_color = (35/255, 61/255, 77/255)
     flye_color    = (161/255, 193/255, 129/255)
     spades_color  = (254/255, 127/255, 45/255)
-    
+
     # Asterisk colors
-    #   - If bar is MaSuRCA -> white
-    #   - Else -> (42, 32, 53)
     asterisk_color_for = [
-        (1.0, 1.0, 1.0),        # for MaSuRCA
-        (42/255, 32/255, 53/255),  # for Flye
-        (42/255, 32/255, 53/255)   # for SPAdes
+        (1.0, 1.0, 1.0),        # MaSuRCA
+        (42/255, 32/255, 53/255),  # Flye
+        (42/255, 32/255, 53/255)   # SPAdes
     ]
     
-    # Prepare a figure with a 2x2 grid of subplots (white background)
+    # Prepare 2x2 figure
     fig, axes = plt.subplots(2, 2, figsize=(10, 8), facecolor='white')
-    
+
     def plot_stat(ax, title, stat_index, y_max=None, highlight_smallest=False):
         """
-        Plots three bars (one per assembler) for a given statistic index,
-        and places an asterisk on the "largest" or "smallest" bar.
-        
-        :param ax:               The Axes object to plot on.
-        :param title:            The title of the subplot.
-        :param stat_index:       Index of the statistic in each assembler's list.
-        :param y_max:            If not None, sets the y-limit to 0..y_max.
-        :param highlight_smallest: If False, highlight the largest bar;
-                                   If True, highlight the smallest bar.
+        Plots a bar chart for a given assembly statistic.
         """
-        # The corresponding values for each assembler
         values = [
             masurca_stats[stat_index],
             flye_stats[stat_index],
             spades_stats[stat_index]
         ]
         
-        # X positions for the bars
-        x = np.arange(3)
+        # If all values are zero, generate an empty plot
+        if all(v == 0 for v in values):
+            ax.set_title(f"{title} (No Data Available)")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            return
         
-        # Colors for the bars
+        x = np.arange(3)  # X-axis positions
         colors = [masurca_color, flye_color, spades_color]
-        
-        # Plot the bars
+
+        # Plot bars
         ax.bar(x, values, color=colors, width=0.6)
         ax.set_title(title)
-        
-        # Label x-ticks with assembler names
         ax.set_xticks(x)
         ax.set_xticklabels(['MaSuRCA', 'Flye', 'SPAdes'])
-        
-        # Set y-limit if requested (e.g., for completeness stats at 100)
+
+        # Set y-limit
         if y_max is not None:
             ax.set_ylim([0, y_max])
-        
+
         # Determine which bar to highlight
-        if highlight_smallest:
-            highlighted_value = min(values)
-            idx = values.index(highlighted_value)
-        else:
-            highlighted_value = max(values)
-            idx = values.index(highlighted_value)
+        highlighted_value = min(values) if highlight_smallest else max(values)
+        idx = values.index(highlighted_value)
         
-        # Calculate position for the asterisk just below the bar's top
-        offset = 0.02 * highlighted_value  # offset based on the bar's own height
-        asterisk_y = highlighted_value - offset  # place it below
-        
-        # Choose asterisk color
+        # Asterisk position
+        offset = 0.02 * highlighted_value
+        asterisk_y = highlighted_value - offset
         asterisk_color = asterisk_color_for[idx]
-        
-        # Add a text object (asterisk) near the top of the chosen bar
-        ax.text(
-            x[idx],              # x-position
-            asterisk_y,          # y-position
-            '*',                 # the text
-            color=asterisk_color,
-            ha='center', 
-            va='top',
-            fontsize=16, 
-            fontweight='bold'
-        )
-    
-    # Top-left: First Compleasm C (0–100), largest gets asterisk
-    plot_stat(axes[0, 0], 'First Compleasm C', stat_index=0, y_max=100, highlight_smallest=False)
-    
-    # Top-right: Second Compleasm C (0–100), largest gets asterisk
-    plot_stat(axes[0, 1], 'Second Compleasm C', stat_index=1, y_max=100, highlight_smallest=False)
-    
-    # Bottom-left: N50 (autoscale), largest gets asterisk
-    plot_stat(axes[1, 0], 'N50', stat_index=2, y_max=None, highlight_smallest=False)
-    
-    # Bottom-right: Contig Count (autoscale), smallest gets asterisk
-    plot_stat(axes[1, 1], 'Contig Count', stat_index=3, y_max=None, highlight_smallest=True)
-    
-    # Tidy layout
+
+        # Add asterisk
+        ax.text(x[idx], asterisk_y, '*', color=asterisk_color, ha='center', va='top',
+                fontsize=16, fontweight='bold')
+
+    # Create each plot
+    plot_stat(axes[0, 0], 'First Compleasm C', stat_index=0, y_max=100)
+    plot_stat(axes[0, 1], 'Second Compleasm C', stat_index=1, y_max=100)
+    plot_stat(axes[1, 0], 'N50', stat_index=2)
+    plot_stat(axes[1, 1], 'Contig Count', stat_index=3, highlight_smallest=True)
+
+    # Layout and saving
     plt.tight_layout()
-    
-    # Save the file as an svg based on input_fasta
-    output_comparative_svg = os.path.join(shared_root, "comparative_stats.svg")
-    plt.savefig(output_comparative_svg, format="svg")
-    output_comparative_png =os.path.join(shared_root, "comparative_stats.png")
-    plt.savefig(output_comparative_png, format="png")
+    output_svg = os.path.join(shared_root, "comparative_stats.svg")
+    output_png = os.path.join(shared_root, "comparative_stats.png")
+    plt.savefig(output_svg, format="svg")
+    plt.savefig(output_png, format="png")
+    plt.close()
+
+    log_print(f"PASS: Comparative plot saved at {output_svg} & {output_png}")
 
 
-def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, SPECIES_ID, clump_f_dedup_path, clump_r_dedup_path, first_compleasm_odb, second_compleasm_odb, REF_SEQ, karyote_id, kingdom_id, sample_stats_dict, results_df):
+def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, SPECIES_ID, first_compleasm_odb, second_compleasm_odb, REF_SEQ, karyote_id, kingdom_id, sample_stats_dict, results_df):
     """
     Runs various QC steps on a given assembly, including Compleasm BUSCO checks 
     (for two lineages), Quast, and coverage calculations.
@@ -1497,12 +1464,12 @@ def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, SPECIES_ID
             The current working directory (used for returning after sub-processes).
         ONT_RAW_READS (str or None):
             Path to ONT reads if available (may be used for coverage or additional steps).
+        ILLUMINA_RAW_F_READS (str):
+            Path to raw forward Illumina reads.
+        ILLUMINA_RAW_R_READS (str):
+            Path to raw reverse Illumina reads.
         SPECIES_ID (str):
             A sample or species identifier used for labeling directories and logs.
-        clump_f_dedup_path (str):
-            Path to deduplicated forward Illumina reads.
-        clump_r_dedup_path (str):
-            Path to deduplicated reverse Illumina reads.
         first_compleasm_odb (str):
             The first Compleasm/BUSCO lineage database identifier (e.g., "basidiomycota_odb10").
         second_compleasm_odb (str):
@@ -1543,8 +1510,9 @@ def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, SPECIES_ID
         >>> sample_stats = {}
         >>> final_path, stats_list, updated_stats = qc_assembly(
         ...     "/path/to/assembly.fasta", "/path/to/shared_root", os.getcwd(),
-        ...     "/path/to/ONT_reads.fq.gz", "Ps_cubensis",
-        ...     "reads_forward_dedup.fq.gz", "reads_reverse_dedup.fq.gz",
+        ...     "/path/to/ONT_reads.fq.gz", 
+        ...     "/path/to/Illu_F_reads.fq.gz", "/path/to/Illu_R_reads.fq.gz",
+        ...     "Ps_cubensis",
         ...     "basidiomycota_odb10", "agaricales_odb10",
         ...     "/path/to/ref.fna", "eukaryote", "funga",
         ...     sample_stats, pd.DataFrame()
@@ -1657,17 +1625,19 @@ def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, SPECIES_ID
         ref_total_bases = 0
         for record in SeqIO.parse(REF_SEQ, "fasta"):
             ref_total_bases += len(record.seq)
-        sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
-        sample_stats_dict["TRIMMED_ILLU_COVERAGE"] = round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
-        sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
+        if not pd.isna(ILLUMINA_RAW_F_READS) and not pd.isna(ILLUMINA_RAW_R_READS):
+            sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
+            sample_stats_dict["TRIMMED_ILLU_COVERAGE"] = round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
+            sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
         if not pd.isna(ONT_RAW_READS):
             sample_stats_dict["RAW_ONT_COVERAGE"] = round(sample_stats_dict["RAW_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
             sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
             sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / ref_total_bases, 2) # Calculated based on REF_SEQ or final_assembly
     else:
-        sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
-        sample_stats_dict["TRIMMED_ILLU_COVERAGE"] =  round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
-        sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
+        if not pd.isna(ILLUMINA_RAW_F_READS) and not pd.isna(ILLUMINA_RAW_R_READS):
+            sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
+            sample_stats_dict["TRIMMED_ILLU_COVERAGE"] =  round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
+            sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
         if not pd.isna(ONT_RAW_READS):
             sample_stats_dict["RAW_ONT_COVERAGE"] =  round(sample_stats_dict["RAW_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
             sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2) # Calculated based on REF_SEQ or final_assembly
@@ -1681,8 +1651,70 @@ def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, SPECIES_ID
     sample_stats_list = [first_compleasm_c, second_compleasm_c, n50, contig_count]
     return final_assembly_path, sample_stats_list, sample_stats_dict
 
+def gen_sample_stats_dict(row):   
+    sample_stats_dict = {"SPECIES_ID": row["SPECIES_ID"],
+                         "ONT_SRA": row["ONT_SRA"] if isinstance(row["ONT_SRA"], str) else None,
+                         "ONT": os.path.basename(row["ONT_RAW_READS"]) if isinstance(row["ONT_RAW_READS"], str) else None,
+                         "ILLU_SRA": row["ILLUMINA_SRA"] if isinstance(row["ILLUMINA_SRA"], str) else None,
+                         "ILLU_F": os.path.basename(row["ILLUMINA_RAW_F_READS"]) if isinstance(row["ILLUMINA_RAW_F_READS"], str) else None,
+                         "ILLU_R": os.path.basename(row["ILLUMINA_RAW_R_READS"]) if isinstance(row["ILLUMINA_RAW_R_READS"], str) else None,
+    
+                         "RAW_ILLU_TOTAL_BASES": None, # FROM FastQC
+                         "RAW_ILLU_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
+                         "TRIMMED_ILLU_TOTAL_BASES": None, # FROM FastQC
+                         "TRIMMED_ILLU_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
+                         "DEDUPED_ILLU_TOTAL_BASES": None, # FROM FastQC
+                         "DEDUPED_ILLU_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
 
-def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
+                         "RAW_ONT_READS": None, # FROM Raw NanoPlot
+                         "RAW_ONT_MEAN_LENGTH": None, # FROM Raw NanoPlot
+                         "RAW_ONT_MEAN_QUAL": None, # FROM Raw NanoPlot
+                         "RAW_ONT_TOTAL_BASES": None, # FROM Raw NanoPlot
+                         "RAW_ONT_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
+        
+                         "FILT_ONT_READS": None, # FROM Filtered NanoPlot
+                         "FILT_ONT_MEAN_LENGTH": None, # FROM Filtered NanoPlot
+                         "FILT_ONT_MEAN_QUAL": None, # FROM Filtered NanoPlot
+                         "FILT_ONT_TOTAL_BASES": None, # FROM Filtered NanoPlot
+                         "FILT_ONT_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
+        
+                         "CORRECT_ONT_READS": None, # FROM Corrected NanoPlot
+                         "CORRECT_ONT_MEAN_LENGTH": None, # FROM CORRECT NanoPlot
+                         "CORRECT_ONT_MEAN_QUAL": None, # FROM CORRECT NanoPlot
+                         "CORRECT_ONT_TOTAL_BASES": None, # FROM CORRECT NanoPlot
+                         "CORRECT_ONT_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
+        
+                         "KMER_COMPLETENESS": None, # FROM Merqury best k-mer completeness >97%
+                         "QUAL_VAL": None, # FROM Merqury Quality Value >43
+        
+                         "FIRST_COMPLEASM_S": None, # FROM First Compleasm
+                         "FIRST_COMPLEASM_D": None, # FROM First Compleasm
+                         "FIRST_COMPLEASM_F": None, # FROM First Compleasm
+                         "FIRST_COMPLEASM_M": None, # FROM First Compleasm
+                         "FIRST_COMPLEASM_C": None, # FROM First Compleasm
+                            
+                         "SECOND_COMPLEASM_S": None, # FROM Second Compleasm
+                         "SECOND_COMPLEASM_D": None, # FROM Second Compleasm
+                         "SECOND_COMPLEASM_F": None, # FROM Second Compleasm
+                         "SECOND_COMPLEASM_M": None, # FROM Second Compleasm
+                         "SECOND_COMPLEASM_C": None, # FROM Second Compleasm
+        
+                         "GENOME_SIZE": None, # FROM QUAST
+                         "ASSEMBLY_READS": None, # FROM QUAST
+                         "ASSEMBLY_CONTIGS": None, # FROM QUAST
+                         "ASSEMBLY_N50": None, # FROM QUAST
+                         "ASSEMBLY_L50": None, # FROM QUAST
+                         "ASSEMBLY_GC": None, # FROM QUAST
+                         "MISASSEMBLIES": None, # FROM QUAST if REF_SEQ != None
+                         "N_PER_100KBP": None, # FROM QUAST if REF_SEQ != None
+                         "MIS_PER_100KBP": None, # FROM QUAST if REF_SEQ != None
+                         "INDELS_PER_100KPB": None, # FROM QUAST if REF_SEQ != None
+                            
+                         "FINAL_ASSEMBLY": None}
+    return sample_stats_dict
+
+
+def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     """
     Run the Entheome Genome Hybrid Assembly Pipeline on a single sample (row of metadata),
     performing quality checks, trimming, assembly, polishing, and final curation steps.
@@ -1830,30 +1862,45 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
     REF_SEQ_GCA = row["REF_SEQ_GCA"]
     REF_SEQ = row["REF_SEQ"]
 
-    if ONT_RAW_READS == None and ILLUMINA_RAW_F_READS == None and ILLUMINA_RAW_R_READS == None and REF_SEQ == None:
-        ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, ONT_RAW_READS, REF_SEQ = download_test_data(SPECIES_ID, ILLU_SRA, ONT_SRA, REF_SEQ_GCA)  
+    if pd.isna(ONT_RAW_READS) and pd.isna(ILLUMINA_RAW_F_READS) and pd.isna(ILLUMINA_RAW_R_READS) and pd.isna(REF_SEQ):
+        ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, ONT_RAW_READS, REF_SEQ = download_test_data(SPECIES_ID, ILLU_SRA, ONT_SRA, REF_SEQ_GCA)
+    elif not pd.isna(ONT_RAW_READS) and pd.isna(ILLUMINA_RAW_F_READS) and pd.isna(ILLUMINA_RAW_R_READS) and pd.isna(REF_SEQ):
+        ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, _, REF_SEQ = download_test_data(SPECIES_ID, ILLU_SRA, ONT_SRA, REF_SEQ_GCA)
+    elif pd.isna(ONT_RAW_READS) and not pd.isna(ILLUMINA_RAW_F_READS) and pd.isna(ILLUMINA_RAW_R_READS) and pd.isna(REF_SEQ):
+        _, _, ONT_RAW_READS, REF_SEQ = download_test_data(SPECIES_ID, ILLU_SRA, ONT_SRA, REF_SEQ_GCA)
 
     if type(ONT_RAW_DIR) == str:
-        shared_root = os.path.commonpath([ONT_RAW_DIR, ILLU_RAW_DIR])
+        if type(ILLU_RAW_DIR) != str:
+            shared_root = os.path.join(ONT_RAW_DIR, SPECIES_ID)
+        else:
+            shared_root = os.path.commonpath([ONT_RAW_DIR, ILLU_RAW_DIR])
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
         ONT_RAW_READS = ont_combine_fastq_gz(ONT_RAW_DIR)
     if type(ILLU_RAW_DIR) == str:
-        shared_root = os.path.commonpath([ONT_RAW_READS, ILLU_RAW_DIR])
+        if type(ONT_RAW_DIR) != str:
+            shared_root = ILLU_RAW_DIR
+        else:
+            shared_root = os.path.commonpath([ONT_RAW_DIR, ILLU_RAW_DIR])
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
         illu_combined_files = illumina_extract_and_check(ILLU_RAW_DIR, SPECIES_ID)
         ILLUMINA_RAW_F_READS = illu_combined_files[0]
         ILLUMINA_RAW_R_READS = illu_combined_files[1]
     elif type(ONT_RAW_READS) == str:    
-        shared_root = os.path.commonpath([ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
+        if type(ILLUMINA_RAW_F_READS) != str and type(ILLUMINA_RAW_R_READS) != str:
+            shared_root = os.path.join(os.path.dirname(ONT_RAW_READS), SPECIES_ID)
+        else:
+            shared_root = os.path.commonpath([ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
     else:
-        shared_root = os.path.commonpath([ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
+        if type(ILLUMINA_RAW_F_READS) != str and type(ILLUMINA_RAW_R_READS) != str and not pd.isna(INPUT_CSV):
+            shared_root = os.path.join(os.path.dirname(INPUT_CSV), SPECIES_ID)
+        else:
+            shared_root = os.path.commonpath([ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")    
-
 
     if pd.notna(REF_SEQ):
         ref_seq_path = REF_SEQ
@@ -1888,7 +1935,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                     log_print(f"NOTE:\tOriginal file {ref_seq_path} not found. Using existing .fa.gz file: {fa_gz_path}")
                 else:
                     log_print(f"NOTE:\tNeither {ref_seq_path} nor {fa_gz_path} exists. REF_SEQ cannot be processed.")
-        
+
         # Case 2: .fna
         elif ref_seq_path.endswith('.fna'):
             new_ref_filename = ref_basename + '.fa'
@@ -1912,12 +1959,9 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         
         # Handle other extensions if necessary
         else:
-            log_print(f"NOTE:\tREF_SEQ file {ref_seq_path} does not match expected extensions (.fna or .fna.gz). Skipping renaming.")
-        
-    
+            log_print(f"NOTE:\tREF_SEQ file {ref_seq_path} does not match expected extensions (.fna or .fna.gz). Skipping renaming.")    
     else:
         log_print("NOTE:\tNo REF_SEQ provided; skipping REF_SEQ processing.")
-
 
     # Process input read files
     if pd.notna(ONT_RAW_READS):
@@ -1926,66 +1970,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         ILLUMINA_RAW_F_READS = process_read_file(ILLUMINA_RAW_F_READS)    
     if pd.notna(ILLUMINA_RAW_R_READS):
         ILLUMINA_RAW_R_READS = process_read_file(ILLUMINA_RAW_R_READS)
-
-    sample_stats_dict = {"SPECIES_ID": SPECIES_ID,
-                         "ONT_SRA": ONT_SRA,
-                         "ONT": os.path.basename(ONT_RAW_READS) if isinstance(ONT_RAW_READS, str) else None,
-                         "ILLU_SRA": ILLU_SRA,
-                         "ILLU_F": os.path.basename(ILLUMINA_RAW_F_READS),
-                         "ILLU_R": os.path.basename(ILLUMINA_RAW_R_READS),
-    
-                         "RAW_ILLU_TOTAL_BASES": None, # FROM FastQC
-                         "RAW_ILLU_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
-                         "TRIMMED_ILLU_TOTAL_BASES": None, # FROM FastQC
-                         "TRIMMED_ILLU_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
-                         "DEDUPED_ILLU_TOTAL_BASES": None, # FROM FastQC
-                         "DEDUPED_ILLU_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
-
-                         "RAW_ONT_READS": None, # FROM Raw NanoPlot
-                         "RAW_ONT_MEAN_LENGTH": None, # FROM Raw NanoPlot
-                         "RAW_ONT_MEAN_QUAL": None, # FROM Raw NanoPlot
-                         "RAW_ONT_TOTAL_BASES": None, # FROM Raw NanoPlot
-                         "RAW_ONT_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
-        
-                         "FILT_ONT_READS": None, # FROM Filtered NanoPlot
-                         "FILT_ONT_MEAN_LENGTH": None, # FROM Filtered NanoPlot
-                         "FILT_ONT_MEAN_QUAL": None, # FROM Filtered NanoPlot
-                         "FILT_ONT_TOTAL_BASES": None, # FROM Filtered NanoPlot
-                         "FILT_ONT_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
-        
-                         "CORRECT_ONT_READS": None, # FROM Corrected NanoPlot
-                         "CORRECT_ONT_MEAN_LENGTH": None, # FROM CORRECT NanoPlot
-                         "CORRECT_ONT_MEAN_QUAL": None, # FROM CORRECT NanoPlot
-                         "CORRECT_ONT_TOTAL_BASES": None, # FROM CORRECT NanoPlot
-                         "CORRECT_ONT_COVERAGE": None, # FROM Calculated later based on REF_SEQ or final_assembly
-        
-                         "KMER_COMPLETENESS": None, # FROM Merqury best k-mer completeness >97%
-                         "QUAL_VAL": None, # FROM Merqury Quality Value >43
-        
-                         "FIRST_COMPLEASM_S": None, # FROM First Compleasm
-                         "FIRST_COMPLEASM_D": None, # FROM First Compleasm
-                         "FIRST_COMPLEASM_F": None, # FROM First Compleasm
-                         "FIRST_COMPLEASM_M": None, # FROM First Compleasm
-                         "FIRST_COMPLEASM_C": None, # FROM First Compleasm
-                            
-                         "SECOND_COMPLEASM_S": None, # FROM Second Compleasm
-                         "SECOND_COMPLEASM_D": None, # FROM Second Compleasm
-                         "SECOND_COMPLEASM_F": None, # FROM Second Compleasm
-                         "SECOND_COMPLEASM_M": None, # FROM Second Compleasm
-                         "SECOND_COMPLEASM_C": None, # FROM Second Compleasm
-        
-                         "GENOME_SIZE": None, # FROM QUAST
-                         "ASSEMBLY_READS": None, # FROM QUAST
-                         "ASSEMBLY_CONTIGS": None, # FROM QUAST
-                         "ASSEMBLY_N50": None, # FROM QUAST
-                         "ASSEMBLY_L50": None, # FROM QUAST
-                         "ASSEMBLY_GC": None, # FROM QUAST
-                         "MISASSEMBLIES": None, # FROM QUAST if REF_SEQ != None
-                         "N_PER_100KBP": None, # FROM QUAST if REF_SEQ != None
-                         "MIS_PER_100KBP": None, # FROM QUAST if REF_SEQ != None
-                         "INDELS_PER_100KPB": None, # FROM QUAST if REF_SEQ != None
-                            
-                         "FINAL_ASSEMBLY": None}
+    sample_stats_dict = gen_sample_stats_dict(row)
     first_compleasm_odb = f"{row['COMPLEASM_1']}_odb10"
     second_compleasm_odb = f"{row['COMPLEASM_2']}_odb10"
     kingdom_id = row["ORGANISM_KINGDOM"].lower()
@@ -1996,7 +1981,8 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
 ###############################################################################
 
     # FastQC Illumina Raw Reads
-    raw_fastqc_dir = "/".join(ILLUMINA_RAW_F_READS.split("/")[:-1]) + "/raw_fastqc_analysis"
+    print(ILLUMINA_RAW_F_READS)
+    raw_fastqc_dir = "/".join(ILLUMINA_RAW_F_READS.split("/")[:-1]) + "/raw_fastqc_analysis"    
     if not os.path.exists(raw_fastqc_dir):
         os.makedirs(raw_fastqc_dir)
     raw_fastqc_F_out_file = os.path.join(raw_fastqc_dir, ILLUMINA_RAW_F_READS.split("/")[-1].replace(".fastq.gz","_fastqc.html"))
@@ -2167,7 +2153,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         
 ###############################################################################
     # Assembly
-###############################################################################   
+###############################################################################
 
     # MaSuRCA de Novo Assembly based on input Reads     
     masurca_out_dir = os.path.join(shared_root, "masurca_assembly")
@@ -2199,12 +2185,11 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         shutil.move(gap_assembly, final_masurca_path)
     
     final_masurca_path, masurca_stats_list, _ = qc_assembly(final_masurca_path, shared_root, cwd,
-                                        ONT_RAW_READS, SPECIES_ID,
-                                        clump_f_dedup_path, clump_r_dedup_path,
+                                        ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, SPECIES_ID,
                                         first_compleasm_odb, second_compleasm_odb,
                                         REF_SEQ, karyote_id, kingdom_id,
                                         sample_stats_dict, results_df)
-        
+    kmer_list = ["21", "33", "55", "77", "99", "127"]        
     if not pd.isna(ONT_RAW_READS):
         flye_out_dir = os.path.join(shared_root, "flye_assembly")
         if not os.path.exists(flye_out_dir):
@@ -2223,8 +2208,7 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                 _ = run_subprocess_cmd(flye_cmd, shell_check = False)
             shutil.move(flye_path, final_flye_path)
         final_flye_path, flye_stats_list, _ = qc_assembly(final_flye_path, shared_root, cwd,
-                                                       ONT_RAW_READS, SPECIES_ID,
-                                                       clump_f_dedup_path, clump_r_dedup_path,
+                                                       ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, SPECIES_ID,
                                                        first_compleasm_odb, second_compleasm_odb,
                                                        REF_SEQ, karyote_id, kingdom_id,
                                                        sample_stats_dict, results_df)
@@ -2245,64 +2229,96 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
                               "-o", spades_out_dir,
                               "-t", str(CPU_THREADS),
                               "-m", str(RAM_GB),
-                              "--careful", "--cov-cutoff", "auto"]
+                              "--careful", "--cov-cutoff", "auto",
+                              "-k", ",".join(kmer_list)]
+                if not pd.isna(REF_SEQ):
+                    spades_cmd.append(f"--trusted-contigs {REF_SEQ}")
                 _ = run_subprocess_cmd(spades_cmd, shell_check = False)
             shutil.move(spades_path, final_spades_path)
         final_spades_path, spades_stats_list, _ = qc_assembly(final_spades_path, shared_root, cwd,
-                                        ONT_RAW_READS, SPECIES_ID,
-                                        clump_f_dedup_path, clump_r_dedup_path,
+                                        ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, SPECIES_ID,
+                                        first_compleasm_odb, second_compleasm_odb,
+                                        REF_SEQ, karyote_id, kingdom_id,
+                                        sample_stats_dict, results_df)
+    else:
+        final_flye_path, flye_stats_list = None, [0,0,0,100000]
+        
+        spades_out_dir = os.path.join(shared_root, "spades_assembly")
+        if not os.path.exists(spades_out_dir):
+            os.makedirs(spades_out_dir)
+        spades_path = os.path.join(spades_out_dir, "scaffolds.fasta")
+        final_spades_path = os.path.join("/".join(spades_path.split("/")[:-1]), f"{SPECIES_ID}_spades.fasta")
+        if os.path.exists(final_spades_path):
+            log_print(f"SKIP:\tFinal SPAdes Assembly already exists: {final_spades_path}.")
+        else:   
+            if not os.path.exists(spades_path):
+                spades_cmd = ["spades.py",
+                              "--careful",
+                              "-1", clump_f_dedup_path,
+                              "-2", clump_r_dedup_path,
+                              "-o", spades_out_dir,
+                              "-t", str(CPU_THREADS),
+                              "-m", str(RAM_GB),
+                              "--cov-cutoff", "auto",
+                              "-k", ",".join(kmer_list)]
+                if not pd.isna(REF_SEQ):
+                    spades_cmd.append(f"--trusted-contigs {REF_SEQ}")
+                _ = run_subprocess_cmd(spades_cmd, shell_check = False)
+            shutil.move(spades_path, final_spades_path)
+        final_spades_path, spades_stats_list, _ = qc_assembly(final_spades_path, shared_root, cwd,
+                                        ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, SPECIES_ID,
                                         first_compleasm_odb, second_compleasm_odb,
                                         REF_SEQ, karyote_id, kingdom_id,
                                         sample_stats_dict, results_df)
         
-        # Combine the lists by index
-        stats_combined = zip(masurca_stats_list, flye_stats_list, spades_stats_list)
+    # Combine the lists by index
+    stats_combined = zip(masurca_stats_list, flye_stats_list, spades_stats_list)
+    
+    # Initialize an empty list to store the results
+    custom_stats = []
         
-        # Initialize an empty list to store the results
-        custom_stats = []
+    # Compare values at each index
+    for index, values in enumerate(stats_combined):
+        if index == len(masurca_stats_list) - 1:  # For the last item, find the smallest
+            min_value = min(values)
+            min_index = values.index(min_value)
+            methods = ["MaSuRCA", "Flye", "SPAdes"]
+            custom_stats.append(methods[min_index])
+        else:  # For all other items, find the largest
+            max_value = max(values)
+            max_index = values.index(max_value)
+            methods = ["MaSuRCA", "Flye", "SPAdes"]
+            custom_stats.append(methods[max_index])
         
-        # Compare values at each index
-        for index, values in enumerate(stats_combined):
-            if index == len(masurca_stats_list) - 1:  # For the last item, find the smallest
-                min_value = min(values)
-                min_index = values.index(min_value)
-                methods = ["MaSuRCA", "Flye", "SPAdes"]
-                custom_stats.append(methods[min_index])
-            else:  # For all other items, find the largest
-                max_value = max(values)
-                max_index = values.index(max_value)
-                methods = ["MaSuRCA", "Flye", "SPAdes"]
-                custom_stats.append(methods[max_index])
+    # Count occurrences of each method
+    method_counts = {}
+    for method in custom_stats:
+        method_counts[method] = method_counts.get(method, 0) + 1
+    shared_root
         
-        # Count occurrences of each method
-        method_counts = {}
-        for method in custom_stats:
-            method_counts[method] = method_counts.get(method, 0) + 1
-        shared_root
-        
-        # Find the most represented method
-        most_represented_method = max(method_counts, key=method_counts.get)
-        comparative_plot_dict = {"MaSuRCA": masurca_stats_list,
-                                 "Flye": flye_stats_list,
-                                 "SPAdes": spades_stats_list}
+    # Find the most represented method
+    most_represented_method = max(method_counts, key=method_counts.get)
+    comparative_plot_dict = {"MaSuRCA": masurca_stats_list,
+                             "Flye": flye_stats_list,
+                             "SPAdes": spades_stats_list}
+    # Display the results
+    log_print(f"Best Initial Assembly: {most_represented_method}.")
 
-        comparative_plots(comparative_plot_dict, os.path.commonpath([final_masurca_path, final_flye_path, final_spades_path]))
-        
-        # Display the results
-        log_print(f"Best Initial Assembly: {most_represented_method}.")
-
-        if most_represented_method == "Flye":
-            assembly_out_dir = flye_out_dir
-            de_novo_assembly = final_flye_path
-        elif most_represented_method == "SPAdes":
-            assembly_out_dir = spades_out_dir
-            de_novo_assembly = final_spades_path
-        else:
-            assembly_out_dir = masurca_out_dir
-            de_novo_assembly = final_masurca_path   
+    if pd.isna(final_flye_path):
+        common_path = os.path.commonpath([final_masurca_path, final_spades_path])
+    else:
+        common_path = os.path.commonpath([final_masurca_path, final_flye_path, final_spades_path])
+    comparative_plots(comparative_plot_dict, common_path)
+      
+    if most_represented_method == "Flye":
+        assembly_out_dir = flye_out_dir
+        de_novo_assembly = final_flye_path
+    elif most_represented_method == "SPAdes":
+        assembly_out_dir = spades_out_dir
+        de_novo_assembly = final_spades_path
     else:
         assembly_out_dir = masurca_out_dir
-        de_novo_assembly = final_masurca_path 
+        de_novo_assembly = final_masurca_path
 
 ###############################################################################
     # Assembly Polishing
@@ -2477,46 +2493,52 @@ def egap_sample(row, results_df, CPU_THREADS, RAM_GB):
         else:        
             shutil.copyfile(closed_gaps_path, final_assembly_path)
     else:
-        output_prefix = "/".join(shared_root.split("/")[:-1]) + f"/{ragtag_ref_assembly.split('/')[-1].replace('_pilon_ragtag_final.fasta','_sealed')}"
-        sealer_output_file = f"{output_prefix}_scaffold.fasta"        
+        output_prefix = "/".join(shared_root.split("/")[:-1]) + f"/{ragtag_ref_assembly.split('/')[-1].replace('_pilon_ragtag_final.fasta','_sealed').replace('_pilon.fasta','_sealed')}"
+        sealer_output_file = f"{output_prefix}_scaffold.fa"        
+        renamed_sealer_output_file = sealer_output_file.replace(".fa",".fasta")
         if os.path.isfile(sealer_output_file):        
             log_print(f"SKIP:\tABySS sealer output file already exists: {sealer_output_file}.")
         else:
-            kmer_sizes = [55,75,95]
-            abyss_sealer_cmd = ["abyss-sealer", "-o", output_prefix, "-S", ragtag_ref_assembly,
-                                "-L", str(400), "-G", str(1000),
-                                "-j", str(CPU_THREADS), "-b", "500M"]            
-            for k in kmer_sizes:
-                abyss_sealer_cmd.extend(["-k", str(k)])
-            abyss_sealer_cmd.extend([clump_f_dedup_path, clump_r_dedup_path])
-            _ = run_subprocess_cmd(abyss_sealer_cmd, shell_check = False)
-        final_assembly_path = sealer_output_file
+            if not os.path.exists(renamed_sealer_output_file):
+                kmer_sizes = [55,75,95]
+                abyss_sealer_cmd = ["abyss-sealer", "-o", output_prefix, "-S", ragtag_ref_assembly,
+                                    "-L", str(400), "-G", str(1000),
+                                    "-j", str(CPU_THREADS), "-b", "500M"]            
+                for k in kmer_sizes:
+                    abyss_sealer_cmd.extend(["-k", str(k)])
+                abyss_sealer_cmd.extend([clump_f_dedup_path, clump_r_dedup_path])
+                _ = run_subprocess_cmd(abyss_sealer_cmd, shell_check = False)
+                shutil.move(sealer_output_file, renamed_sealer_output_file)                
+        final_assembly_path = renamed_sealer_output_file
     final_gz_assembly_path = final_assembly_path + ".gz"
     gzip_file(final_assembly_path, final_gz_assembly_path)
 
 ###############################################################################
     # Final Assembly Assessment
 ###############################################################################
+    final_assembly_path, results_df = process_final_assembly(row, results_df,
+                                                             CPU_THREADS, RAM_GB,
+                                                             final_assembly_path,
+                                                             sample_stats_dict)    
 
-    final_assembly_path, sample_stats_list, sample_stats_dict = qc_assembly(final_assembly_path, shared_root, cwd,
-                                                         ONT_RAW_READS, SPECIES_ID,
-                                                         clump_f_dedup_path, clump_r_dedup_path,
-                                                         first_compleasm_odb, second_compleasm_odb,
-                                                         REF_SEQ, karyote_id, kingdom_id,
-                                                         sample_stats_dict, results_df)
-    sample_stats_dict["FINAL_ASSEMBLY"] = final_assembly_path
-    quality_classifications = classify_assembly(sample_stats_dict)
-    for metric, classification in quality_classifications.items():
-        log_print(f"{metric}: {classification}")
-    result_row = pd.DataFrame([quality_classifications], index=[index])
-    results_df = pd.concat([results_df, result_row])
-    for key, value in sample_stats_dict.items():
-        input_csv_df.loc[index, key] = value
-    log_print(f"Assessment of Final Assembly: {final_assembly_path}")
-    log_print(f"PASS:\tEGAP Final Assembly Complete: {final_assembly_path}")
-    log_print("This was produced with the help of the Entheogen Genome (Entheome) Foundation\n")
-    log_print("If this was useful, please support us at https://entheome.org/\n")
-    print("\n\n\n")
+    # final_assembly_path, sample_stats_list, sample_stats_dict = qc_assembly(final_assembly_path, shared_root, cwd,
+    #                                                      ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, SPECIES_ID,
+    #                                                      first_compleasm_odb, second_compleasm_odb,
+    #                                                      REF_SEQ, karyote_id, kingdom_id,
+    #                                                      sample_stats_dict, results_df)
+    # sample_stats_dict["FINAL_ASSEMBLY"] = final_assembly_path
+    # quality_classifications = classify_assembly(sample_stats_dict)
+    # for metric, classification in quality_classifications.items():
+    #     log_print(f"{metric}: {classification}")
+    # result_row = pd.DataFrame([quality_classifications], index=[index])
+    # results_df = pd.concat([results_df, result_row])
+    # for key, value in sample_stats_dict.items():
+    #     input_csv_df.loc[index, key] = value
+    # log_print(f"Assessment of Final Assembly: {final_assembly_path}")
+    # log_print(f"PASS:\tEGAP Final Assembly Complete: {final_assembly_path}")
+    # log_print("This was produced with the help of the Entheogen Genome (Entheome) Foundation\n")
+    # log_print("If this was useful, please support us at https://entheome.org/\n")
+    # print("\n\n\n")
     
     return final_assembly_path, results_df
 
@@ -2559,18 +2581,21 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, REF_SEQ_GCA):
     if not os.path.exists(EGAP_test_data_dir):
         os.mkdir(EGAP_test_data_dir)
     illumina_test_dir = os.path.join(EGAP_test_data_dir, "Illumina")
-    illu_sra_f = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_1.fastq.gz")
-    illu_sra_r = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_2.fastq.gz")
+    illu_sra_f = None
+    illu_sra_r = None
     ont_sra = None
     ref_seq_gca = None
-    if not os.path.exists(illu_sra_f) and not os.path.exists(illu_sra_r):   
-        if not os.path.exists(illumina_test_dir):
-            os.mkdir(illumina_test_dir)
-        os.chdir(illumina_test_dir)
-        illu_cmd = f"prefetch {ILLUMINA_SRA} && fastq-dump --gzip --split-files {ILLUMINA_SRA} && rm -rf {ILLUMINA_SRA}"
-        _ = run_subprocess_cmd(illu_cmd, shell_check = True)
-    else:
-        log_print(f"SKIP:\tIllumina SRAs already exist: {illu_sra_f}; {illu_sra_r}")
+    if not pd.isna(ILLUMINA_SRA):        
+        illu_sra_f = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_1.fastq.gz")
+        illu_sra_r = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_2.fastq.gz")
+        if not os.path.exists(illu_sra_f) and not os.path.exists(illu_sra_r):   
+            if not os.path.exists(illumina_test_dir):
+                os.mkdir(illumina_test_dir)
+            os.chdir(illumina_test_dir)
+            illu_cmd = f"prefetch {ILLUMINA_SRA} && fastq-dump --gzip --split-files {ILLUMINA_SRA} && rm -rf {ILLUMINA_SRA}"
+            _ = run_subprocess_cmd(illu_cmd, shell_check = True)
+        else:
+            log_print(f"SKIP:\tIllumina SRAs already exist: {illu_sra_f}; {illu_sra_r}")
     os.chdir(cwd)
     if not pd.isna(ONT_SRA):
         ont_test_dir = os.path.join(EGAP_test_data_dir, "ONT")
@@ -2585,17 +2610,93 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, REF_SEQ_GCA):
             log_print(f"SKIP:\tONT SRAs already exists: {ont_sra}")
     os.chdir(cwd)
     if not pd.isna(REF_SEQ_GCA):
-        ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{ont_sra}/")
+        ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
         ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))
-        renamed_gca = os.path.join(EGAP_test_data_dir, f"{ont_sra}.fasta")
+        renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
         if not os.path.exists(renamed_gca):
             if not os.path.exists(ref_seq_gca):
                 ref_seq_cmd= f"datasets download genome accession {REF_SEQ_GCA} --include genome && unzip ncbi_dataset"
                 _ = run_subprocess_cmd(ref_seq_cmd, shell_check = True)
             shutil.move(ref_seq_gca, renamed_gca)
         else:
-            log_print(f"SKIP:\tONT SRAs already exists: {ont_sra}")
+            log_print(f"SKIP:\tREF_SEQ GCA already exists: {REF_SEQ_GCA}")
     return illu_sra_f, illu_sra_r, ont_sra, ref_seq_gca
+
+
+def process_final_assembly(row, results_df, CPU_THREADS, RAM_GB, final_assembly_path=None, sample_stats_dict=None):
+    """
+    DESCRIPTION
+
+    Parameters:
+    row (TYPE): DESCRIPTION.
+    results_df (TYPE): DESCRIPTION.
+    CPU_THREADS (TYPE): DESCRIPTION.
+    RAM_GB (TYPE): DESCRIPTION.
+    final_assembly_path (TYPE, optional): DESCRIPTION. The default is None.
+    sample_stats_dict (TYPE, optional): DESCRIPTION. The default is None.
+
+    Returns
+    -------
+    final_assembly_path (TYPE): DESCRIPTION.
+    results_df (TYPE): DESCRIPTION.
+
+    """
+    SPECIES_ID = row["SPECIES_ID"]
+    REF_SEQ_GCA = row["REF_SEQ_GCA"]
+    cwd = os.getcwd()
+    EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
+    if not os.path.exists(EGAP_test_dir):
+        os.mkdir(EGAP_test_dir)
+    EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
+    if not os.path.exists(EGAP_test_data_dir):
+        os.mkdir(EGAP_test_data_dir)  
+
+    if not pd.isna(REF_SEQ_GCA):
+ 
+        ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
+        ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))
+        renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
+        if not os.path.exists(renamed_gca):
+            if not os.path.exists(ref_seq_gca):
+                ref_seq_cmd= f"datasets download genome accession {REF_SEQ_GCA} --include genome && unzip ncbi_dataset"
+                _ = run_subprocess_cmd(ref_seq_cmd, shell_check = True)
+            shutil.move(ref_seq_gca, renamed_gca)
+        else:
+            log_print(f"SKIP:\tREF_SEQ GCA already exists: {REF_SEQ_GCA}")
+    
+    if pd.isna(final_assembly_path):
+        final_assembly_path = renamed_gca
+    shared_root = EGAP_test_data_dir
+    ONT_RAW_READS = row["ONT_RAW_READS"]
+    ILLUMINA_RAW_F_READS = row["ILLUMINA_RAW_F_READS"]
+    ILLUMINA_RAW_R_READS = row["ILLUMINA_RAW_R_READS"]
+    first_compleasm_odb = row["COMPLEASM_1"] + "_odb10"
+    second_compleasm_odb = row["COMPLEASM_2"] + "_odb10"
+    REF_SEQ = None
+    karyote_id = row["ORGANISM_KARYOTE"]
+    kingdom_id = row["ORGANISM_KINGDOM"]
+    if pd.isna(sample_stats_dict):
+        sample_stats_dict = gen_sample_stats_dict(row)    
+    final_assembly_path, sample_stats_list, sample_stats_dict = qc_assembly(final_assembly_path, shared_root, cwd,
+                                                                            ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, SPECIES_ID,
+                                                                            first_compleasm_odb, second_compleasm_odb,
+                                                                            REF_SEQ, karyote_id, kingdom_id,
+                                                                            sample_stats_dict, results_df)
+    sample_stats_dict["FINAL_ASSEMBLY"] = final_assembly_path
+    quality_classifications = classify_assembly(sample_stats_dict)
+    for metric, classification in quality_classifications.items():
+        log_print(f"{metric}: {classification}")
+    result_row = pd.DataFrame([quality_classifications], index=[index])
+    results_df = pd.concat([results_df, result_row])
+    for key, value in sample_stats_dict.items():
+        input_csv_df.loc[index, key] = value
+    log_print(f"Assessment of Final Assembly: {final_assembly_path}")
+    log_print(f"PASS:\tEGAP Final Assembly Complete: {final_assembly_path}")
+    log_print("This was produced with the help of the Entheogen Genome (Entheome) Foundation\n")
+    log_print("If this was useful, please support us at https://entheome.org/\n")
+    print("\n\n\n")
+    
+    return final_assembly_path, results_df 
 
 
 if __name__ == "__main__":
@@ -2603,23 +2704,23 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Entheome Genome Assembly Pipeline (EGAP)")
 
     # Default values
-    default_input_csv = None
-    default_ont_sra = "SRR25932369" 
+    default_input_csv = None # "/mnt/d/TESTING_SPACE/EGAP_Test_Data/EGAP_test.csv"
+    default_ont_sra = None
     default_raw_ont_dir = None
     default_ont_reads = None
-    default_illu_sra = "SRR25932370" # "SRR5602600"
+    default_illu_sra = None # "SRR5602600"
     default_raw_illu_dir = None
     default_raw_illu_reads_1 = None
     default_raw_illu_reads_2 = None
-    default_species_id = "Ps_zapotecorum" # "My_speciosa" # Format: <2-letters of Genus>_<full species name>
-    default_organism_kingdom = "Funga" # "Flora"
-    default_organism_karyote = "Eukaryote"
-    default_compleasm_1 = "basidiomycota" # "embryophyta"
-    default_compleasm_2 = "agaricales" # "eudicots"
-    default_estimated_genome_size = "60m"
+    default_species_id = None # "My_speciosa" # Format: <2-letters of Genus>_<full species name>
+    default_organism_kingdom = None # "Flora"
+    default_organism_karyote = None
+    default_compleasm_1 = None # "embryophyta"
+    default_compleasm_2 = None # "eudicots"
+    default_estimated_genome_size = None
     default_reference_sequence= None
     default_reference_sequence_gca = None # "GCA_024721245.1"
-    default_percent_resources = 0.90
+    default_percent_resources = 0.50
     
     # Add arguments with default values
     parser.add_argument("--input_csv", "-csv",
@@ -2702,13 +2803,17 @@ if __name__ == "__main__":
     # Parse samples in sample_dict & input_csv_df
     results_df = pd.DataFrame()
     for index, row in input_csv_df.iterrows():
-        final_assembly_path, results_df = egap_sample(row, results_df, CPU_THREADS, RAM_GB)
+        if pd.isna(row["ONT_SRA"]) and pd.isna(row["ILLUMINA_SRA"]) and pd.isna(row["EST_SIZE"]) and not pd.isna(row["REF_SEQ_GCA"]):
+            final_assembly_path, results_df = process_final_assembly(row, results_df, CPU_THREADS, RAM_GB, final_assembly_path=None, sample_stats_dict = None)
+        else:
+            final_assembly_path, results_df = egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB)
     
+
     # TODO: remove those rows in input_csv_df that are partially duplicated but with less data (they represent the original input and are outdated once the main function completes)
     # TODO: plot_classification_table(results_df)
 
     if not pd.isna(INPUT_CSV):
         final_csv_filename = INPUT_CSV.replace(".csv", "_final_assembly_stats.csv")
     else:        
-        final_csv_filename =input_csv_df.iloc[1]["FINAL_ASSEMBLY"].replace(".fasta","_stats.csv") # os.path.join("/".join(os.path.dirname(default_raw_illu_reads_1).split("/")[:-1]), f"{args.species_id}_final_assembly_stats.csv")
+        final_csv_filename = input_csv_df.iloc[1]["FINAL_ASSEMBLY"].replace(".fasta","_stats.csv") # os.path.join("/".join(os.path.dirname(default_raw_illu_reads_1).split("/")[:-1]), f"{args.species_id}_final_assembly_stats.csv")
     input_csv_df.to_csv(final_csv_filename, index=False)
