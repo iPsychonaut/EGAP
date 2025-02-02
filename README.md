@@ -399,9 +399,6 @@ The example data are published in:
 > Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes  
 > of ecologically and geographically diverse *Psilocybe* species. *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
 
-> McKernan K, Kane L, Helbert Y, Zhang L, Houde N, McLaughlin S. A whole genome  
-> atlas of 81 *Psilocybe* genomes as a resource for psilocybin production. *F1000Research* 2021, 10:961; doi: [10.12688/f1000research.55301.2](https://doi.org/10.12688/f1000research.55301.2)
-
 > Grassa CJ, Wenger JP, Dabney C, Poplawski SG, Motley ST, Michael TP, Schwartz  
 > CJ, Weiblen GD. A complete Cannabis chromosome assembly and adaptive admixture  
 > for elevated cannabidiol (CBD) content. *bioRxiv*, 458083; doi: [https://doi.org/10.1101/458083](https://doi.org/10.1101/458083).
