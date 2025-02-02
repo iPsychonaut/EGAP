@@ -43,15 +43,15 @@ check_success "Initializing mamba"
 source ~/.bashrc
 check_success "\nSourcing ~/.bashrc"
 
-# Create EGAP_env2 with Python 3.8 using mamba
-echo -e "\e[36m\nCreating conda environment 'EGAP_env2' with Python 3.8...\e[0m"
-conda create -y -n EGAP_env2 python=3.8
-check_success "Creating EGAP_env2"
+# Create EGAP_env with Python 3.8 using mamba
+echo -e "\e[36m\nCreating conda environment 'EGAP_env' with Python 3.8...\e[0m"
+conda create -y -n EGAP_env python=3.8
+check_success "Creating EGAP_env"
 
 # Activate the environment
-echo -e "\e[36m\nActivating 'EGAP_env2' environment...\e[0m"
-conda activate EGAP_env2
-check_success "Activating 'EGAP_env2' environment"
+echo -e "\e[36m\nActivating 'EGAP_env' environment...\e[0m"
+conda activate EGAP_env
+check_success "Activating 'EGAP_env' environment"
 
 # Install required conda packages
 echo -e "\e[36m\nInstalling required conda packages via mamba...\e[0m"
@@ -117,5 +117,5 @@ EOF
 # Make sure the wrapper script is executable
 chmod +x "$WRAPPER_SCRIPT"
 
-echo "The command 'egap' has been installed in your EGAP_env2 environment."
-echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env2"\e[0m\n'
+echo "The command 'egap' has been installed in your EGAP_env environment."
+echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env"\e[0m\n'
