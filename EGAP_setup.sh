@@ -43,20 +43,15 @@ check_success "Initializing mamba"
 source ~/.bashrc
 check_success "\nSourcing ~/.bashrc"
 
-# Create EGAP_env with Python 3.8 using mamba
-echo -e "\e[36m\nCreating conda environment 'EGAP_env' with Python 3.8...\e[0m"
-conda create -y -n EGAP_env python=3.8
-check_success "Creating EGAP_env"
+# Create EGAP_env2 with Python 3.8 using mamba
+echo -e "\e[36m\nCreating conda environment 'EGAP_env2' with Python 3.8...\e[0m"
+conda create -y -n EGAP_env2 python=3.8
+check_success "Creating EGAP_env2"
 
 # Activate the environment
-echo -e "\e[36m\nActivating 'EGAP_env' environment...\e[0m"
-conda activate EGAP_env
-check_success "Activating 'EGAP_env' environment"
-
-# EGAP Installs
-echo -e "\e[36m\nInstalling system packages via apt-get...\e[0m"
-sudo apt-get update && sudo apt-get install -y openjdk-8-jre-headless
-check_success "Installing system packages"
+echo -e "\e[36m\nActivating 'EGAP_env2' environment...\e[0m"
+conda activate EGAP_env2
+check_success "Activating 'EGAP_env2' environment"
 
 # Install required conda packages
 echo -e "\e[36m\nInstalling required conda packages via mamba...\e[0m"
@@ -87,44 +82,40 @@ conda install -y -c bioconda -c conda-forge \
                                 kmc==3.2.4 \
                                 runner==1.3 \
                                 spades==4.0.0 \
-                                flye
+                                ratatosk==0.9.0 \
+                                purge_dups==1.2.6 \
+                                flye==2.9.5
 
 check_success "Installing conda packages"
 
-# Clone purge_dups repository if it doesn't exist
-if [ ! -d "purge_dups" ]; then
-    echo -e "\e[36m\nCloning purge_dups repository...\e[0m"
-    git clone https://github.com/dfguan/purge_dups.git
-    check_success "Cloning purge_dups repository"
-else
-    echo -e "\e[33mDirectory 'purge_dups' already exists. Skipping clone.\e[0m"
-fi
-
-# Build purge_dups
-cd purge_dups/src || { echo "Failed to change to purge_dups/src directory."; exit 1; }
-make
-check_success "Building purge_dups"
-cd ~ # Return to home directory
-
-# Clone Ratatosk repository if it doesn't exist
-if [ ! -d "Ratatosk" ]; then
-    echo -e "\e[36m\nCloning Ratatosk repository...\e[0m"
-    git clone --recursive https://github.com/DecodeGenetics/Ratatosk.git
-    check_success "Cloning Ratatosk repository"
-else
-    echo -e "\e[33mDirectory 'Ratatosk' already exists. Skipping clone.\e[0m"
-fi
-
-# Build Ratatosk
-cd Ratatosk || { echo "Failed to change to Ratatosk directory."; exit 1; }
-mkdir -p build && cd build
-cmake .. || { echo "CMake configuration failed."; exit 1; }
-make || { echo "Make failed."; exit 1; }
-sudo make install || { echo "Make install failed."; exit 1; }
-check_success "Building Ratatosk"
-cd ~ # Return to home directory
+# Execute quast-download commands
+echo -e "\e[36m\nDownloading full suite of quast tools...\e[0m"
+quast-download-gridss && quast-download-silva
+check_success "Downloading quast tools"
 
 echo -e "\n\e[32mEGAP Pipeline Pre-requisites have been successfully installed!\e[0m\n"
-echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env"\e[0m\n'
-echo -e '\n\e[36mOptionally run "quast-download-gridss"\e[0m\n'
-echo -e '\n\e[36mOptionally run "quast-download-silva"\e[0m\n'
+
+# Locate EGAP.py (adjust search as needed)
+EGAP_PATH=$(find "$HOME" -maxdepth 5 -type f -name "EGAP.py" | head -n 1)
+if [ -z "$EGAP_PATH" ]; then
+    echo "ERROR: EGAP.py not found!"
+    exit 1
+fi
+echo "Found EGAP.py at: $EGAP_PATH"
+
+# Determine the bin directory of the activated conda environment
+# (This assumes that "python" points to the environment's python.)
+ENV_BIN_DIR=$(dirname "$(which python)")
+
+# Create the wrapper script in the environment's bin directory
+WRAPPER_SCRIPT="$ENV_BIN_DIR/egap"
+cat <<EOF > "$WRAPPER_SCRIPT"
+#!/bin/bash
+python "$EGAP_PATH" "\$@"
+EOF
+
+# Make sure the wrapper script is executable
+chmod +x "$WRAPPER_SCRIPT"
+
+echo "The command 'egap' has been installed in your EGAP_env2 environment."
+echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env2"\e[0m\n'
