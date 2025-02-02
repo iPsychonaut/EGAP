@@ -409,4 +409,4 @@ If you would like to contribute to the EGAP Pipeline, please submit a pull reque
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the BSD 3-Clause License.
