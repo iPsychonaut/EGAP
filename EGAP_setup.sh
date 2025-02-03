@@ -10,7 +10,7 @@ check_success() {
                     exit 1
                  fi
                 }
-
+                
 # Download and install Miniforge3 if not already installed
 if [ -d "$HOME/miniforge3" ]; then
     echo -e "\e[33mMiniforge3 is already installed at $HOME/miniforge3. Skipping installation.\e[0m"
