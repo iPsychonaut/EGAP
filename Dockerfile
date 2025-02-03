@@ -30,6 +30,11 @@ RUN conda run -n EGAP_env mamba install -y -c conda-forge -c bioconda -c prkreke
 RUN conda run -n EGAP_env quast-download-gridss && \
     conda run -n EGAP_env quast-download-silva
 
+# Clone and install runner in EGAP_env
+RUN git clone https://github.com/dfguan/runner.git && \
+    cd runner && conda run -n EGAP_env python3 setup.py install --user && \
+    cd .. && rm -rf runner
+
 # Package EGAP_env with conda-pack
 RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
     mkdir /EGAP_env && cd /EGAP_env && tar xf /tmp/EGAP_env.tar && \
