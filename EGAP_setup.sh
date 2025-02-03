@@ -53,6 +53,51 @@ echo -e "\e[36m\nActivating 'EGAP_env' environment...\e[0m"
 conda activate EGAP_env
 check_success "Activating 'EGAP_env' environment"
 
+# Activate the environment
+echo -e "\e[36m\nActivating 'EGAP_env' environment...\e[0m"
+conda activate EGAP_env
+check_success "Activating 'EGAP_env' environment"
+
+# Remove the existing runner folder if it exists
+if [ -d "runner" ]; then
+    echo -e "\e[33mRunner folder exists. Removing...\e[0m"
+    rm -rf runner
+    check_success "Removing existing runner folder"
+fi
+
+# Clone and install runner manually
+echo -e "\e[36m\nCloning and installing runner...\e[0m"
+git clone https://github.com/dfguan/runner.git
+check_success "Cloning runner repository"
+
+# Ensure EGAP_env is activated
+echo -e "\e[36m\nActivating 'EGAP_env' environment before installing runner...\e[0m"
+source "$HOME/miniforge3/bin/activate" EGAP_env
+check_success "Activating EGAP_env"
+
+# Remove the existing runner folder if it exists
+if [ -d "runner" ]; then
+    echo -e "\e[33mRunner folder exists. Removing...\e[0m"
+    rm -rf runner
+    check_success "Removing existing runner folder"
+fi
+
+# Clone runner and install inside EGAP_env
+echo -e "\e[36m\nCloning and installing runner in EGAP_env...\e[0m"
+git clone https://github.com/dfguan/runner.git
+check_success "Cloning runner repository"
+
+cd runner || { echo "Failed to enter runner directory."; exit 1; }
+pip install . --no-cache-dir
+check_success "Installing runner via pip"
+
+cd ..
+rm -rf runner
+check_success "Cleaning up runner repository"
+
+# Verify installation
+python -c "import runner" 2>/dev/null && echo -e "\e[32mRunner installed successfully in EGAP_env.\e[0m" || echo -e "\e[31mRunner installation failed.\e[0m"
+
 # Install required conda packages
 echo -e "\e[36m\nInstalling required conda packages via mamba...\e[0m"
 conda install -y -c bioconda -c conda-forge \
@@ -80,7 +125,6 @@ conda install -y -c bioconda -c conda-forge \
                                 bbmap==39.15 \
                                 racon==1.5.0 \
                                 kmc==3.2.4 \
-                                runner==1.3 \
                                 spades==4.0.0 \
                                 ratatosk==0.9.0 \
                                 purge_dups==1.2.6 \
