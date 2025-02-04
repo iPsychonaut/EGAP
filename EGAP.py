@@ -1936,22 +1936,22 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, REF_SEQ_GCA):
         else:
             log_print(f"SKIP:\tONT SRAs already exists: {ont_sra}")
     os.chdir(cwd)
+    ref_seq_gca_dir = os.path.join(cwd, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
+    renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
     if not pd.isna(REF_SEQ_GCA):
-        ref_seq_gca_dir = os.path.join(cwd, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
-        renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
         if not os.path.exists(renamed_gca):
             try:
                 ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]
                 if not os.path.exists(ref_seq_gca):
-                    ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome && unzip ncbi_dataset"
+                    ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome &&  unzip -o ncbi_dataset -d {EGAP_test_data_dir}"
                     _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
             except IndexError:
-                ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome && unzip ncbi_dataset"
+                ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome &&  unzip -o ncbi_dataset -d {EGAP_test_data_dir}"
                 _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
             ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]
             shutil.move(ref_seq_gca, renamed_gca)
         else:
-            log_print(f"SKIP:\tREF_SEQ GCA already exists: {REF_SEQ_GCA}")
+            log_print(f"SKIP:\tREF_SEQ GCA already exists: {renamed_gca}")
     return illu_sra_f, illu_sra_r, ont_sra, ref_seq_gca
 
 
@@ -1982,18 +1982,18 @@ def process_final_assembly(row, results_df, CPU_THREADS, RAM_GB, final_assembly_
     EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
     if not os.path.exists(EGAP_test_data_dir):
         os.mkdir(EGAP_test_data_dir)
+    ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
+    ref_seq_gca_fasta = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))
+    renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
     if not pd.isna(REF_SEQ_GCA):
-        ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
-        ref_seq_gca_fasta = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))
-        print(ref_seq_gca_fasta)
-        renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
         if not os.path.exists(renamed_gca):
             if len(ref_seq_gca_fasta) == 0:
-                ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome && unzip ncbi_dataset"
+                ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome && unzip -o ncbi_dataset -d {EGAP_test_data_dir}"
                 _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
+            ref_seq_gca_fasta = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]            
             shutil.move(ref_seq_gca_fasta, renamed_gca)
         else:
-            log_print(f"SKIP:\tREF_SEQ GCA already exists: {REF_SEQ_GCA}")
+            log_print(f"SKIP:\tREF_SEQ GCA already exists: {renamed_gca}")
     if pd.isna(final_assembly_path):
         final_assembly_path = renamed_gca
     shared_root = EGAP_test_data_dir
