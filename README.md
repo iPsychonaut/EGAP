@@ -152,7 +152,7 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 ### Example Command:
 
 ```bash
-egap --raw_ont_reads /path/to/ont_reads.fq.gz \
+EGAP --raw_ont_reads /path/to/ont_reads.fq.gz \
      --raw_illu_dir /path/to/illumina_reads/ \
      --species_id AB_speciesname \
      --organism_kingdom Funga \
@@ -166,7 +166,7 @@ egap --raw_ont_reads /path/to/ont_reads.fq.gz \
 Or, providing SRA numbers (which will download the files into the current working directory):
 
 ```bash
-egap --ont_sra SRR######## \
+EGAP --ont_sra SRR######## \
      --illu_sra SRR######## \
      --species_id AB_speciesname \
      --organism_kingdom Funga \
@@ -182,7 +182,7 @@ egap --ont_sra SRR######## \
 Alternatively, using a CSV file for multiple samples:
 
 ```bash
-egap --input_csv /path/to/samples.csv
+EGAP --input_csv /path/to/samples.csv
 ```
 
 ## CSV Generation
@@ -263,7 +263,7 @@ cd Illumina/ && prefetch SRR5602600 && fastq-dump --gzip --split-files SRR560260
 Adjust the paths as needed:
 
 ```bash
-egap --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_1.fq.gz \
+EGAP --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_1.fq.gz \
      --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_2.fq.gz \
      --species_id My_speciosa \
      --organism_kingdom Flora \
@@ -295,7 +295,7 @@ cd Illumina && prefetch SRR13870478 && fastq-dump --gzip --split-files SRR279453
 Adjust the paths as needed:
 
 ```bash
-egap --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR27945394.fastq.gz \
+EGAP --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR27945394.fastq.gz \
      --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/Illumina/SRR27945395_1.fastq.gz \
      --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/Illumina/SRR27945395_2.fastq.gz \
      --species_id Ps_caeruleorhiza \
