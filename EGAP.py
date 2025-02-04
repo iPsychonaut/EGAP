@@ -921,11 +921,9 @@ def comparative_plots(comparative_plot_dict, shared_root):
     masurca_color = (35/255, 61/255, 77/255)
     flye_color = (161/255, 193/255, 129/255)
     spades_color = (254/255, 127/255, 45/255)
-    asterisk_color_for = [
-        (1.0, 1.0, 1.0),
-        (42/255, 32/255, 53/255),
-        (42/255, 32/255, 53/255)
-    ]
+    asterisk_color_for = [(1.0, 1.0, 1.0),
+                          (42/255, 32/255, 53/255),
+                          (42/255, 32/255, 53/255)]
     fig, axes = plt.subplots(2, 2, figsize=(10, 8), facecolor='white')
     def plot_stat(ax, title, stat_index, y_max=None, highlight_smallest=False):
         values = [masurca_stats[stat_index], flye_stats[stat_index], spades_stats[stat_index]]
@@ -1111,7 +1109,6 @@ def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, ILLUMINA_R
     second_compleasm_c = sample_stats_dict["SECOND_COMPLEASM_S"] + sample_stats_dict["SECOND_COMPLEASM_D"]
     n50 = sample_stats_dict["ASSEMBLY_N50"]
     contig_count = sample_stats_dict["ASSEMBLY_CONTIGS"]
-    
     sample_stats_list = [first_compleasm_c, second_compleasm_c, n50, contig_count]
     return final_assembly_path, sample_stats_list, sample_stats_dict
 
@@ -1369,10 +1366,8 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         _ = run_subprocess_cmd(fastqc_cmd, shell_check = False)
     sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] =  round((float(get_total_bases(fastqc_F_out_file).split(" ")[0]) + float(get_total_bases(fastqc_R_out_file).split(" ")[0])) / 2, 2)
     
-    # Run bbduk on the trimmed files
+    # Run bbduk on the trimmed files then clumpify
     bbduk_f_map_path, bbduk_r_map_path = bbduk_map(trimmo_f_pair_path, trimmo_r_pair_path)
-
-    # Run clumpify on the mapped files
     clump_f_dedup_path, clump_r_dedup_path = clumpify_dedup(bbduk_f_map_path, bbduk_r_map_path)
     
     # FastQC Illumina Deduplicated Reads
@@ -1738,7 +1733,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     # Assembly Curation
 ###############################################################################    
     
-# Purge haplotigs and overlaps with purge_dups (if ONT Reads exist)
+    # Purge haplotigs and overlaps with purge_dups (if ONT Reads exist)
     if not pd.isna(ONT_RAW_READS):
         # Define paths and variables
         pd_work_dir = os.path.join(shared_root, "purge_dups_work")
@@ -1886,31 +1881,6 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
                                                              CPU_THREADS, RAM_GB,
                                                              final_assembly_path,
                                                              sample_stats_dict)    
-
-    # final_assembly_path, sample_stats_list, sample_stats_dict = qc_assembly(final_assembly_path, shared_root, cwd,
-    #                                                      ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, SPECIES_ID,
-    #                                                      first_compleasm_odb, second_compleasm_odb,
-    #                                                      REF_SEQ, karyote_id, kingdom_id,
-    #                                                      sample_stats_dict, results_df)
-    # sample_stats_dict["FINAL_ASSEMBLY"] = final_assembly_path
-    # quality_classifications = classify_assembly(sample_stats_dict)
-    # for metric, classification in quality_classifications.items():
-    #     log_print(f"{metric}: {classification}")
-    # result_row = pd.DataFrame([quality_classifications], index=[index])
-    # results_df = pd.concat([results_df, result_row])
-    # for key, value in sample_stats_dict.items():
-    #     input_csv_df.loc[index, key] = value
-    # log_print(f"Assessment of Final Assembly: {final_assembly_path}")
-    # log_print(f"PASS:\tEGAP Final Assembly Complete: {final_assembly_path}")
-    # log_print("This was produced with the help of the Entheogen Genome (Entheome) Foundation\n")
-    # log_print("If this was useful, please support us at https://entheome.org/\n")
-    # print("\n\n\n")
-    
-    return final_assembly_path, results_df
-
-
-
-
     return final_assembly_path, results_df
 
 
@@ -2014,13 +1984,14 @@ def process_final_assembly(row, results_df, CPU_THREADS, RAM_GB, final_assembly_
         os.mkdir(EGAP_test_data_dir)
     if not pd.isna(REF_SEQ_GCA):
         ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
-        ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))
+        ref_seq_gca_fasta = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))
+        print(ref_seq_gca_fasta)
         renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
         if not os.path.exists(renamed_gca):
-            if not os.path.exists(ref_seq_gca):
+            if len(ref_seq_gca_fasta) == 0:
                 ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome && unzip ncbi_dataset"
                 _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
-            shutil.move(ref_seq_gca, renamed_gca)
+            shutil.move(ref_seq_gca_fasta, renamed_gca)
         else:
             log_print(f"SKIP:\tREF_SEQ GCA already exists: {REF_SEQ_GCA}")
     if pd.isna(final_assembly_path):
