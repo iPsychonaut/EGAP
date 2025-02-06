@@ -13,6 +13,7 @@ RUN mamba install -n base --yes conda-pack
 ###############################################################################
 
 # Create EGAP_env with Python 3.8
+# RUN conda create -c conda-forge -c bioconda -c defaults -n EGAP_env --yes python==3.8 egap
 RUN conda create -c conda-forge -c bioconda -c defaults \
     -n EGAP_env --yes python==3.8
 
@@ -24,6 +25,7 @@ RUN conda run -n EGAP_env mamba install -y -c conda-forge -c bioconda -c prkreke
     merqury==1.3 meryl==1.3 beautifulsoup4==4.12.3 ncbi-datasets-cli==16.39.0 \
     samtools==1.21 fastqc==0.12.1 abyss==2.0.2 bbmap==39.15 ratatosk==0.9.0 racon==1.5.0 \
     kmc==3.2.4 runner==1.3 spades==4.0.0 flye==2.9.5 ratatosk==0.9.0 purge_dups==1.2.6 && \
+    pbccs==6.4.0 hifiasm==0.21.0 gfatools==0.5
     conda clean -a -y
 
 # Download required resources for quast
