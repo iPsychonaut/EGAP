@@ -6,30 +6,36 @@
 
 ## Overview
 
-EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline designed to produce high-quality genome assemblies from **Oxford Nanopore Technologies (ONT)** and/or **Illumina** sequencing data. It can:
+EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline
+for hybrid genome assembly from Oxford Nanopore, Illumina, and PacBio data.
+It supports multiple input modes and assembly methods and determines the best 
+based on multiple metrics: BUSCO Completeness (Single + Duplicated), Assembly 
+Contig Count, Assembly N50, Assembly L50, and Assembly GC-content.
 
 1. **Preprocess & QC Reads**  
-   - Merge or detect multiple FASTQ files.  
+   - Merge or detect multiple FASTQ files.
    - Perform read trimming and adapter removal (Trimmomatic, BBDuk).  
    - Deduplicate reads (Clumpify).  
    - Filter and correct ONT reads (Filtlong, Ratatosk).  
    - Generate read metrics (FastQC, NanoPlot, BBMap-based insert-size checks).  
 
 2. **Assembly**  
-   - Hybrid or Illumina-only assembly (MaSuRCA), optionally skipping gap closure in MaSuRCA.  
-   - If ONT data are available, it also tries Flye or SPAdes, then compares key metrics to pick the best initial assembly.  
-
+   - MaSuRCA - Will be performed with Illumina Only or with Hybrid (ONT or PacBio).
+   - Flye - Will be performed with ONT only or PacBio only.
+   - SPAdes - Will be performed with Illumina only or with Hybrid (ONT or PacBio).
+   - hifiasm - Will be performed with PacBio only.
+   
 3. **Assembly Polishing**
-   - Polishes assemblies with Racon (ONT) and Pilon (Illumina).  
-   - Optionally removes haplotigs with purge_dups.  
+   - Polishes assemblies with Racon (in ONT) and Pilon (if Illumina).  
+   - Removes haplotigs with purge_dups.
 
 4. **Assembly Curation**
    - Scaffolds and patches using RagTag against a reference genome (if provided).  
    - Performs final gap-closing with either TGS-GapCloser (if ONT) or ABySS-Sealer (if Illumina-only).  
 
 5. **Quality Assessments & Classification**  
-   - Runs QUAST for contiguity statistics (N50, L50, GC%, etc.).  
    - Runs Compleasm (BUSCO) on two lineages to measure completeness.  
+   - Runs QUAST for contiguity statistics (N50, L50, GC%, etc.).  
    - Rates the final assembly as **AMAZING**, **GREAT**, **OK**, or **POOR** based on combined metrics.  
    - (Optional) Integrates coverage calculations against a reference or final assembly size.  
 
@@ -41,11 +47,14 @@ Currently, the pipeline supports only the following combinations:
 - **Illumina input + Reference sequence** (either GCA accession or a path to a FASTA file)
 - **Illumina input + ONT input** (SRA, DIR, or RAW FASTQ files)
 - **Illumina input + ONT input + Reference sequence**
+- **PacBio input only**  (SRA, DIR, or RAW FASTQ files)
+- **PacBio input only + Reference sequence**  
+- **Illumina input + PacBio input**
+- **Illumina input + PacBio input + Reference sequence**
 
 *Future developments include support for:*
 - ONT input only
 - ONT input + Reference sequence
-- PacBio data (SRA, DIR, or RAW FASTQ files) in any combination (solo or with Reference sequence, ONT input, and/or Illumina input)
 
 ## Table of Contents
 
@@ -78,7 +87,11 @@ The following tools are installed:
 - [NanoPlot](https://github.com/wdecoster/NanoPlot)
 - [Filtlong](https://github.com/rrwick/Filtlong)
 - [Ratatosk](https://github.com/DecodeGenetics/Ratatosk)
+- [gfatools](https://github.com/lh3/gfatools)
+- [hifiasm](https://github.com/chhylp123/hifiasm)
 - [MaSuRCA](https://github.com/alekseyzimin/masurca)
+- [Flye](https://github.com/mikolmogorov/Flye)
+- [SPAdes](https://github.com/ablab/spades)
 - [Racon](https://github.com/lbcb-sci/racon)
 - [Burrows-Wheeler Aligner](https://github.com/lh3/bwa)
 - [SamTools](https://github.com/samtools/samtools)
@@ -127,13 +140,16 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 ### Parameters:
 
 - `--input_csv`, `-csv` (str): Path to a CSV containing multiple sample data. (default = None)
-- `--ont_sra`, `-osra` (str): Oxford Nanopore Sequence Read Archive (SRA) Accession number. (default = 'SRR27945394')
+- `--ont_sra`, `-osra` (str): Oxford Nanopore Sequence Read Archive (SRA) Accession number. (if `-csv` = None; else None)
 - `--raw_ont_dir`, `-odir` (str): Path to a directory containing all Raw ONT Reads. (if `-csv` = None; else REQUIRED)
 - `--raw_ont_reads`, `-i0` (str): Path to the combined Raw ONT FASTQ reads. (if `-csv` = None; else REQUIRED)
-- `--illu_sra`, `-isra` (str): Illumina Sequence Read Archive (SRA) Accession number. (default = 'SRR27945395')
-- `--raw_illu_dir`, `-idir` (str): Path to a directory containing all Raw Illumina Reads. (if `-csv` = None; else REQUIRED)
+- `--illu_sra`, `-isra` (str): Illumina Sequence Read Archive (SRA) Accession number. (if `-csv` = None; else None)
+- `--raw_illu_dir`, `-idir` (str): Path to a directory containing all Raw Illumina Reads. (if `-csv` = None; else None)
 - `--raw_illu_reads_1`, `-i1` (str): Path to the Raw Forward Illumina Reads. (if `-csv` = None; else REQUIRED)
 - `--raw_illu_reads_2`, `-i2` (str): Path to the Raw Reverse Illumina Reads. (if `-csv` = None; else REQUIRED)
+- `--pacbio_sra`, `-psra` (str): PacBio Sequence Read Archive (SRA) Accession number. (if `-csv` = None; else None)
+- `--raw_pacbio_dir`, `-pdir` (str): Path to a directory containing all Raw PacBio Reads. (if `-csv` = None; else None)
+- `--raw_pacbio_reads`, `-preads` (str): Path to the combined Raw PacBio FASTQ reads. (if `-csv` = None; else REQUIRED)
 - `--species_id`, `-ID` (str): Species ID formatted as `<2-letters of Genus>_<full species name>`. (if `-csv` = None; else REQUIRED)
 - `--organism_kingdom`, `-Kg` (str): Kingdom the current organism data belongs to. (default: Funga)
 - `--organism_karyote`, `-Ka` (str): Karyote type of the organism. (default: Eukaryote)
@@ -143,11 +159,6 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 - `--ref_seq_gca`, `-rgca` (str): Curated Genome Assembly (GCA) Accession number. (default = None)
 - `--ref_seq`, `-rf` (str): Path to the reference genome for assembly. (default: None)
 - `--percent_resources`, `-R` (float): Percentage of resources for processing. (default: 1.00)
-
-*Additional PacBio-related parameters (reserved for future support):*
-- `--pacbio_sra`, `-psra` (str): PacBio Sequence Read Archive (SRA) Accession number. (default: None)
-- `--raw_pacbio_dir`, `-pdir` (str): Path to a directory containing all Raw PacBio Reads. (if `-csv` = None; else REQUIRED)
-- `--raw_pacbio_reads`, `-preads` (str): Path to the combined Raw PacBio FASTQ reads. (if `-csv` = None; else REQUIRED)
 
 ### Example Command:
 
@@ -193,11 +204,13 @@ To run EGAP with multiple samples, provide a CSV file containing the necessary i
 
 The CSV file should have the following header and columns:
 
-| ONT_SRA       | ONT_RAW_DIR  | ONT_RAW_READS               | ILLUMINA_SRA  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | SPECIES_ID  | ORGANISM_KINGDOM  | ORGANISM_KARYOTE  | COMPLEASM_1    | COMPLEASM_2  | EST_SIZE  | REF_SEQ_GCA  | REF_SEQ                    |
-|---------------|--------------|-----------------------------|---------------|--------------------|-------------------------------------|-------------------------------------|-------------|-------------------|-------------------|----------------|--------------|-----------|--------------|----------------------------|
-| None          | None         | /path/to/ONT/sample1.fq.gz  | None          | None               | /path/to/Illumina/sample1_R1.fq.gz  | /path/to/Illumina/sample1_R2.fq.gz  | AB_sample1  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 60m       | None         | None                       |
-| None          | None         | None                        | None          | /path/to/Illumina  | None                                | None                                | AB_sample2  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | None         | /path/to/ref_genome.fasta  |
-| SRA2########  | None         | None                        | SRA########   | None               | None                                | None                                | AB_sample3  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 70m       | None         | None                       |
+| ONT_SRA       | ONT_RAW_DIR  | ONT_RAW_READS               | ILLUMINA_SRA  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | PACBIO_SRA | PACBIO_RAW_DIR | PACBIO_RAW_READS          | SPECIES_ID           | ORGANISM_KINGDOM  | ORGANISM_KARYOTE  | COMPLEASM_1    | COMPLEASM_2  | EST_SIZE  | REF_SEQ_GCA   | REF_SEQ                    |
+|---------------|--------------|-----------------------------|---------------|--------------------|-------------------------------------|-------------------------------------|------------|----------------|---------------------------|----------------------|-------------------|-------------------|----------------|--------------|-----------|---------------|----------|
+| None          | None         | None                        | SRA00000001   | None               | None                                | None                                | None       | None           | None                      | Ab_sample1           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | GCA00000001.1 | None     |
+| None          | None         | /path/to/ONT/sample1.fq.gz  | None          | None               | /path/to/Illumina/sample1_1.fq.gz   | /path/to/Illumina/sample1_2.fq.gz   | None       | None           | None                      | Ab_sample2           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 60m       | None          | None     |
+| None          | None         | None                        | None          | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample3           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | None          | None     |
+| None          | None         | None                        | SRA00000002   | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample4_sub-name  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | GCA00000002.1 | None     |
+
 
 ### Column Descriptions
 
@@ -208,7 +221,10 @@ The CSV file should have the following header and columns:
 - **ILLUMINA_RAW_DIR**: Path to the directory containing all Raw Illumina Reads. Use `None` if specifying individual files.
 - **ILLUMINA_RAW_F_READS**: Path to the Raw Forward Illumina Reads (e.g., `/path/to/Illumina/sample1_R1.fq.gz`).
 - **ILLUMINA_RAW_R_READS**: Path to the Raw Reverse Illumina Reads (e.g., `/path/to/Illumina/sample1_R2.fq.gz`).
-- **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>` (e.g., `AB_sample1`).
+- **PACBIO_SRA**: PacBio Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
+- **PACBIO_RAW_DIR**: Path to the directory containing all Raw PacBio Reads. Use `None` if specifying individual files.
+- **PACBIO_RAW_READS**: Path to the combined Raw PacBio FASTQ reads (e.g., `/path/to/PACBIO/sample1.fq.gz`).
+- **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>` (e.g., `Ab_sample1`, optionally `Ab_sample4_sub-name`).
 - **ORGANISM_KINGDOM**: Kingdom of the organism (default: `Funga`).
 - **ORGANISM_KARYOTE**: Karyote type of the organism (default: `Eukaryote`).
 - **COMPLEASM_1**: Name of the first compleasm/BUSCO database (default: basidiomycota).
@@ -220,10 +236,10 @@ The CSV file should have the following header and columns:
 ### Example CSV File (`samples.csv`)
 
 ```csv
-ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
-None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/,None,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/,None,None,Ps_zapotecorum,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
-SRR27945394,None,None,SRR27945395,None,None,None,Ps_caeruleorhiza,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
-None,None,None,SRR5602600,None,None,None,My_speciosa,Flora,Eukaryote,embryophyta,eudicots,200m,GCA_024721245.1,None
+ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIOT_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
+None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/,None,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/,None,None,None,None,None,Ps_zapotecorum,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
+SRR27945394,None,None,SRR27945395,None,None,None,None,None,None,Ps_caeruleorhiza,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
+None,None,None,SRR5602600,None,None,None,None,None,None,My_speciosa,Flora,Eukaryote,embryophyta,eudicots,200m,GCA_024721245.1,None
 ```
 
 ### Notes
@@ -378,8 +394,7 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 - **Improved Error Handling**: Develop robust error detection and user-friendly feedback.
 - **Integration with Additional Sequencing Platforms**:  
   - Support for ONT input only and ONT input with Reference sequence.  
-  - **Future PacBio Support**: Capability to use PacBio data (SRA, directory, or FASTQ) in any combination (solo or with Reference sequence, ONT input, or Illumina input).
-
+  
 ## References
 
 This pipeline was modified from two of the following pipelines:
