@@ -10,7 +10,7 @@ check_success() {
                     exit 1
                  fi
                 }
-                
+
 # Download and install Miniforge3 if not already installed
 if [ -d "$HOME/miniforge3" ]; then
     echo -e "\e[33mMiniforge3 is already installed at $HOME/miniforge3. Skipping installation.\e[0m"
@@ -43,20 +43,20 @@ check_success "Initializing mamba"
 source ~/.bashrc
 check_success "\nSourcing ~/.bashrc"
 
-# Create EGAP_env with Python 3.8 using mamba
-echo -e "\e[36m\nCreating conda environment 'EGAP_env' with Python 3.8...\e[0m"
-conda create -y -n EGAP_env python=3.8
-check_success "Creating EGAP_env"
+# Create EGAP_env2 with Python 3.8 using mamba
+echo -e "\e[36m\nCreating conda environment 'EGAP_env2' with Python 3.8...\e[0m"
+conda create -y -n EGAP_env2 python=3.8
+check_success "Creating EGAP_env2"
 
 # Activate the environment
-echo -e "\e[36m\nActivating 'EGAP_env' environment...\e[0m"
-conda activate EGAP_env
-check_success "Activating 'EGAP_env' environment"
+echo -e "\e[36m\nActivating 'EGAP_env2' environment...\e[0m"
+conda activate EGAP_env2
+check_success "Activating 'EGAP_env2' environment"
 
 # Activate the environment
-echo -e "\e[36m\nActivating 'EGAP_env' environment...\e[0m"
-conda activate EGAP_env
-check_success "Activating 'EGAP_env' environment"
+echo -e "\e[36m\nActivating 'EGAP_env2' environment...\e[0m"
+conda activate EGAP_env2
+check_success "Activating 'EGAP_env2' environment"
 
 # Remove the existing runner folder if it exists
 if [ -d "runner" ]; then
@@ -70,11 +70,6 @@ echo -e "\e[36m\nCloning and installing runner...\e[0m"
 git clone https://github.com/dfguan/runner.git
 check_success "Cloning runner repository"
 
-# Ensure EGAP_env is activated
-echo -e "\e[36m\nActivating 'EGAP_env' environment before installing runner...\e[0m"
-source "$HOME/miniforge3/bin/activate" EGAP_env
-check_success "Activating EGAP_env"
-
 # Remove the existing runner folder if it exists
 if [ -d "runner" ]; then
     echo -e "\e[33mRunner folder exists. Removing...\e[0m"
@@ -82,8 +77,8 @@ if [ -d "runner" ]; then
     check_success "Removing existing runner folder"
 fi
 
-# Clone runner and install inside EGAP_env
-echo -e "\e[36m\nCloning and installing runner in EGAP_env...\e[0m"
+# Clone runner and install inside EGAP_env2
+echo -e "\e[36m\nCloning and installing runner in EGAP_env2...\e[0m"
 git clone https://github.com/dfguan/runner.git
 check_success "Cloning runner repository"
 
@@ -96,7 +91,7 @@ rm -rf runner
 check_success "Cleaning up runner repository"
 
 # Verify installation
-python -c "import runner" 2>/dev/null && echo -e "\e[32mRunner installed successfully in EGAP_env.\e[0m" || echo -e "\e[31mRunner installation failed.\e[0m"
+python -c "import runner" 2>/dev/null && echo -e "\e[32mRunner installed successfully in EGAP_env2.\e[0m" || echo -e "\e[31mRunner installation failed.\e[0m"
 
 # Install required conda packages
 echo -e "\e[36m\nInstalling required conda packages via mamba...\e[0m"
@@ -128,8 +123,11 @@ conda install -y -c bioconda -c conda-forge \
                                 spades==4.0.0 \
                                 ratatosk==0.9.0 \
                                 purge_dups==1.2.6 \
-                                flye==2.9.5
-
+                                flye==2.9.5 \
+                                pbccs==6.4.0 \
+                                hifiasm==0.21.0 \
+                                gfatools==0.5
+                                
 check_success "Installing conda packages"
 
 # Execute quast-download commands
@@ -161,5 +159,5 @@ EOF
 # Make sure the wrapper script is executable
 chmod +x "$WRAPPER_SCRIPT"
 
-echo "The command 'egap' has been installed in your EGAP_env environment."
-echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env"\e[0m\n'
+echo "The command 'egap' has been installed in your EGAP_env2 environment."
+echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env2"\e[0m\n'
