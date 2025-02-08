@@ -1801,7 +1801,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         if os.path.exists(gzipped_filtered_ONT_reads):
             log_print(f"SKIP:\tGzipped FiltLong output already exists: {gzipped_filtered_ONT_reads}.")
         else:
-            if os.path.exits(filtered_ONT_reads):
+            if os.path.exists(filtered_ONT_reads):
                 log_print(f"SKIP:\tFiltLong output already exists: {filtered_ONT_reads}.")
             else:
                 filtlong_cmd = f"filtlong --min_length 1000 --min_mean_q 8 --target_bases 500000000 --trim -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} {ONT_RAW_READS} > {filtered_ONT_reads}"
