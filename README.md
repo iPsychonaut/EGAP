@@ -3,6 +3,7 @@
 <div align="center">
   <img src="EGAP_banner.png" alt="EGAP Banner" width="500">
 </div>
+https://anaconda.org/bioconda/egap/badges/version.svg https://anaconda.org/bioconda/egap/badges/latest_release_date.svg https://anaconda.org/bioconda/egap/badges/platforms.svg https://anaconda.org/bioconda/egap/badges/downloads.svg
 
 ## Overview
 
