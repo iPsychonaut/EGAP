@@ -1,13 +1,10 @@
 # EGAP Pipeline
 
-# EGAP Pipeline
-
 <div align="center">
   <img src="EGAP_banner.png" alt="EGAP Banner" width="500">
 </div>
 
 <div align="center">
-  <!-- Badges -->
   <a href="https://anaconda.org/bioconda/egap">
     <img src="https://anaconda.org/bioconda/egap/badges/version.svg" alt="Version Badge">
   </a>
