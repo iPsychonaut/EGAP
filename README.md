@@ -1,10 +1,13 @@
 # EGAP Pipeline
 
+# EGAP Pipeline
+
 <div align="center">
   <img src="EGAP_banner.png" alt="EGAP Banner" width="500">
 </div>
 
 <div align="center">
+  <!-- Badges -->
   <a href="https://anaconda.org/bioconda/egap">
     <img src="https://anaconda.org/bioconda/egap/badges/version.svg" alt="Version Badge">
   </a>
@@ -66,6 +69,8 @@ Currently, the pipeline supports only the following combinations:
 - **PacBio input only + Reference sequence**  
 - **Illumina input + PacBio input**
 - **Illumina input + PacBio input + Reference sequence**
+
+NOTE: it is typically not recommended to use a Reference Sequence when assembling Fungal genomes as it can mask rearrangements.
 
 *Future developments include support for:*
 - ONT input only
