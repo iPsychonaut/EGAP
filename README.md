@@ -1,7 +1,5 @@
 # EGAP Pipeline
 
-# EGAP Pipeline
-
 <div align="center">
   <img src="EGAP_banner.png" alt="EGAP Banner" width="500">
 </div>
