@@ -311,10 +311,32 @@ cd Illumina && prefetch SRR13870478 && fastq-dump --gzip --split-files SRR279453
 Adjust the paths as needed:
 
 ```bash
-EGAP --raw_ont_reads /path/to/EGAP/EGAP_Processing/ONT/SRR27945394.fastq.gz \
-     --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/Illumina/SRR27945395_1.fastq.gz \
-     --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/Illumina/SRR27945395_2.fastq.gz \
+EGAP --raw_ont_reads /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/ONT/SRR27945394.fastq.gz \
+     --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/Illumina/SRR27945395_1.fastq.gz \
+     --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/Illumina/SRR27945395_2.fastq.gz \
      --species_id Ps_caeruleorhiza \
+     --organism_kingdom Funga \
+     --organism_karyote Eukaryote \
+     --compleasm_1 agaricales \
+     --compleasm_2 basidiomycota \
+     --est_size 60m
+```
+
+### PacBio-Only (no Reference Sequence) Assembly Example
+
+*Ps. subaeruginosa*
+
+Data is not available on NCBI, however there are reads available on JGI:
+
+https://genome.jgi.doe.gov/portal/pages/dynamicOrganismDownload.jsf?organism=Psisu1
+
+##### PacBio-Only (no Reference Sequence) Assembly Command
+
+Adjust the paths as needed:
+
+```bash
+EGAP --raw_pacbio_reads /path/to/EGAP/EGAP_Processing/Ps_subaeruginosa/PacBio/pbio-2517.24491.ccs.fastq.gz \
+     --species_id Ps_subaeruginosa \
      --organism_kingdom Funga \
      --organism_karyote Eukaryote \
      --compleasm_1 agaricales \
@@ -336,15 +358,15 @@ The current thresholds for each metric classification (subject to change) are:
 - **second_compleasm_c** = {"AMAZING": >98.5, "GREAT": >95.0, "OK": >80.0, "POOR": <80.0}
 - **contigs_thresholds** = {"AMAZING": 100, "GREAT": 1000, "OK": 10000, "POOR": 100000}
 - **n50_thresholds** = {"AMAZING": 1000000, "GREAT": 100000, "OK": 1000, "POOR": 100}
-- **l50_thresholds** = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #}
+- **l50_thresholds** = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #} (still determining best metrics)
 
 ### Compleasm BUSCO Plots
 
 BUSCO outputs are evaluated based on:
-- >98.5% Completion (sum of Single and Duplicated genes) for an AMAZING/Great Assembly
-- >95.0% Completion for a Good Assembly
-- >80% Completion for an OK Assembly
-- <80% Completion for a POOR Assembly
+- Greater than 98.5% Completion (sum of Single and Duplicated genes) for an AMAZING/Great Assembly
+- Greater than 95.0% Completion for a Good Assembly
+- Greater than 80% Completion for an OK Assembly
+- Less than 80% Completion for a POOR Assembly
 
 Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with only duplicated genes are excluded from the plot (noted in the x-axis label).
 
@@ -386,6 +408,25 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 
 *Funga are known to have multinucleate cells and may exhibit higher levels of duplicated genes, though not as extensively as Flora.*
 
+#### PacBio-Only (no Reference Sequence) Assembly BUSCO Plots
+
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="Ps_subaeruginosa_agaricales_odb10_busco.png" alt="Ps. subaeruginosa agaricales BUSCO plot" width="400">
+      <br>
+      **Ps. subaeruginosa agaricales BUSCO**
+    </td>
+    <td align="center">
+      <img src="Ps_subaeruginosa_basidiomycota_odb10_busco.png" alt="Ps. subaeruginosa basidiomycota BUSCO plot" width="400">
+      <br>
+      **Ps. subaeruginosa basidiomycota BUSCO**
+    </td>
+  </tr>
+</table>
+
+*Funga are known to have multinucleate cells and may exhibit higher levels of duplicated genes, though not as extensively as Flora.*
+
 ## Future Improvements
 
 - **Automated Quality Assessment Reports**: Generate comprehensive quality reports post-assembly for easier analysis.
@@ -417,6 +458,10 @@ The example data are published in:
 > Grassa CJ, Wenger JP, Dabney C, Poplawski SG, Motley ST, Michael TP, Schwartz  
 > CJ, Weiblen GD. A complete Cannabis chromosome assembly and adaptive admixture  
 > for elevated cannabidiol (CBD) content. *bioRxiv*, 458083; doi: [https://doi.org/10.1101/458083](https://doi.org/10.1101/458083).
+
+> Catcheside D, DOE Joint Genome Institute.
+> Psilocybe subaeruginosa BRI183 Annotated Standard Draft (Project ID: 1281328) from “Acquisition of the sequestrate (truffle-like) habit by basidiomycete macrofungi” (Proposal ID: 1956).
+> JGI CSP Fungal Program (Program Year: 2016). Released 2023-08-18; [Unpublished; no DOI].
 
 ## Contribution
 
