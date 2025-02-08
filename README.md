@@ -1,9 +1,26 @@
 # EGAP Pipeline
 
+# EGAP Pipeline
+
 <div align="center">
   <img src="EGAP_banner.png" alt="EGAP Banner" width="500">
 </div>
-https://anaconda.org/bioconda/egap/badges/version.svg https://anaconda.org/bioconda/egap/badges/latest_release_date.svg https://anaconda.org/bioconda/egap/badges/platforms.svg https://anaconda.org/bioconda/egap/badges/downloads.svg
+
+<div align="center">
+  <!-- Badges -->
+  <a href="https://anaconda.org/bioconda/egap">
+    <img src="https://anaconda.org/bioconda/egap/badges/version.svg" alt="Version Badge">
+  </a>
+  <a href="https://anaconda.org/bioconda/egap">
+    <img src="https://anaconda.org/bioconda/egap/badges/latest_release_date.svg" alt="Latest Release Date Badge">
+  </a>
+  <a href="https://anaconda.org/bioconda/egap">
+    <img src="https://anaconda.org/bioconda/egap/badges/platforms.svg" alt="Platforms Badge">
+  </a>
+  <a href="https://anaconda.org/bioconda/egap">
+    <img src="https://anaconda.org/bioconda/egap/badges/downloads.svg" alt="Downloads Badge">
+  </a>
+</div>
 
 ## Overview
 
