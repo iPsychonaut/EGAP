@@ -604,16 +604,16 @@ def masurca_config_gen(input_folder, output_folder,
             )
         # For hybrid assemblies, add the long-read data line.
         if pd.notna(ONT_RAW_READS) and pd.isna(PACBIO_RAW_READS):
-            config_content.append(f"NANOPORE={ONT_RAW_READS.replace('.gz','')}\n")
+            config_content.append(f"NANOPORE={ONT_RAW_READS}\n")
         elif pd.notna(PACBIO_RAW_READS) and pd.isna(ONT_RAW_READS):
-            config_content.append(f"PACBIO={PACBIO_RAW_READS.replace('.gz','')}\n")
+            config_content.append(f"PACBIO={PACBIO_RAW_READS}\n")
         elif pd.notna(ONT_RAW_READS) and pd.notna(PACBIO_RAW_READS):
             # If both long-read types are provided, prefer the PACBIO line.
-            config_content.append(f"PACBIO={PACBIO_RAW_READS.replace('.gz','')}\n")
+            config_content.append(f"PACBIO={PACBIO_RAW_READS}\n")
         
         # Optionally add a REFERENCE line.
         if ref_seq:
-            config_content.append(f"REFERENCE={ref_seq.replace('.gbff','.fna.gz')}\n")
+            config_content.append(f"REFERENCE={ref_seq.replace('.gbff','.fna.gz').replace('.fna','.fasta')}\n")
         config_content.append("END\n")
         
         # Add the PARAMETERS section.
@@ -1474,9 +1474,9 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
             _ = run_subprocess_cmd(ont_cmd, shell_check=True)
         else:
             log_print(f"SKIP:\tONT SRAs already exists: {ont_sra}")
-    os.chdir(EGAP_test_data_dir)
+    os.chdir(EGAP_test_dir)
     ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
-    renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
+    renamed_gca = os.path.join(EGAP_test_dir, f"{REF_SEQ_GCA}.fasta")
     if not pd.isna(REF_SEQ_GCA):
         if not os.path.exists(renamed_gca):
             try:
@@ -1491,6 +1491,7 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
             shutil.move(ref_seq_gca, renamed_gca)
         else:
             log_print(f"SKIP:\tREF_SEQ GCA already exists: {renamed_gca}")
+    os.chdir(cwd)
     return illu_sra_f, illu_sra_r, ont_sra, pacbio_sra, ref_seq_gca, EGAP_test_data_dir
 
 
@@ -1600,6 +1601,15 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     EST_SIZE = row["EST_SIZE"]
     REF_SEQ_GCA = row["REF_SEQ_GCA"]
     REF_SEQ = row["REF_SEQ"]
+    EGAP_test_data_dir = ""
+    cwd = os.getcwd()
+    EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
+    if not os.path.exists(EGAP_test_dir):
+        os.mkdir(EGAP_test_dir)
+    if len(SPECIES_ID.split("_")) == 2:
+        EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
+    elif len(SPECIES_ID.split("_")) > 2:
+        EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", f"{SPECIES_ID.split('_')[0]}_{SPECIES_ID.split('_')[1]}", SPECIES_ID)
     
     if pd.notna(REF_SEQ_GCA) or pd.notna(ILLU_SRA) or pd.notna(ONT_SRA) or pd.notna(PACBIO_SRA):
         if pd.isna(ONT_SRA):
@@ -1615,17 +1625,8 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         else:
             # ALL
             ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, ONT_RAW_READS, PACBIO_RAW_READS, REF_SEQ, EGAP_test_data_dir = download_test_data(SPECIES_ID, ILLU_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GCA)
-    else:
-        cwd = os.getcwd()
-        EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
-        if not os.path.exists(EGAP_test_dir):
-            os.mkdir(EGAP_test_dir)
-        if len(SPECIES_ID.split("_")) == 2:
-            EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
-        elif len(SPECIES_ID.split("_")) > 2:
-            EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", f"{SPECIES_ID.split('_')[0]}_{SPECIES_ID.split('_')[1]}", SPECIES_ID)
-        if not os.path.exists(EGAP_test_data_dir):
-            os.mkdir(EGAP_test_data_dir)
+    if not os.path.exists(EGAP_test_data_dir):
+        os.mkdir(EGAP_test_data_dir)
 
     if type(PACBIO_RAW_DIR) == str:
         shared_root = PACBIO_RAW_DIR
@@ -1722,6 +1723,8 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
                     log_print(f"NOTE:\tNeither {ref_seq_path} nor {fa_path} exists. REF_SEQ cannot be processed.")
         else:
             log_print(f"NOTE:\tREF_SEQ file {ref_seq_path} does not match expected extensions (.fna or .fna.gz). Skipping renaming.")
+    elif pd.notna(REF_SEQ_GCA):
+        REF_SEQ = EGAP_test_dir + "/" + REF_SEQ_GCA + ".fasta"
     else:
         log_print("NOTE:\tNo REF_SEQ provided; skipping REF_SEQ processing.")
 
@@ -1748,7 +1751,12 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         log_print(f"NOTE:\tUnable to parse input estimated size {EST_SIZE}, using default: 25000000")
         estimated_genome_size = 25000000
     EST_SIZE = estimated_genome_size
-
+    
+    if pd.notna(REF_SEQ) and "ncbi" in REF_SEQ:
+        data_dir = REF_SEQ.split("ncbi")[0].replace("/ncbi","")
+        gca_number= REF_SEQ.split("/")[-1].split(".")[0] + "." + REF_SEQ.split("/")[-1].split(".")[1].split("_")[0] + ".fasta"
+        REF_SEQ = data_dir + gca_number
+    
 ###############################################################################
     # Reads Pre-Processing
 ###############################################################################
@@ -1762,6 +1770,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         fwd_unpaired_out = trimmo_f_pair_path.replace("paired","unpaired")
         trimmo_r_pair_path = ILLUMINA_RAW_R_READS.replace(".fastq.gz", "_paired.fastq.gz")
         rev_unpaired_out = trimmo_r_pair_path.replace("paired","unpaired")
+        ILLUMINA_CLIP = f"ILLUMINACLIP:{find_file('TruSeq3-PE.fa')}:2:30:10:11"
         HEADCROP = "HEADCROP:10"
         CROP = "CROP:145"
         SLIDINGWINDOW = "SLIDINGWINDOW:50:25"
@@ -1773,7 +1782,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
                                 ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, 
                                 trimmo_f_pair_path, fwd_unpaired_out,
                                 trimmo_r_pair_path, rev_unpaired_out,
-                                f"ILLUMINACLIP:{find_file('TruSeq3-PE.fa')}:2:30:10:11",
+                                ILLUMINA_CLIP,
                                 HEADCROP, CROP, SLIDINGWINDOW, MINLEN]
             _ = run_subprocess_cmd(trimmomatic_cmd, shell_check = False)
         if trimmo_f_pair_path == None and trimmo_r_pair_path == None:
@@ -1791,42 +1800,42 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         sample_stats_dict = fastqc_reads(clump_f_dedup_path, clump_r_dedup_path, "Deduplicated_Illumina_", CPU_THREADS, sample_stats_dict)
 
     # NanoPlot ONT Raw Reads    
-    if not pd.isna(ONT_RAW_READS):
+    if pd.notna(ONT_RAW_READS):
         # NanoPlot ONT Raw Reads
         sample_stats_dict = nanoplot_qc_reads(ONT_RAW_READS, "Raw_ONT_", CPU_THREADS, sample_stats_dict)
     
         # Filtlong ONT Raw Reads
         filtered_ONT_reads = ONT_RAW_READS.replace(".fastq.gz","_filtered.fastq")
-        gzipped_filtered_ONT_reads = filtered_ONT_reads.replace(".fasta",".fasta.gz")
+        gzipped_filtered_ONT_reads = filtered_ONT_reads.replace(".fastq",".fastq.gz")
         if os.path.exists(gzipped_filtered_ONT_reads):
             log_print(f"SKIP:\tGzipped FiltLong output already exists: {gzipped_filtered_ONT_reads}.")
         else:
-            if os.path.exists(filtered_ONT_reads):
-                log_print(f"SKIP:\tFiltLong output already exists: {filtered_ONT_reads}.")
-            else:
-                filtlong_cmd = f"filtlong --min_length 1000 --min_mean_q 8 --target_bases 500000000 --trim -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} {ONT_RAW_READS} > {filtered_ONT_reads}"
-                _ = run_subprocess_cmd(filtlong_cmd, shell_check = True)
-                    
-            # NanoPlot ONT Filtered Reads
-            sample_stats_dict = nanoplot_qc_reads(filtered_ONT_reads, "Filt_ONT_", CPU_THREADS, sample_stats_dict)        
-        if os.path.exists(gzipped_filtered_ONT_reads):
-            log_print(f"SKIP:\tGzipped FiltLong output already exists: {gzipped_filtered_ONT_reads}.")
-        else:
-            gzip_file(filtered_ONT_reads, gzipped_filtered_ONT_reads)
-    
-        # Error Correct ONT Filtered Reads With Illumina Reads
+            coverage = 75
+            min_length = 1000
+            keep_percent = 90
+            min_mean_q = 8
+            split_count = 500
+            target_bases = EST_SIZE * coverage
+            filtlong_cmd =  f"filtlong -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} --trim --split {split_count} --min_length {min_length} --min_mean_q {min_mean_q} --keep_percent {keep_percent} --target_bases {target_bases} {ONT_RAW_READS} | gzip > {gzipped_filtered_ONT_reads}" #f"filtlong --min_length 1000 --min_mean_q 8 --target_bases 500000000 --trim -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} {ONT_RAW_READS} > {filtered_ONT_reads}"
+            _ = run_subprocess_cmd(filtlong_cmd, shell_check = True)
+
+        # NanoPlot ONT Filtered Reads
+        sample_stats_dict = nanoplot_qc_reads(gzipped_filtered_ONT_reads, "Filt_ONT_", CPU_THREADS, sample_stats_dict)        
+
+        # Ratatosk Correct Filtered ONT Reads
         corrected_ONT_out = gzipped_filtered_ONT_reads.replace("filtered.fastq.gz","corrected")
         corrected_ONT_Reads = corrected_ONT_out + ".fastq.gz"
         if os.path.exists(corrected_ONT_Reads):
             log_print(f"SKIP:\tRatatosk Corrected Reads already exists: {corrected_ONT_Reads}.")
-        else:
+        else:   
+            # Error Correct ONT Filtered Reads With Illumina Reads
             ratatosk_cmd = ["Ratatosk", "correct",
                             "-s", clump_f_dedup_path, "-s", clump_r_dedup_path,
                             "-l", gzipped_filtered_ONT_reads,
                             "-o", corrected_ONT_out,
                             "-c", str(CPU_THREADS), "-G", "-v"]
             _ = run_subprocess_cmd(ratatosk_cmd, shell_check = False)
-        
+
         # NanoPlot ONT Corrected Reads
         sample_stats_dict = nanoplot_qc_reads(corrected_ONT_Reads, "Corrected_ONT", CPU_THREADS, sample_stats_dict)
     
@@ -1849,20 +1858,15 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         if os.path.exists(gzipped_filtered_PACBIO_reads):
             log_print(f"SKIP:\tGzipped FiltLong output already exists: {gzipped_filtered_PACBIO_reads}.")
         else:
-            if os.path.exists(filtered_PACBIO_reads):
-                log_print(f"SKIP:\t FiltLong output already exists: {filtered_PACBIO_reads}.")
-            else:
-                coverage = 300 # can be changed later if needed
-                target_bases = EST_SIZE * coverage
-                filtlong_cmd = f"filtlong --min_length 10000 --keep_percent 90 --target_bases {target_bases} {hifi_reads} > {filtered_PACBIO_reads}"
-                _ = run_subprocess_cmd(filtlong_cmd, shell_check=True)                
-            
+            coverage = 300
+            target_bases = EST_SIZE * coverage
+            min_length = 10000
+            keep_percent = 90
+            filtlong_cmd = f"filtlong --min_length {min_length} --keep_percent {keep_percent} --target_bases {target_bases} {hifi_reads} | gzip > {gzipped_filtered_PACBIO_reads}"
+            _ = run_subprocess_cmd(filtlong_cmd, shell_check=True)                
+
         # NanoPlot Flitered Reads
-        sample_stats_dict = nanoplot_qc_reads(filtered_PACBIO_reads, "FiltPacBio", CPU_THREADS, sample_stats_dict)
-        if os.path.exists(gzipped_filtered_PACBIO_reads):
-            log_print(f"SKIP:\tGzipped FiltLong output already exists: {gzipped_filtered_PACBIO_reads}.")
-        else:
-            gzip_file(filtered_PACBIO_reads, gzipped_filtered_PACBIO_reads)
+        sample_stats_dict = nanoplot_qc_reads(gzipped_filtered_PACBIO_reads, "FiltPacBio", CPU_THREADS, sample_stats_dict)
         
 ###############################################################################
     # Assembly
@@ -1934,8 +1938,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
                                   "-o", spades_out_dir,
                                   "-t", str(CPU_THREADS),
                                   "-m", str(RAM_GB),
-                                  "--cov-cutoff", "auto",
-                                  "-k", ",".join(kmer_list)]
+                                  "--cov-cutoff", "auto"]
                 elif pd.notna(ONT_RAW_READS):
                     spades_cmd = ["spades.py",
                                   "-1", clump_f_dedup_path,
@@ -1944,8 +1947,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
                                   "-o", spades_out_dir,
                                   "-t", str(CPU_THREADS),
                                   "-m", str(RAM_GB),
-                                  "--careful", "--cov-cutoff", "auto",
-                                  "-k", ",".join(kmer_list)]
+                                  "--careful", "--cov-cutoff", "auto"]
                 elif pd.notna(ILLUMINA_RAW_F_READS) and pd.notna(ILLUMINA_RAW_R_READS):
                     spades_cmd = ["spades.py",
                                   "--careful",
@@ -1954,10 +1956,12 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
                                   "-o", spades_out_dir,
                                   "-t", str(CPU_THREADS),
                                   "-m", str(RAM_GB),
-                                  "--cov-cutoff", "auto",
-                                  "-k", ",".join(kmer_list)]
+                                  "--cov-cutoff", "auto"]
                 if pd.notna(REF_SEQ):
-                    spades_cmd.append(f"--trusted-contigs {REF_SEQ}")
+                    spades_cmd.append("--trusted-contigs")
+                    spades_cmd.append(REF_SEQ)
+                spades_cmd.append("-k")
+                spades_cmd.append(",".join(kmer_list))
                 _ = run_subprocess_cmd(spades_cmd, shell_check = False)
             shutil.move(spades_path, final_spades_path)
         final_spades_path, spades_stats_list, _ = qc_assembly(final_spades_path, shared_root, cwd,
@@ -2019,13 +2023,13 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         if os.path.exists(final_hifiasm_path):
             log_print(f"SKIP:\tFinal HiFi Assembly already exists: {final_hifiasm_path}.")            
         else:
-            if os.path.exists(hifiasm_path):
-                log_print(f"SKIP:\tHiFi Assembly already exists: {hifiasm_path}.")
+            if os.path.exists(hifiasm_gfa_path):
+                log_print(f"SKIP:\tHiFi Assembly already exists: {hifiasm_gfa_path}.")
             else:
                 hifhiasm_cmd = ["hifiasm", "-o", hifiasm_path, "-t", str(CPU_THREADS), gzipped_filtered_PACBIO_reads]
                 _ = run_subprocess_cmd(hifhiasm_cmd, shell_check=False)
             gfa_cmd = f"gfatools gfa2fa {hifiasm_gfa_path} > {final_hifiasm_path}"
-            _ = run_subprocess_cmd(gfa_cmd, shell_check=False)            
+            _ = run_subprocess_cmd(gfa_cmd, shell_check=True)            
         final_hifiasm_path, hifiasm_stats_list, _ = qc_assembly(final_hifiasm_path, shared_root, cwd,
                                                                 ONT_RAW_READS,
                                                                 ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS,
@@ -2053,7 +2057,6 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     method_counts = {}
     for method in custom_stats:
         method_counts[method] = method_counts.get(method, 0) + 1
-    shared_root
     most_represented_method = max(method_counts, key=method_counts.get)
     comparative_plot_dict = {"MaSuRCA": masurca_stats_list,
                              "Flye": flye_stats_list,
@@ -2077,7 +2080,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         assembly_out_dir = masurca_out_dir
         initial_assembly = final_masurca_path
     os.chdir(EGAP_test_data_dir)
-    
+
 ###############################################################################
     # Assembly Polishing
 ###############################################################################
@@ -2122,20 +2125,21 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         pilon_out_dir = os.path.join(shared_root, "pilon_polished_assembly")
         pilon_assembly = os.path.join(pilon_out_dir, "pilon_assembly.fasta")
         pilon_renamed_fasta = initial_assembly.replace(".fasta","_pilon.fasta")
-        if os.path.exists(pilon_assembly):
-            log_print(f"SKIP:\tPilon Polished Assembly already exists: {pilon_assembly}.")
-        elif os.path.exists(pilon_renamed_fasta):
+        if os.path.exists(pilon_renamed_fasta):
             log_print(f"SKIP:\tPilon Polished Assembly already exists: {pilon_renamed_fasta}.")
         else:
-            pilon_cmd = ["pilon", f"-Xmx{RAM_GB}g",
-                         "--genome", second_racon_assembly,
-                         "--frags", polish_bam,
-                         "--output", pilon_out_prefix,
-                         "--outdir", pilon_out_dir,
-                         "--changes", "--vcf",
-                         "--chunksize", str(5000000)]
-            _ = run_subprocess_cmd(pilon_cmd, shell_check = False)
-        shutil.move(pilon_assembly, pilon_renamed_fasta)
+            if os.path.exists(pilon_assembly):
+                log_print(f"SKIP:\tPilon Polished Assembly already exists: {pilon_assembly}.")
+            else:
+                pilon_cmd = ["pilon", f"-Xmx{RAM_GB}g",
+                             "--genome", second_racon_assembly,
+                             "--frags", polish_bam,
+                             "--output", pilon_out_prefix,
+                             "--outdir", pilon_out_dir,
+                             "--changes", "--vcf",
+                             "--chunksize", str(5000000)]
+                _ = run_subprocess_cmd(pilon_cmd, shell_check = False)
+            shutil.move(pilon_assembly, pilon_renamed_fasta)
         pilon_assembly = pilon_renamed_fasta
     else:
         log_print("SKIP:\tPilon Polish; No Illumina Reads Provided...")
@@ -2308,6 +2312,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     final_gz_assembly_path = final_assembly_path + ".gz"
     gzip_file(final_assembly_path, final_gz_assembly_path)
     os.chdir(cwd)
+    log_print("Final Compressed Assembly can be found here: {final_gz_assembly_path}")
     return final_gz_assembly_path, results_df
 
 
