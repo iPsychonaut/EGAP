@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Sun Dec 22 19:57:46 2024
@@ -550,7 +550,7 @@ def masurca_config_gen(input_folder, output_folder,
     os.chdir(output_folder)
     
     # Set the Jellyfish hash size (adjust if available RAM is lower than 62GB)
-    jf_size = EST_SIZE * 20
+    jf_size = EST_SIZE
     max_ram_tested = 62
     if ram_gb < max_ram_tested:
         adjustment_ratio = ram_gb / max_ram_tested
@@ -628,7 +628,11 @@ def masurca_config_gen(input_folder, output_folder,
         config_content.append(f"JF_SIZE={jf_size}\n")
         # Force CABOG: always disable SOAP and Flye.
         config_content.append(f"SOAP_ASSEMBLY={soap_assembly}\n")
-        config_content.append(f"FLYE_ASSEMBLY={flye_assembly}\n")
+        if pd.isna(ILLUMINA_RAW_F_READS) and pd.isna(ILLUMINA_RAW_R_READS) and pd.isna(ref_seq):
+            config_content.append(f"FLYE_ASSEMBLY={flye_assembly}\n")
+        else:
+            config_content.append("FLYE_ASSEMBLY=0\n")
+        
         config_content.append("END\n")
         
         # Write the configuration file.
@@ -1474,9 +1478,11 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
             _ = run_subprocess_cmd(ont_cmd, shell_check=True)
         else:
             log_print(f"SKIP:\tONT SRAs already exists: {ont_sra}")
-    os.chdir(EGAP_test_dir)
+    os.chdir(EGAP_test_data_dir)
+    if "." not in REF_SEQ_GCA:
+        log_print(f"ERROR:\tReference Sequence GCA requires version number: {REF_SEQ_GCA} has no '.#' ")
     ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
-    renamed_gca = os.path.join(EGAP_test_dir, f"{REF_SEQ_GCA}.fasta")
+    renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
     if not pd.isna(REF_SEQ_GCA):
         if not os.path.exists(renamed_gca):
             try:
@@ -1491,11 +1497,11 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
             shutil.move(ref_seq_gca, renamed_gca)
         else:
             log_print(f"SKIP:\tREF_SEQ GCA already exists: {renamed_gca}")
-    os.chdir(cwd)
+    os.chdir(EGAP_test_dir)
     return illu_sra_f, illu_sra_r, ont_sra, pacbio_sra, ref_seq_gca, EGAP_test_data_dir
 
 
-def process_final_assembly(row, results_df, CPU_THREADS, RAM_GB, final_assembly_path=None, sample_stats_dict=None):
+def process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB, final_assembly_path=None, sample_stats_dict=None):
     """
     Finalize and assess the assembly, updating the results.
 
@@ -1557,19 +1563,24 @@ def process_final_assembly(row, results_df, CPU_THREADS, RAM_GB, final_assembly_
                                                                             first_compleasm_odb, second_compleasm_odb,
                                                                             REF_SEQ, karyote_id, kingdom_id,
                                                                             sample_stats_dict, results_df)
+    sample_stats_dict["FINAL_ASSEMBLY"] = final_assembly_path
     quality_classifications = classify_assembly(sample_stats_dict)
     for metric, classification in quality_classifications.items():
         log_print(f"{metric}: {classification}")
-    # (Additional result processing omitted for brevity.)
+    result_row = pd.DataFrame([quality_classifications], index=[index])
+    results_df = pd.concat([results_df, result_row])
+    for key, value in sample_stats_dict.items():
+        input_csv_df.loc[index, key] = value
+    
     log_print(f"Assessment of Final Assembly: {final_assembly_path}")
     log_print(f"PASS:\tEGAP Final Assembly Complete: {final_assembly_path}")
     log_print("This was produced with the help of the Entheogen Genome (Entheome) Foundation\n")
     log_print("If this was useful, please support us at https://entheome.org/\n")
     print("\n\n\n")
-    return final_assembly_path, results_df
+    return final_assembly_path, input_csv_df
 
 
-def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
+def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     """
     Run the EGAP pipeline on a single sample.
 
@@ -1724,7 +1735,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         else:
             log_print(f"NOTE:\tREF_SEQ file {ref_seq_path} does not match expected extensions (.fna or .fna.gz). Skipping renaming.")
     elif pd.notna(REF_SEQ_GCA):
-        REF_SEQ = EGAP_test_dir + "/" + REF_SEQ_GCA + ".fasta"
+        REF_SEQ = f"{EGAP_test_data_dir}/{REF_SEQ_GCA}.fasta"
     else:
         log_print("NOTE:\tNo REF_SEQ provided; skipping REF_SEQ processing.")
 
@@ -1746,7 +1757,8 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     size_str = EST_SIZE.lower().strip()
     multipliers = {'m': 10**6, 'g': 10**9}
     if size_str[-1] in multipliers:
-        estimated_genome_size = int(float(size_str[:-1]) * multipliers[size_str[-1]])
+        estimated_genome_size = int(float(size_str[:-1]) * multipliers[size_str[-1]]) 
+        estimated_genome_size = estimated_genome_size if estimated_genome_size <= 1693548387 else 1693548387 # Largest genome tested that worked
     else:
         log_print(f"NOTE:\tUnable to parse input estimated size {EST_SIZE}, using default: 25000000")
         estimated_genome_size = 25000000
@@ -1755,8 +1767,10 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     if pd.notna(REF_SEQ) and "ncbi" in REF_SEQ:
         data_dir = REF_SEQ.split("ncbi")[0].replace("/ncbi","")
         gca_number= REF_SEQ.split("/")[-1].split(".")[0] + "." + REF_SEQ.split("/")[-1].split(".")[1].split("_")[0] + ".fasta"
-        REF_SEQ = data_dir + gca_number
-    
+        REF_SEQ = data_dir  + f"{gca_number}"
+
+    print(REF_SEQ)
+
 ###############################################################################
     # Reads Pre-Processing
 ###############################################################################
@@ -1871,6 +1885,8 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
 ###############################################################################
     # Assembly
 ###############################################################################
+
+    print(REF_SEQ)
 
     # MaSuRCA Hybrid Assembly (Illumina w/ PacBio or ONT, or Illumina Only)
     if pd.notna(ILLUMINA_RAW_F_READS) and pd.notna(ILLUMINA_RAW_R_READS):    
@@ -2220,19 +2236,23 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     # RagTag Correct Reads if REF_SEQ is provided
     if pd.notna(REF_SEQ):
         log_print("Running RagTag usinng Reference Sequence...")
-        ragtag_ref_assembly = os.path.join("/".join(os.path.dirname(dup_purged_assembly).split("/")[:-1]), os.path.basename(dup_purged_assembly).replace(".fasta","_ragtag_final.fasta"))
-        ragtag_patched = ragtag_ref_assembly.replace("_pilon_ragtag_final.fasta","_patched")
+        ragtag_ref_assembly = os.path.join("/".join(os.path.dirname(dup_purged_assembly).split("/")[:-1]), os.path.dirname(dup_purged_assembly).split("/")[-1],os.path.basename(dup_purged_assembly).replace(".fasta","_ragtag_final.fasta"))
+
+        ragtag_patched = ragtag_ref_assembly.replace("_pilon_ragtag_final.fasta","_patched")        
         patch_fasta = os.path.join(ragtag_patched, "ragtag.patch.fasta")
-        ragtag_scaff = ragtag_patched.replace("patched","scaffold")
-        scaff_fasta = os.path.join(ragtag_scaff, "ragtag.scaffold.fasta")
-        ragtag_corr = ragtag_patched.replace("patched","corrected")
-        corr_fasta = os.path.join(ragtag_corr, "ragtag.correct.fasta")
         if not os.path.exists(ragtag_patched):
             os.mkdir(ragtag_patched)
+
+        ragtag_scaff = ragtag_patched.replace("patched","scaffold")
+        scaff_fasta = os.path.join(ragtag_scaff, "ragtag.scaffold.fasta")
         if not os.path.exists(ragtag_scaff):
-            os.mkdir(ragtag_scaff)
+            os.mkdir(ragtag_scaff)            
+
+        ragtag_corr = ragtag_patched.replace("patched","corrected")
+        corr_fasta = os.path.join(ragtag_corr, "ragtag.correct.fasta")
         if not os.path.exists(ragtag_corr):
             os.mkdir(ragtag_corr)
+
         if os.path.exists(ragtag_ref_assembly):
             log_print(f"SKIP:\tRagTag Reference Corrected Assembly already exists: {ragtag_ref_assembly}")
         else:
@@ -2281,7 +2301,7 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         gzip_file(final_assembly_path, final_gz_assembly_path)
     elif pd.notna(ILLUMINA_RAW_F_READS) and pd.notna(ILLUMINA_RAW_R_READS):
         log_print("Running Abyss-Sealer on Illumina Reads...")
-        output_prefix = "/".join(shared_root.split("/")[:-1]) + f"/{ragtag_ref_assembly.split('/')[-1].replace('_pilon_ragtag_final.fasta','_sealed').replace('_pilon.fasta','_sealed')}"
+        output_prefix = "/".join(shared_root.split("/")[:-1]) + f"/{shared_root.split('/')[-1]}/{ragtag_ref_assembly.split('/')[-1].replace('_pilon_ragtag_final.fasta','_sealed').replace('_pilon.fasta','_sealed')}"
         sealer_output_file = f"{output_prefix}_scaffold.fa"        
         renamed_sealer_output_file = sealer_output_file.replace(".fa",".fasta")
         if os.path.isfile(sealer_output_file):        
@@ -2305,14 +2325,13 @@ def egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB):
 ###############################################################################
     # Final Assembly Assessment
 ###############################################################################
-    final_assembly_path, results_df = process_final_assembly(row, results_df,
+    final_assembly_path, results_df = process_final_assembly(row, results_df, input_csv_df,
                                                              CPU_THREADS, RAM_GB,
                                                              final_assembly_path,
                                                              sample_stats_dict)    
     final_gz_assembly_path = final_assembly_path + ".gz"
     gzip_file(final_assembly_path, final_gz_assembly_path)
     os.chdir(cwd)
-    log_print("Final Compressed Assembly can be found here: {final_gz_assembly_path}")
     return final_gz_assembly_path, results_df
 
 
@@ -2411,12 +2430,15 @@ if __name__ == "__main__":
     results_df = pd.DataFrame()
     for index, row in input_csv_df.iterrows():
         if pd.isna(row["ONT_SRA"]) and pd.isna(row["ILLUMINA_SRA"]) and pd.isna(row["EST_SIZE"]) and not pd.isna(row["REF_SEQ_GCA"]):
-            final_assembly_path, results_df = process_final_assembly(row, results_df, CPU_THREADS, RAM_GB)
+            final_assembly_path, input_csv_df = process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB)
         else:
-            final_assembly_path, results_df = egap_sample(row, results_df, INPUT_CSV, CPU_THREADS, RAM_GB)
+            final_assembly_path, input_csv_df = egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB)
     
     if INPUT_CSV is not None:
         final_csv_filename = INPUT_CSV.replace(".csv", "_final_assembly_stats.csv")
     else:
         final_csv_filename = input_csv_df.iloc[1]["FINAL_ASSEMBLY"].replace(".fasta", "_stats.csv")
+    
+    # Fill in any blanks in the input_csv_df with the string "None" and then save as CSV file
+    input_csv_df.replace("", "None", inplace = True)
     input_csv_df.to_csv(final_csv_filename, index=False)
