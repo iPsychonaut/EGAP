@@ -15,19 +15,8 @@ RUN mamba install -n base --yes conda-pack
 # Create EGAP_env with Python 3.8
 # RUN conda create -c conda-forge -c bioconda -c defaults -n EGAP_env --yes python==3.8 egap
 RUN conda create -c conda-forge -c bioconda -c defaults \
-    -n EGAP_env --yes python==3.8
-
-# Install EGAP dependencies from bioconda (note: "ratatosk==0.9.0" appears twice; consider removing one)
-RUN conda run -n EGAP_env mamba install -y -c conda-forge -c bioconda -c prkrekel -c agbiome -c defaults \
-    masurca==4.1.2 quast==5.2.0 compleasm==0.2.6 biopython==1.81 RagTag==2.1.0 \
-    NanoPlot==1.43.0 termcolor==2.3.0 minimap2==2.28 bwa==0.7.18 matplotlib==3.7.3 \
-    bamtools==2.5.2 tgsgapcloser==1.2.1 psutil==6.0.0 pilon==1.22 trimmomatic==0.39 \
-    merqury==1.3 meryl==1.3 beautifulsoup4==4.12.3 ncbi-datasets-cli==16.39.0 \
-    samtools==1.21 fastqc==0.12.1 abyss==2.0.2 bbmap==39.15 ratatosk==0.9.0 racon==1.5.0 \
-    kmc==3.2.4 runner==1.3 spades==4.0.0 flye==2.9.5 ratatosk==0.9.0 purge_dups==1.2.6 && \
-    pbccs==6.4.0 hifiasm==0.21.0 gfatools==0.5
-    conda clean -a -y
-
+    -n EGAP_env --yes python=3.8 egap
+    
 # Download required resources for quast
 RUN conda run -n EGAP_env quast-download-gridss && \
     conda run -n EGAP_env quast-download-silva
@@ -50,9 +39,9 @@ RUN apt-get update && apt-get install -y wget && \
     chmod +x /EGAP_env/EGAP.py && \
     rm -rf /var/lib/apt/lists/*
 
-# Create a wrapper script in EGAP_env/bin called "egap"
-RUN printf '#!/bin/bash\npython /EGAP_env/EGAP.py "$@"\n' > /EGAP_env/bin/egap && \
-    chmod +x /EGAP_env/bin/egap
+# Create a wrapper script in EGAP_env/bin called "EGAP"
+RUN printf '#!/bin/bash\npython /EGAP_env/EGAP.py "$@"\n' > /EGAP_env/bin/EGAP && \
+    chmod +x /EGAP_env/bin/EGAP
 
 ###############################################################################
 # Generate EGEP_env
