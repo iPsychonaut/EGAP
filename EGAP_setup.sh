@@ -43,20 +43,19 @@ check_success "Initializing mamba"
 source ~/.bashrc
 check_success "\nSourcing ~/.bashrc"
 
-# Create EGAP_env2 with Python 3.8 using mamba
-echo -e "\e[36m\nCreating conda environment 'EGAP_env2' with Python 3.8...\e[0m"
-conda create -y -n EGAP_env2 python=3.8
-check_success "Creating EGAP_env2"
+# Create EGAP_env with Python using mamba
+echo -e "\e[36m\nCreating conda environment 'EGAP_env' with Python...\e[0m"
+conda create -y -n EGAP_env \
+  "python>=3.8" \
+  egap \
+  -c bioconda -c conda-forge
+
+check_success "Creating EGAP_env with Python Libraries"
 
 # Activate the environment
-echo -e "\e[36m\nActivating 'EGAP_env2' environment...\e[0m"
-conda activate EGAP_env2
-check_success "Activating 'EGAP_env2' environment"
-
-# Activate the environment
-echo -e "\e[36m\nActivating 'EGAP_env2' environment...\e[0m"
-conda activate EGAP_env2
-check_success "Activating 'EGAP_env2' environment"
+echo -e "\e[36m\nActivating 'EGAP_env' environment...\e[0m"
+conda activate EGAP_env
+check_success "Activating 'EGAP_env' environment"
 
 # Remove the existing runner folder if it exists
 if [ -d "runner" ]; then
@@ -65,20 +64,8 @@ if [ -d "runner" ]; then
     check_success "Removing existing runner folder"
 fi
 
-# Clone and install runner manually
-echo -e "\e[36m\nCloning and installing runner...\e[0m"
-git clone https://github.com/dfguan/runner.git
-check_success "Cloning runner repository"
-
-# Remove the existing runner folder if it exists
-if [ -d "runner" ]; then
-    echo -e "\e[33mRunner folder exists. Removing...\e[0m"
-    rm -rf runner
-    check_success "Removing existing runner folder"
-fi
-
-# Clone runner and install inside EGAP_env2
-echo -e "\e[36m\nCloning and installing runner in EGAP_env2...\e[0m"
+# Clone runner and install inside EGAP_env
+echo -e "\e[36m\nCloning and installing runner in EGAP_env...\e[0m"
 git clone https://github.com/dfguan/runner.git
 check_success "Cloning runner repository"
 
@@ -91,44 +78,7 @@ rm -rf runner
 check_success "Cleaning up runner repository"
 
 # Verify installation
-python -c "import runner" 2>/dev/null && echo -e "\e[32mRunner installed successfully in EGAP_env2.\e[0m" || echo -e "\e[31mRunner installation failed.\e[0m"
-
-# Install required conda packages
-echo -e "\e[36m\nInstalling required conda packages via mamba...\e[0m"
-conda install -y -c bioconda -c conda-forge \
-                                masurca==4.1.2 \
-                                quast==5.2.0 \
-                                compleasm==0.2.6 \
-                                biopython==1.81 \
-                                RagTag==2.1.0 \
-                                NanoPlot==1.43.0 \
-                                termcolor==2.3.0 \
-                                minimap2==2.28 \
-                                bwa==0.7.18 \
-                                samtools==1.21 \
-                                bamtools==2.5.2 \
-                                tgsgapcloser==1.2.1 \
-                                abyss==2.0.2 \
-                                sepp==4.5.1 \
-                                psutil==6.0.0 \
-                                beautifulsoup4==4.12.3 \
-                                ncbi-datasets-cli==16.39.0 \
-                                matplotlib==3.7.3 \
-                                trimmomatic==0.39 \
-                                pilon==1.22 \
-                                fastqc==0.12.1 \
-                                bbmap==39.15 \
-                                racon==1.5.0 \
-                                kmc==3.2.4 \
-                                spades==4.0.0 \
-                                ratatosk==0.9.0 \
-                                purge_dups==1.2.6 \
-                                flye==2.9.5 \
-                                pbccs==6.4.0 \
-                                hifiasm==0.21.0 \
-                                gfatools==0.5
-                                
-check_success "Installing conda packages"
+python -c "import runner" 2>/dev/null && echo -e "\e[32mRunner installed successfully in EGAP_env.\e[0m" || echo -e "\e[31mRunner installation failed.\e[0m"
 
 # Execute quast-download commands
 echo -e "\e[36m\nDownloading full suite of quast tools...\e[0m"
@@ -159,5 +109,5 @@ EOF
 # Make sure the wrapper script is executable
 chmod +x "$WRAPPER_SCRIPT"
 
-echo "The command 'egap' has been installed in your EGAP_env2 environment."
-echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env2"\e[0m\n'
+echo "The command 'egap' has been installed in your EGAP_env environment."
+echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env"\e[0m\n'
