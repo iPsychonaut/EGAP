@@ -1479,7 +1479,7 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
         else:
             log_print(f"SKIP:\tONT SRAs already exists: {ont_sra}")
     os.chdir(EGAP_test_data_dir)
-    if "." not in REF_SEQ_GCA:
+    if pd.notna(REF_SEQ_GCA) and "." not in REF_SEQ_GCA:
         log_print(f"ERROR:\tReference Sequence GCA requires version number: {REF_SEQ_GCA} has no '.#' ")
     ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
     renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
@@ -1886,8 +1886,6 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     # Assembly
 ###############################################################################
 
-    print(REF_SEQ)
-
     # MaSuRCA Hybrid Assembly (Illumina w/ PacBio or ONT, or Illumina Only)
     if pd.notna(ILLUMINA_RAW_F_READS) and pd.notna(ILLUMINA_RAW_R_READS):    
         masurca_out_dir = os.path.join(shared_root, "masurca_assembly")
@@ -2141,6 +2139,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         pilon_out_dir = os.path.join(shared_root, "pilon_polished_assembly")
         pilon_assembly = os.path.join(pilon_out_dir, "pilon_assembly.fasta")
         pilon_renamed_fasta = initial_assembly.replace(".fasta","_pilon.fasta")
+        pilon_ext_code = 0
         if os.path.exists(pilon_renamed_fasta):
             log_print(f"SKIP:\tPilon Polished Assembly already exists: {pilon_renamed_fasta}.")
         else:
@@ -2152,15 +2151,20 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
                              "--frags", polish_bam,
                              "--output", pilon_out_prefix,
                              "--outdir", pilon_out_dir,
-                             "--changes", "--vcf",
-                             "--chunksize", str(5000000)]
-                _ = run_subprocess_cmd(pilon_cmd, shell_check = False)
-            shutil.move(pilon_assembly, pilon_renamed_fasta)
-        pilon_assembly = pilon_renamed_fasta
+                             "--changes", "--vcf", "--tracks",
+                             "--chunksize", str(5000000),
+                             "--fix", ",".join(["indels","local","snps"])]
+                pilon_ext_code = run_subprocess_cmd(pilon_cmd, shell_check = False)
+                if pilon_ext_code != 0:
+                    log_print("WARN:\tPilon was not able to finish, likely due to memory, attempting to continue anyway...")
+                    pilon_assembly = second_racon_assembly
+                if not os.path.exists(pilon_renamed_fasta):
+                    shutil.move(pilon_assembly, pilon_renamed_fasta)
+        pilon_assembly = pilon_renamed_fasta                    
     else:
         log_print("SKIP:\tPilon Polish; No Illumina Reads Provided...")
         pilon_assembly = second_racon_assembly
-
+    
 ###############################################################################
     # Assembly Curation
 ###############################################################################    
@@ -2238,7 +2242,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         log_print("Running RagTag usinng Reference Sequence...")
         ragtag_ref_assembly = os.path.join("/".join(os.path.dirname(dup_purged_assembly).split("/")[:-1]), os.path.dirname(dup_purged_assembly).split("/")[-1],os.path.basename(dup_purged_assembly).replace(".fasta","_ragtag_final.fasta"))
 
-        ragtag_patched = ragtag_ref_assembly.replace("_pilon_ragtag_final.fasta","_patched")        
+        ragtag_patched = ragtag_ref_assembly.replace("_ragtag_final.fasta","_patched")        
         patch_fasta = os.path.join(ragtag_patched, "ragtag.patch.fasta")
         if not os.path.exists(ragtag_patched):
             os.mkdir(ragtag_patched)
@@ -2358,6 +2362,8 @@ if __name__ == "__main__":
     default_reference_sequence = None
     default_reference_sequence_gca = None
     default_percent_resources = 0.9
+    default_cpu_threads = None 
+    default_ram_gb = None
 
     parser.add_argument("--input_csv", "-csv", type=str, default=default_input_csv,
                         help=f"Path to a csv containing multiple sample data. (default: {default_input_csv})")
@@ -2399,6 +2405,10 @@ if __name__ == "__main__":
                         help=f"Path to the reference genome. (default: {default_reference_sequence})")
     parser.add_argument("--percent_resources", "-R", type=float, default=default_percent_resources,
                         help=f"Fraction of system resources to use. (default: {default_percent_resources})")
+    parser.add_argument("--cpu_threads", "-T", type=float, default=default_cpu_threads,
+                        help=f"Exact number of CPU threads to use. (default: {default_cpu_threads})")
+    parser.add_argument("--ram_gb", "-ram", type=float, default=default_ram_gb,
+                        help=f"Exact amount of RAM (in GB) to use. (default: {default_ram_gb})")
     
     args = parser.parse_args()
     INPUT_CSV = args.input_csv
@@ -2424,8 +2434,17 @@ if __name__ == "__main__":
                        "REF_SEQ_GCA": [args.ref_seq_gca],
                        "REF_SEQ": [args.ref_seq]}
         input_csv_df = pd.DataFrame.from_dict(sample_dict)
+
     PERCENT_RESOURCES = args.percent_resources
-    CPU_THREADS, RAM_GB = get_resource_values(PERCENT_RESOURCES)
+    CPU_THREADS = int(args.cpu_threads)
+    RAM_GB = int(args.ram_gb)
+
+    if pd.notna(PERCENT_RESOURCES) and pd.isna(CPU_THREADS) and pd.isna(RAM_GB):
+        CPU_THREADS, RAM_GB = get_resource_values(PERCENT_RESOURCES)
+    elif pd.notna(PERCENT_RESOURCES) and pd.notna(CPU_THREADS) and pd.isna(RAM_GB):
+        _, RAM_GB = get_resource_values(PERCENT_RESOURCES)
+    elif pd.notna(PERCENT_RESOURCES) and pd.notna(RAM_GB) and pd.isna(CPU_THREADS):
+        CPU_THREADS, _ = get_resource_values(PERCENT_RESOURCES)
 
     results_df = pd.DataFrame()
     for index, row in input_csv_df.iterrows():
