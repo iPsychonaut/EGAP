@@ -2436,8 +2436,8 @@ if __name__ == "__main__":
         input_csv_df = pd.DataFrame.from_dict(sample_dict)
 
     PERCENT_RESOURCES = args.percent_resources
-    CPU_THREADS = int(args.cpu_threads)
-    RAM_GB = int(args.ram_gb)
+    CPU_THREADS = int(args.cpu_threads) if pd.notna(args.cpu_threads) else args.cpu_threads
+    RAM_GB = int(args.ram_gb) if pd.notna(args.ram_gb) else args.ram_gb
 
     if pd.notna(PERCENT_RESOURCES) and pd.isna(CPU_THREADS) and pd.isna(RAM_GB):
         CPU_THREADS, RAM_GB = get_resource_values(PERCENT_RESOURCES)
