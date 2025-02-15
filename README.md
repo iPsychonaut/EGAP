@@ -282,7 +282,8 @@ Example: Illumina Only data for Psilocybe cubensis B+ with reference sequence of
 - /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/f_reads.fastq.gz
 - /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/r_reads.fastq.gz)
 - /path/to/EGAP/EGAP_Processing/Ps_cubensis/ref_seq.fasta
-* if no sub-folder for sub-species is needed then place everything in the main species folder i.e. /path/to/EGAP/EGAP_Processing/Ps_cubensis/Illumina/f_reads.fastq.gz
+
+If no sub-folder for sub-species is needed then place everything in the main species folder i.e. /path/to/EGAP/EGAP_Processing/Ps_semilanceata/Illumina/f_reads.fastq.gz
 
 ##### Illumina-Only (with Reference Sequence) Assembly Command
 
