@@ -356,14 +356,14 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="resources/My_speciosa_eudicots_odb10_busco.png" alt="My. speciosa eudicots BUSCO plot" width="400">
+      <img src="resources/Ps_cubensis_B+_masurca_sealed_scaffold_agaricales_odb10_busco.png" alt="Ps. cubensis B+ agaricales BUSCO plot" width="400">
       <br>
-      **My. speciosa eudicots BUSCO**
+      **Ps. cubensis B+ agaricales BUSCO**
     </td>
     <td align="center">
-      <img src="resources/My_speciosa_embryophyta_odb10_busco.png" alt="My. speciosa embryophyta BUSCO plot" width="400">
+      <img src="resources/Ps_cubensis_B+_masurca_sealed_scaffold_basidiomycota_odb10_busco.png" alt="Ps. cubensis B+ basidiomycota BUSCO plot" width="400">
       <br>
-      **My. speciosa embryophyta BUSCO**
+      **Ps. cubensis B+ basidiomycota BUSCO**
     </td>
   </tr>
 </table>
@@ -375,12 +375,12 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="resources/Ps_semilanceata_agaricales_odb10_busco.png" alt="Ps. semilanceata agaricales BUSCO plot" width="400">
+      <img src="resources/Ps_semilanceata_EGAP_assembly_agaricales_odb10_busco.png" alt="Ps. semilanceata agaricales BUSCO plot" width="400">
       <br>
       **Ps. semilanceata agaricales BUSCO**
     </td>
     <td align="center">
-      <img src="resources/Ps_semilanceata_basidiomycota_odb10_busco.png" alt="Ps. semilanceata basidiomycota BUSCO plot" width="400">
+      <img src="resources/Ps_semilanceata_EGAP_assembly_basidiomycota_odb10_busco.png" alt="Ps. semilanceata basidiomycota BUSCO plot" width="400">
       <br>
       **Ps. semilanceata basidiomycota BUSCO**
     </td>
