@@ -275,90 +275,48 @@ None,None,None,SRR5602600,None,None,None,None,None,None,My_speciosa,Flora,Eukary
 First, create the main processing folder with the required sub-folders. Adjust "EGAP_Processing" as needed:
 
 ```bash
-mkdir -p /path/to/EGAP/EGAP_Processing/ONT /path/to/EGAP/EGAP_Processing/Illumina && cd /path/to/EGAP/EGAP_Processing
+mkdir -p /path/to/EGAP/EGAP_Processing/
 ```
-
-### Illumina-Only (with Reference Sequence) Assembly Example
-
-*My. speciosa* assembled with reference to its own Reference Sequence.
-
-Download the Reference Sequence into the main processing folder:
-
-```bash
-datasets download genome accession GCA_024721245.1 --include genome && unzip ncbi_dataset
-```
-
-Download the Illumina data into the Illumina folder (split into multiple files):
-
-```bash
-cd Illumina/ && prefetch SRR5602600 && fastq-dump --gzip --split-files SRR5602600 && rm -rf SRR5602600 && cd ..
-```
+If you are providing your own data locally, be sure to have a species folder and *if needed a sub-folder matching your Species ID:
+Example: Illumina Only data for Psilocybe cubensis B+ with reference sequence of Psilocybe cubensis
+- /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/f_reads.fastq.gz
+- /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/r_reads.fastq.gz)
+- /path/to/EGAP/EGAP_Processing/Ps_cubensis/ref_seq.fasta
+* if no sub-folder for sub-species is needed then place everything in the main species folder i.e. /path/to/EGAP/EGAP_Processing/Ps_cubensis/Illumina/f_reads.fastq.gz
 
 ##### Illumina-Only (with Reference Sequence) Assembly Command
 
-Adjust the paths as needed:
-
 ```bash
-EGAP --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_1.fq.gz \
-     --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_2.fq.gz \
-     --species_id My_speciosa \
-     --organism_kingdom Flora \
-     --organism_karyote Eukaryote \
-     --compleasm_1 embryophyta \
-     --compleasm_2 eudicots \
+EGAP --illu_sra SRR13870683 \
+     --species_id Ps_cubensis_B+ \
+     --organism_kingdom Funga \
+     --organism_karyote eukaryote \
+     --compleasm_1 agaricales \
+     --compleasm_2 basidiomycota \
      --est_size 700m \
-     --ref_seq /path/to/EGAP/EGAP_Processing/My_speciosa/ncbi_dataset/data/GCA_024721245.1/GCA_024721245.1_ASM2472124v1_genomic.fna
-```
-
-### ONT/Illumina Hybrid Assembly Example
-
-*Ps. caeruleorhiza*
-
-Download the ONT data into the ONT folder:
-
-```bash
-cd ONT && prefetch SRR13870478 && fastq-dump --gzip SRR27945394 && rm -rf SRR27945394 && cd ..
-```
-
-Download the Illumina data into the Illumina folder (split into multiple files):
-
-```bash
-cd Illumina && prefetch SRR13870478 && fastq-dump --gzip --split-files SRR27945395 && rm -rf SRR27945395 && cd ..
+     --ref_seq_gca GCF_017499595.1
 ```
 
 ##### ONT/Illumina Hybrid Assembly Command
 
-Adjust the paths as needed:
-
 ```bash
-EGAP --raw_ont_reads /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/ONT/SRR27945394.fastq.gz \
-     --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/Illumina/SRR27945395_1.fastq.gz \
-     --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/Illumina/SRR27945395_2.fastq.gz \
-     --species_id Ps_caeruleorhiza \
+EGAP --ont_sra SRR25920759 \
+     --illu_sra SRR25920760 \
+     --species_id Ps_semilanceata \
      --organism_kingdom Funga \
-     --organism_karyote Eukaryote \
+     --organism_karyote eukaryote \
      --compleasm_1 agaricales \
      --compleasm_2 basidiomycota \
      --est_size 60m
 ```
 
-### PacBio-Only (no Reference Sequence) Assembly Example
-
-*Ps. subaeruginosa*
-
-Data is not available on NCBI, however there are reads available on JGI:
-
-https://genome.jgi.doe.gov/portal/pages/dynamicOrganismDownload.jsf?organism=Psisu1
-
 ##### PacBio-Only (no Reference Sequence) Assembly Command
 
-Adjust the paths as needed:
-
 ```bash
-EGAP --raw_pacbio_reads /path/to/EGAP/EGAP_Processing/Ps_subaeruginosa/PacBio/pbio-2517.24491.ccs.fastq.gz \
-     --species_id Ps_subaeruginosa \
+EGAP --pacbio_sra SRP093873 \
+     --species_id Pa_papilionaceus \
      --organism_kingdom Funga \
-     --organism_karyote Eukaryote \
+     --organism_karyote eukaryote \
      --compleasm_1 agaricales \
      --compleasm_2 basidiomycota \
      --est_size 60m
@@ -474,11 +432,14 @@ The example data are published in:
 > High-quality draft genomes of ecologically and geographically diverse *Psilocybe* species.
 > *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
 
+> McKernan K, Kane L, Helbert Y, Zhang L, Houde N, McLaughlin S.
+> A whole genome atlas of 81 Psilocybe genomes as a resource for psilocybin production.
+> F1000Research 2021, 10:961; doi: [10.12688/f1000research.55301.2](https://doi.org/10.12688/f1000research.55301.2)
 
 > Ruiz‐Dueñas FJ, Barrasa JM, Sánchez‐García M, Camarero S, Miyauchi S, Serrano A, Linde D, Babiker R, Drula E, Ayuso‐Fernández I, Pacheco R,
 > Padilla G, Ferreira P, Barriuso J, Kellner H, Castanera R, Alfaro M, Ramírez L, Pisabarro AG, Riley R, Kuo A, Andreopoulos W, LaButti K,
 > Pangilinan J, Tritt A, Lipzen A, He G, Yan M, Ng V, Grigoriev IV, Cullen D, Martin F, Rosso M, Henrissat B, Hibbett D, Martínez AT.
-> Genomic Analysis Enlightens Agaricales Lifestyle Evolution and Increasing Peroxidase Diversity. Molecular Biology and Evolution. 38(4): 1428-1446 (2020). https://doi.org/10.1093/molbev/msaa301.
+> Genomic Analysis Enlightens Agaricales Lifestyle Evolution and Increasing Peroxidase Diversity. Molecular Biology and Evolution. 38(4): 1428-1446 (2020). [10.1093/molbev/msaa301](https://doi.org/10.1093/molbev/msaa301).
 
 ## Contribution
 
