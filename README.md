@@ -1,7 +1,7 @@
 # EGAP Pipeline
 
 <div align="center">
-  <img src="EGAP_banner.png" alt="EGAP Banner" width="500">
+  <img src="resources/EGAP_banner.png" alt="EGAP Banner" width="500">
 </div>
 
 <div align="center">
@@ -150,7 +150,7 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 ## Pipeline Flow
 
 <div align="center">
-  <img src="EGAP_pipeline.png" alt="EGAP Pipeline" width="500">
+  <img src="resources/EGAP_pipeline.png" alt="EGAP Pipeline" width="500">
 </div>
 
 ## Command-Line Usage
@@ -177,7 +177,9 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 - `--ref_seq_gca`, `-rgca` (str): Curated Genome Assembly (GCA) Accession number. (default = None)
 - `--ref_seq`, `-rf` (str): Path to the reference genome for assembly. (default: None)
 - `--percent_resources`, `-R` (float): Percentage of resources for processing. (default: 1.00)
-
+- `--cpu_threads`, `-T` (float): Exact number of CPU threads to use. (default: None)
+- `--ram_gb`, `-ram`, (float): Exact amount of RAM (in GB) to use. (default: None)
+                        
 ### Example Command:
 
 ```bash
@@ -203,7 +205,8 @@ EGAP --ont_sra SRR######## \
      --compleasm_1 basidiomycota \
      --compleasm_2 agaricales \
      --est_size 60m \
-     --percent_resources 0.8
+     --cpu_threads 10 \
+     --ram_gb 32
 ```
 
 *Note:* Do not use multiple inputs for the same data type (e.g., do NOT use `illu_sra` and `raw_illu_dir` simultaneously).
@@ -228,7 +231,6 @@ The CSV file should have the following header and columns:
 | None          | None         | /path/to/ONT/sample1.fq.gz  | None          | None               | /path/to/Illumina/sample1_1.fq.gz   | /path/to/Illumina/sample1_2.fq.gz   | None       | None           | None                      | Ab_sample2           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 60m       | None          | None     |
 | None          | None         | None                        | None          | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample3           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | None          | None     |
 | None          | None         | None                        | SRA00000002   | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample4_sub-name  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | GCA00000002.1 | None     |
-
 
 ### Column Descriptions
 
@@ -304,7 +306,7 @@ EGAP --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR56
      --organism_karyote Eukaryote \
      --compleasm_1 embryophyta \
      --compleasm_2 eudicots \
-     --est_size 693m \
+     --est_size 700m \
      --ref_seq /path/to/EGAP/EGAP_Processing/My_speciosa/ncbi_dataset/data/GCA_024721245.1/GCA_024721245.1_ASM2472124v1_genomic.fna
 ```
 
@@ -393,12 +395,12 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="My_speciosa_eudicots_odb10_busco.png" alt="My. speciosa eudicots BUSCO plot" width="400">
+      <img src="resources/My_speciosa_eudicots_odb10_busco.png" alt="My. speciosa eudicots BUSCO plot" width="400">
       <br>
       **My. speciosa eudicots BUSCO**
     </td>
     <td align="center">
-      <img src="My_speciosa_embryophyta_odb10_busco.png" alt="My. speciosa embryophyta BUSCO plot" width="400">
+      <img src="resources/My_speciosa_embryophyta_odb10_busco.png" alt="My. speciosa embryophyta BUSCO plot" width="400">
       <br>
       **My. speciosa embryophyta BUSCO**
     </td>
@@ -412,14 +414,14 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="Ps_caeruleorhiza_agaricales_odb10_busco.png" alt="Ps. caeruleorhiza agaricales BUSCO plot" width="400">
+      <img src="resources/Ps_semilanceata_agaricales_odb10_busco.png" alt="Ps. semilanceata agaricales BUSCO plot" width="400">
       <br>
-      **Ps. caeruleorhiza agaricales BUSCO**
+      **Ps. semilanceata agaricales BUSCO**
     </td>
     <td align="center">
-      <img src="Ps_caeruleorhiza_basidiomycota_odb10_busco.png" alt="Ps. caeruleorhiza basidiomycota BUSCO plot" width="400">
+      <img src="resources/Ps_semilanceata_basidiomycota_odb10_busco.png" alt="Ps. semilanceata basidiomycota BUSCO plot" width="400">
       <br>
-      **Ps. caeruleorhiza basidiomycota BUSCO**
+      **Ps. semilanceata basidiomycota BUSCO**
     </td>
   </tr>
 </table>
@@ -431,14 +433,14 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="Ps_subaeruginosa_agaricales_odb10_busco.png" alt="Ps. subaeruginosa agaricales BUSCO plot" width="400">
+      <img src="resources/Pa_papilionaceus_agaricales_odb10_busco.png" alt="Pa. papilionaceus agaricales BUSCO plot" width="400">
       <br>
-      **Ps. subaeruginosa agaricales BUSCO**
+      **Pa. papilionaceus agaricales BUSCO**
     </td>
     <td align="center">
-      <img src="Ps_subaeruginosa_basidiomycota_odb10_busco.png" alt="Ps. subaeruginosa basidiomycota BUSCO plot" width="400">
+      <img src="resources/Pa_papilionaceus_basidiomycota_odb10_busco.png" alt="Pa. papilionaceus basidiomycota BUSCO plot" width="400">
       <br>
-      **Ps. subaeruginosa basidiomycota BUSCO**
+      **Pa. papilionaceus basidiomycota BUSCO**
     </td>
   </tr>
 </table>
@@ -458,32 +460,29 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 
 This pipeline was modified from two of the following pipelines:
 
-> Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR,  
-> Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes  
-> of ecologically and geographically diverse *Psilocybe* species. *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
+> Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR, Barlow C, Rockefeller A, Slot JC, Angel-Mosti V.
+> High-quality draft genomes of ecologically and geographically diverse *Psilocybe* species.
+> *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
 
-> Muñoz-Barrera A, Rubio-Rodríguez LA, Jáspez D, Corrales A, Marcelino-Rodriguez I,  
-> Lorenzo-Salazar JM, González-Montelongo R, Flores C. Benchmarking of bioinformatics  
-> tools for the hybrid de novo assembly of human whole-genome sequencing data.  
+> Muñoz-Barrera A, Rubio-Rodríguez LA, Jáspez D, Corrales A, Marcelino-Rodriguez I, Lorenzo-Salazar JM, González-Montelongo R, Flores C.
+> Benchmarking of bioinformatics tools for the hybrid de novo assembly of human whole-genome sequencing data.  
 > *bioRxiv* 2024.05.28.595812; doi: [10.1101/2024.05.28.595812](https://doi.org/10.1101/2024.05.28.595812)
 
 The example data are published in:
 
-> Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR,  
-> Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes  
-> of ecologically and geographically diverse *Psilocybe* species. *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
+> Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR, Barlow C, Rockefeller A, Slot JC, Angel-Mosti V.
+> High-quality draft genomes of ecologically and geographically diverse *Psilocybe* species.
+> *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
 
-> Grassa CJ, Wenger JP, Dabney C, Poplawski SG, Motley ST, Michael TP, Schwartz  
-> CJ, Weiblen GD. A complete Cannabis chromosome assembly and adaptive admixture  
-> for elevated cannabidiol (CBD) content. *bioRxiv*, 458083; doi: [https://doi.org/10.1101/458083](https://doi.org/10.1101/458083).
 
-> Catcheside D, DOE Joint Genome Institute.
-> Psilocybe subaeruginosa BRI183 Annotated Standard Draft (Project ID: 1281328) from “Acquisition of the sequestrate (truffle-like) habit by basidiomycete macrofungi” (Proposal ID: 1956).
-> JGI CSP Fungal Program (Program Year: 2016). Released 2023-08-18; [Unpublished; no DOI].
+> Ruiz‐Dueñas FJ, Barrasa JM, Sánchez‐García M, Camarero S, Miyauchi S, Serrano A, Linde D, Babiker R, Drula E, Ayuso‐Fernández I, Pacheco R,
+> Padilla G, Ferreira P, Barriuso J, Kellner H, Castanera R, Alfaro M, Ramírez L, Pisabarro AG, Riley R, Kuo A, Andreopoulos W, LaButti K,
+> Pangilinan J, Tritt A, Lipzen A, He G, Yan M, Ng V, Grigoriev IV, Cullen D, Martin F, Rosso M, Henrissat B, Hibbett D, Martínez AT.
+> Genomic Analysis Enlightens Agaricales Lifestyle Evolution and Increasing Peroxidase Diversity. Molecular Biology and Evolution. 38(4): 1428-1446 (2020). https://doi.org/10.1093/molbev/msaa301.
 
 ## Contribution
 
-If you would like to contribute to the EGAP Pipeline, please submit a pull request or open an issue on GitHub. For major changes, please discuss via an issue first.
+If you would like to contribute to the EGAP Pipeline, please submit a pull request or open an issue on GitHub. For major changes, please discuss via an issue first. 
 
 ## License
 
