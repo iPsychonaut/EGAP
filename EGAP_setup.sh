@@ -87,27 +87,5 @@ check_success "Downloading quast tools"
 
 echo -e "\n\e[32mEGAP Pipeline Pre-requisites have been successfully installed!\e[0m\n"
 
-# Locate EGAP.py (adjust search as needed)
-EGAP_PATH=$(find "$HOME" -maxdepth 5 -type f -name "EGAP.py" | head -n 1)
-if [ -z "$EGAP_PATH" ]; then
-    echo "ERROR: EGAP.py not found!"
-    exit 1
-fi
-echo "Found EGAP.py at: $EGAP_PATH"
-
-# Determine the bin directory of the activated conda environment
-# (This assumes that "python" points to the environment's python.)
-ENV_BIN_DIR=$(dirname "$(which python)")
-
-# Create the wrapper script in the environment's bin directory
-WRAPPER_SCRIPT="$ENV_BIN_DIR/egap"
-cat <<EOF > "$WRAPPER_SCRIPT"
-#!/bin/bash
-python "$EGAP_PATH" "\$@"
-EOF
-
-# Make sure the wrapper script is executable
-chmod +x "$WRAPPER_SCRIPT"
-
-echo "The command 'egap' has been installed in your EGAP_env environment."
-echo -e '\n\e[32mStart by activating the environment "conda activate EGAP_env"\e[0m\n'
+echo "The command 'EGAP' has been installed in your EGAP_env environment."
+echo -e '\n\e[32mStart by activating the environment with "conda activate EGAP_env"\e[0m\n'
