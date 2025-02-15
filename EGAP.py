@@ -1445,14 +1445,23 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
     if not pd.isna(PACBIO_SRA):
         pacbio_test_dir = os.path.join(EGAP_test_data_dir, "PacBio")
         pacbio_sra = os.path.join(pacbio_test_dir, f"{PACBIO_SRA}.fastq.gz")
+        sra_list = [os.path.abspath(os.path.join(root, file))
+                    for root, _, files in os.walk(pacbio_test_dir)
+                    for file in files if file.endswith(".sra")]
+        sra_folder_list = [os.path.dirname(sra) for sra in sra_list]
         if not os.path.exists(pacbio_sra):
             if not os.path.exists(pacbio_test_dir):
                 os.mkdir(pacbio_test_dir)
             os.chdir(pacbio_test_dir)
-            pacbio_cmd = f"prefetch {PACBIO_SRA} && fastq-dump --gzip --split-files {PACBIO_SRA} && rm -rf {PACBIO_SRA}"
+            prefetch_cmd = ["prefetch", "--max-size", "100G", PACBIO_SRA]
+            _ = run_subprocess_cmd(prefetch_cmd, shell_check=False)
+            pacbio_cmd = f"fastq-dump --gzip --skip-technical --readids --read-filter pass --dumpbase --clip --stdout {' '.join(sra_list)} > {pacbio_sra}"
             _ = run_subprocess_cmd(pacbio_cmd, shell_check=True)
         else:
             log_print(f"SKIP:\tPacBio SRA already exists: {pacbio_sra}")
+        for sra_folder in sra_folder_list:
+            if os.path.exists(sra_folder):
+                shutil.rmtree(sra_folder)
     os.chdir(EGAP_test_data_dir)
     if not pd.isna(ILLUMINA_SRA):
         illumina_test_dir = os.path.join(EGAP_test_data_dir, "Illumina")
@@ -2056,6 +2065,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
 
     # Comparative Analysis and Selection of Best Initial Assembly
     stats_combined = zip(masurca_stats_list, flye_stats_list, spades_stats_list, hifiasm_stats_list)
+    print(stats_combined)
     custom_stats = []
     for index, values in enumerate(stats_combined):
         if index == len(masurca_stats_list) - 1:
@@ -2077,10 +2087,17 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
                              "SPAdes": spades_stats_list,
                              "hifiasm": hifiasm_stats_list}
     log_print(f"Best Initial Assembly: {most_represented_method}.")
+    # TODO: list the stats of the most_represented_method
+    print(stats_combined)
+    
     initial_assembly_list = [final_masurca_path, final_flye_path, final_spades_path, final_hifiasm_path]
     trimmed_assembly_list = [item for item in initial_assembly_list if item is not None]
-    common_path = os.path.commonpath(trimmed_assembly_list)
-    comparative_plots(comparative_plot_dict, common_path, SPECIES_ID)
+
+    
+    # # TODO: consider removing: 
+    # common_path = os.path.commonpath(trimmed_assembly_list)
+    # comparative_plots(comparative_plot_dict, common_path, SPECIES_ID)
+    
     if most_represented_method == "Flye":
         assembly_out_dir = flye_out_dir
         initial_assembly = final_flye_path
@@ -2342,7 +2359,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
 if __name__ == "__main__":
     # Argument Parsing & Test Data
     parser = argparse.ArgumentParser(description="Run Entheome Genome Assembly Pipeline (EGAP)")
-    default_input_csv = None
+    default_input_csv = os.path.join(os.getcwd(), "resources", "EGAP_test.csv")
     default_ont_sra = None
     default_raw_ont_dir = None
     default_ont_reads = None
@@ -2361,7 +2378,7 @@ if __name__ == "__main__":
     default_estimated_genome_size = None
     default_reference_sequence = None
     default_reference_sequence_gca = None
-    default_percent_resources = 0.9
+    default_percent_resources = 1.0
     default_cpu_threads = None 
     default_ram_gb = None
 
