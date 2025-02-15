@@ -183,8 +183,8 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 ### Example Command:
 
 ```bash
-EGAP --raw_ont_reads /path/to/ont_reads.fq.gz \
-     --raw_illu_dir /path/to/illumina_reads/ \
+EGAP --raw_ont_reads /path/to/ont_reads.fq.gz \ # A combined reads file of all ONT raw reads
+     --raw_illu_dir /path/to/illumina_reads/ \ # A folder containing an md5 checksum file and individual Illumina reads files
      --species_id AB_speciesname \
      --organism_kingdom Funga \
      --organism_karyote Eukaryote \
@@ -205,8 +205,8 @@ EGAP --ont_sra SRR######## \
      --compleasm_1 basidiomycota \
      --compleasm_2 agaricales \
      --est_size 60m \
-     --cpu_threads 10 \
-     --ram_gb 32
+     --cpu_threads 10 \ # Providing a specific number for CPUs and NOT using percent resources requires the next line
+     --ram_gb 32 # Required if NOT using percent resources
 ```
 
 *Note:* Do not use multiple inputs for the same data type (e.g., do NOT use `illu_sra` and `raw_illu_dir` simultaneously).
@@ -253,13 +253,13 @@ The CSV file should have the following header and columns:
 - **REF_SEQ_GCA**: Curated Genome Assembly (GCA) Accession number (or `None`).
 - **REF_SEQ**: Path to the reference genome for assembly (or `None`).
 
-### Example CSV File (`samples.csv`)
+### Example CSV File (`EGAP_test.csv` included in repository)
 
 ```csv
-ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIOT_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
-None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/,None,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/,None,None,None,None,None,Ps_zapotecorum,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
-SRR27945394,None,None,SRR27945395,None,None,None,None,None,None,Ps_caeruleorhiza,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
-None,None,None,SRR5602600,None,None,None,None,None,None,My_speciosa,Flora,Eukaryote,embryophyta,eudicots,200m,GCA_024721245.1,None
+ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
+None,None,None,SRR13870683,None,None,None,None,None,None,Ps_cubensis_B+,Funga,eukaryote,basidiomycota,agaricales,60m,GCF_017499595.1,None
+SRR25920759,None,None,SRR25920760,None,None,None,None,None,None,Ps_semilanceata,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
+None,None,None,None,None,None,None,SRP093873,None,None,Pa_papilionaceus,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
 ```
 
 ### Notes
@@ -277,13 +277,15 @@ First, create the main processing folder with the required sub-folders. Adjust "
 ```bash
 mkdir -p /path/to/EGAP/EGAP_Processing/
 ```
+
 If you are providing your own data locally, be sure to have a species folder and *if needed a sub-folder matching your Species ID:
 Example: Illumina Only data for Psilocybe cubensis B+ with reference sequence of Psilocybe cubensis
 - /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/f_reads.fastq.gz
 - /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/r_reads.fastq.gz)
 - /path/to/EGAP/EGAP_Processing/Ps_cubensis/ref_seq.fasta
 
-If no sub-folder for sub-species is needed then place everything in the main species folder i.e. /path/to/EGAP/EGAP_Processing/Ps_semilanceata/Illumina/f_reads.fastq.gz
+If no sub-folder for sub-species is needed then place everything in the main species folder i.e.:
+- /path/to/EGAP/EGAP_Processing/Ps_semilanceata/Illumina/f_reads.fastq.gz
 
 ##### Illumina-Only (with Reference Sequence) Assembly Command
 
