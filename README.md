@@ -368,8 +368,6 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
   </tr>
 </table>
 
-*Flora are known to have large amounts of duplicated genes.*
-
 #### ONT/Illumina Hybrid Assembly BUSCO Plots
 
 <table align="center">
@@ -387,8 +385,6 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
   </tr>
 </table>
 
-*Funga are known to have multinucleate cells and may exhibit higher levels of duplicated genes, though not as extensively as Flora.*
-
 #### PacBio-Only (no Reference Sequence) Assembly BUSCO Plots
 
 <table align="center">
@@ -405,8 +401,6 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
     </td>
   </tr>
 </table>
-
-*Funga are known to have multinucleate cells and may exhibit higher levels of duplicated genes, though not as extensively as Flora.*
 
 ## Future Improvements
 
