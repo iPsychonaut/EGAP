@@ -390,12 +390,12 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="resources/Pa_papilionaceus_agaricales_odb10_busco.png" alt="Pa. papilionaceus agaricales BUSCO plot" width="400">
+      <img src="resources/Pa_papilionaceus_flye.purged_agaricales_odb10_busco.png" alt="Pa. papilionaceus agaricales BUSCO plot" width="400">
       <br>
       **Pa. papilionaceus agaricales BUSCO**
     </td>
     <td align="center">
-      <img src="resources/Pa_papilionaceus_basidiomycota_odb10_busco.png" alt="Pa. papilionaceus basidiomycota BUSCO plot" width="400">
+      <img src="resources/Pa_papilionaceus_flye.purged_basidiomycota_odb10_busco.png" alt="Pa. papilionaceus basidiomycota BUSCO plot" width="400">
       <br>
       **Pa. papilionaceus basidiomycota BUSCO**
     </td>
