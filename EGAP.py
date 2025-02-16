@@ -1434,14 +1434,12 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
     """
     cwd = os.getcwd()
     EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
-    if not os.path.exists(EGAP_test_dir):
-        os.mkdir(EGAP_test_dir)
+    os.makedirs(EGAP_test_dir, exist_ok=True)
     if len(SPECIES_ID.split("_")) == 2:
         EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
     elif len(SPECIES_ID.split("_")) > 2:
         EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", f"{SPECIES_ID.split('_')[0]}_{SPECIES_ID.split('_')[1]}", SPECIES_ID)
-    if not os.path.exists(EGAP_test_data_dir):
-        os.mkdir(EGAP_test_data_dir)
+    os.makedirs(EGAP_test_data_dir, exist_ok=True)
     illu_sra_f = None
     illu_sra_r = None
     ont_sra = None
@@ -1455,8 +1453,7 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
                     for file in files if file.endswith(".sra")]
         sra_folder_list = [os.path.dirname(sra) for sra in sra_list]
         if not os.path.exists(pacbio_sra):
-            if not os.path.exists(pacbio_test_dir):
-                os.mkdir(pacbio_test_dir)
+            os.makedirs(pacbio_test_dir, exist_ok=True)
             os.chdir(pacbio_test_dir)
             prefetch_cmd = ["prefetch", "--max-size", "100G", PACBIO_SRA]
             _ = run_subprocess_cmd(prefetch_cmd, shell_check=False)
@@ -1473,8 +1470,7 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
         illu_sra_f = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_1.fastq.gz")
         illu_sra_r = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_2.fastq.gz")
         if not os.path.exists(illu_sra_f) and not os.path.exists(illu_sra_r):
-            if not os.path.exists(illumina_test_dir):
-                os.mkdir(illumina_test_dir)
+            os.makedirs(illumina_test_dir, exist_ok=True)
             os.chdir(illumina_test_dir)
             illu_cmd = f"prefetch {ILLUMINA_SRA} && fastq-dump --gzip --split-files {ILLUMINA_SRA} && rm -rf {ILLUMINA_SRA}"
             _ = run_subprocess_cmd(illu_cmd, shell_check=True)
@@ -1485,8 +1481,7 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
         ont_test_dir = os.path.join(EGAP_test_data_dir, "ONT")
         ont_sra = os.path.join(ont_test_dir, f"{ONT_SRA}.fastq.gz")
         if not os.path.exists(ont_sra):
-            if not os.path.exists(ont_test_dir):
-                os.mkdir(ont_test_dir)
+            os.makedirs(ont_test_dir, exist_ok=True)
             os.chdir(ont_test_dir)
             ont_cmd = f"prefetch {ONT_SRA} && fastq-dump --gzip {ONT_SRA} && rm -rf {ONT_SRA}"
             _ = run_subprocess_cmd(ont_cmd, shell_check=True)
@@ -1538,11 +1533,9 @@ def process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB, f
     REF_SEQ_GCA = row["REF_SEQ_GCA"]
     cwd = os.getcwd()
     EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
-    if not os.path.exists(EGAP_test_dir):
-        os.mkdir(EGAP_test_dir)
+    os.makedirs(EGAP_test_dir, exist_ok=True)
     EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
-    if not os.path.exists(EGAP_test_data_dir):
-        os.mkdir(EGAP_test_data_dir)
+    os.makedirs(EGAP_test_data_dir, exist_ok=True)
     ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
     ref_seq_gca_fasta = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))
     renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
@@ -1629,8 +1622,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     EGAP_test_data_dir = ""
     cwd = os.getcwd()
     EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
-    if not os.path.exists(EGAP_test_dir):
-        os.mkdir(EGAP_test_dir)
+    os.makedirs(EGAP_test_dir, exist_ok=True)
     if len(SPECIES_ID.split("_")) == 2:
         EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
     elif len(SPECIES_ID.split("_")) > 2:
@@ -1650,8 +1642,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         else:
             # ALL
             ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, ONT_RAW_READS, PACBIO_RAW_READS, REF_SEQ, EGAP_test_data_dir = download_test_data(SPECIES_ID, ILLU_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GCA)
-    if not os.path.exists(EGAP_test_data_dir):
-        os.mkdir(EGAP_test_data_dir)
+    os.makedirs(EGAP_test_data_dir, exist_ok=True)
 
     if type(PACBIO_RAW_DIR) == str:
         shared_root = PACBIO_RAW_DIR
@@ -1891,8 +1882,8 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         # NanoPlot Flitered Reads
         sample_stats_dict = nanoplot_qc_reads(gzipped_filtered_PACBIO_reads, "FiltPacBio", CPU_THREADS, sample_stats_dict)
 
-    log_print("Selecting Highest Mean Quality Long reads...")
     if pd.notna(ONT_RAW_READS):
+        log_print("Selecting Highest Mean Quality Long reads...")
         highest_mean_qual_long_reads = corrected_ONT_Reads
         if pd.notna(ONT_RAW_READS) and sample_stats_dict["CORRECT_ONT_MEAN_QUAL"] < sample_stats_dict["FILT_ONT_MEAN_QUAL"]:
             highest_mean_qual_long_reads = gzipped_filtered_ONT_reads
@@ -1900,14 +1891,18 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         else:
             highest_mean_qual = sample_stats_dict["CORRECT_ONT_MEAN_QUAL"]
     if pd.notna(PACBIO_RAW_READS):
+        log_print("Selecting Highest Mean Quality Long reads...")
         highest_mean_qual_long_reads = PACBIO_RAW_READS
         if pd.notna(PACBIO_RAW_READS) and sample_stats_dict["CORRECT_PACBIO_MEAN_QUAL"] < sample_stats_dict["FILT_PACBIO_MEAN_QUAL"]:
             highest_mean_qual_long_reads = filtered_PACBIO_reads
             highest_mean_qual = sample_stats_dict["FILT_PACBIO_MEAN_QUAL"]
         else:
             highest_mean_qual = sample_stats_dict["CORRECT_ONT_MEAN_QUAL"]
-    log_print(f"Highest Mean Quality Long reads: {highest_mean_qual_long_reads}")
-    log_print(f"Mean Quality: {highest_mean_qual}")
+    try:
+        log_print(f"Highest Mean Quality Long reads: {highest_mean_qual_long_reads}")
+        log_print(f"Mean Quality: {highest_mean_qual}")
+    except UnboundLocalError:
+        pass
         
 ###############################################################################
     # Assembly
@@ -2055,8 +2050,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     # HiFi Assembly of PacBio only reads
     if pd.notna(PACBIO_RAW_READS):
         hifiasm_out_dir = os.path.join(shared_root, "hifiasm_assembly")
-        if not os.path.exists(hifiasm_out_dir):
-            os.mkdir(hifiasm_out_dir)
+        os.makedirs(hifiasm_out_dir, exist_ok=True)
         pacbio_prefix = os.path.join(hifiasm_out_dir, os.path.basename(PACBIO_RAW_READS.split(".")[0]))
         hifiasm_path = pacbio_prefix + ".asm"
         hifiasm_gfa_path = pacbio_prefix + ".asm.bp.p_ctg.gfa"
@@ -2223,8 +2217,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         log_print("Purging Haplotigs from Long Reads (ONT or PacBio)...")
         # Define paths and variables
         pd_work_dir = os.path.join(shared_root, "purge_dups_work")
-        if not os.path.exists(pd_work_dir):
-            os.mkdir(pd_work_dir)
+        os.makedirs(pd_work_dir, exist_ok=True)
         os.chdir(pd_work_dir)           
         # Create the FOFN file for PacBio reads
         if pd.notna(ONT_RAW_READS) and pd.isna(PACBIO_RAW_READS):
@@ -2293,18 +2286,15 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
 
         ragtag_patched = ragtag_ref_assembly.replace("_ragtag_final.fasta","_patched")        
         patch_fasta = os.path.join(ragtag_patched, "ragtag.patch.fasta")
-        if not os.path.exists(ragtag_patched):
-            os.mkdir(ragtag_patched)
+        os.makedirs(ragtag_patched, exist_ok=True)
 
         ragtag_scaff = ragtag_patched.replace("patched","scaffold")
         scaff_fasta = os.path.join(ragtag_scaff, "ragtag.scaffold.fasta")
-        if not os.path.exists(ragtag_scaff):
-            os.mkdir(ragtag_scaff)            
+        os.makedirs(ragtag_scaff, exist_ok=True)            
 
         ragtag_corr = ragtag_patched.replace("patched","corrected")
         corr_fasta = os.path.join(ragtag_corr, "ragtag.correct.fasta")
-        if not os.path.exists(ragtag_corr):
-            os.mkdir(ragtag_corr)
+        os.makedirs(ragtag_corr, exist_ok=True)
 
         if os.path.exists(ragtag_ref_assembly):
             log_print(f"SKIP:\tRagTag Reference Corrected Assembly already exists: {ragtag_ref_assembly}")
