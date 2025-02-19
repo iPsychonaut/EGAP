@@ -139,7 +139,7 @@ Inside the Docker container, load the pre-generated EGAP environment:
 source /EGAP_env/bin/activate
 ```
 
-- Anaconda installation in a dedicated environment through the Bioconda channel with the following command:
+Anaconda installation in a dedicated environment through the Bioconda channel with the following command:
 
 ```bash
 conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install -y -c bioconda egap
@@ -340,8 +340,8 @@ EGAP generates final assemblies along with:
 The current thresholds for each metric classification (subject to change) are:
 - **first_compleasm_c** = {"AMAZING": >98.5, "GREAT": >95.0, "OK": >80.0, "POOR": <80.0}
 - **second_compleasm_c** = {"AMAZING": >98.5, "GREAT": >95.0, "OK": >80.0, "POOR": <80.0}
-- **contigs_thresholds** = {"AMAZING": 100, "GREAT": 1000, "OK": 10000, "POOR": 100000}
-- **n50_thresholds** = {"AMAZING": 1000000, "GREAT": 100000, "OK": 1000, "POOR": 100}
+- **contigs_thresholds** = {"AMAZING": <100, "GREAT": <1000, "OK": <10000, "POOR": >10000}
+- **n50_thresholds** = {"AMAZING": >1000000, "GREAT": >100000, "OK": >1000, "POOR": <1000}
 - **l50_thresholds** = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #} (still determining best metrics)
 
 ### Compleasm BUSCO Plots
