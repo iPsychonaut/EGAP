@@ -1435,10 +1435,13 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
     cwd = os.getcwd()
     EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
     os.makedirs(EGAP_test_dir, exist_ok=True)
-    if len(SPECIES_ID.split("_")) == 2:
+    if "-" in SPECIES_ID:
+        if len(SPECIES_ID.split("-")[0].split("_")[-1]) == 2 or len(SPECIES_ID.split("-")[0].split("_")[-1]) == 3:
+            EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
+        else:
+            EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID.split("-")[0])
+    else:   
         EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
-    elif len(SPECIES_ID.split("_")) > 2:
-        EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", f"{SPECIES_ID.split('_')[0]}_{SPECIES_ID.split('_')[1]}", SPECIES_ID)
     os.makedirs(EGAP_test_data_dir, exist_ok=True)
     illu_sra_f = None
     illu_sra_r = None
@@ -1447,16 +1450,27 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
     ref_seq_gca = None
     if not pd.isna(PACBIO_SRA):
         pacbio_test_dir = os.path.join(EGAP_test_data_dir, "PacBio")
+        os.makedirs(pacbio_test_dir, exist_ok=True)
+        os.chdir(pacbio_test_dir)
         pacbio_sra = os.path.join(pacbio_test_dir, f"{PACBIO_SRA}.fastq.gz")
         sra_list = [os.path.abspath(os.path.join(root, file))
                     for root, _, files in os.walk(pacbio_test_dir)
                     for file in files if file.endswith(".sra")]
+        if len(sra_list) > 0:
+            log_print("SKIP:\tPrefetch {pacbio_sra}, already exists.")
+        else:
+            if os.path.exists(pacbio_sra):
+                log_print("SKIP:\tPrefetch {pacbio_sra}, already exists.")
+            else:
+                prefetch_cmd = ["prefetch", "--max-size", "100G", PACBIO_SRA]
+                _ = run_subprocess_cmd(prefetch_cmd, shell_check=False)
+                sra_list = [os.path.abspath(os.path.join(root, file))
+                            for root, _, files in os.walk(pacbio_test_dir)
+                            for file in files if file.endswith(".sra")]
         sra_folder_list = [os.path.dirname(sra) for sra in sra_list]
         if not os.path.exists(pacbio_sra):
             os.makedirs(pacbio_test_dir, exist_ok=True)
             os.chdir(pacbio_test_dir)
-            prefetch_cmd = ["prefetch", "--max-size", "100G", PACBIO_SRA]
-            _ = run_subprocess_cmd(prefetch_cmd, shell_check=False)
             pacbio_cmd = f"fastq-dump --gzip --skip-technical --readids --read-filter pass --dumpbase --clip --stdout {' '.join(sra_list)} > {pacbio_sra}"
             _ = run_subprocess_cmd(pacbio_cmd, shell_check=True)
         else:
@@ -1830,12 +1844,11 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
             log_print(f"SKIP:\tGzipped FiltLong output already exists: {gzipped_filtered_ONT_reads}.")
         else:
             coverage = 75
+            target_bases = EST_SIZE * coverage
             min_length = 1000
             keep_percent = 90
             min_mean_q = 8
-            split_count = 500
-            target_bases = EST_SIZE * coverage
-            filtlong_cmd =  f"filtlong -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} --trim --split {split_count} --min_length {min_length} --min_mean_q {min_mean_q} --keep_percent {keep_percent} --target_bases {target_bases} {ONT_RAW_READS} | gzip > {gzipped_filtered_ONT_reads}" #f"filtlong --min_length 1000 --min_mean_q 8 --target_bases 500000000 --trim -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} {ONT_RAW_READS} > {filtered_ONT_reads}"
+            filtlong_cmd =  f"filtlong -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} --trim --min_length {min_length} --min_mean_q {min_mean_q} --keep_percent {keep_percent} --target_bases {target_bases} {ONT_RAW_READS} | gzip > {gzipped_filtered_ONT_reads}" #f"filtlong --min_length 1000 --min_mean_q 8 --target_bases 500000000 --trim -1 {clump_f_dedup_path} -2 {clump_r_dedup_path} {ONT_RAW_READS} > {filtered_ONT_reads}"
             _ = run_subprocess_cmd(filtlong_cmd, shell_check = True)
 
         # NanoPlot ONT Filtered Reads
@@ -1893,11 +1906,11 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
     if pd.notna(PACBIO_RAW_READS):
         log_print("Selecting Highest Mean Quality Long reads...")
         highest_mean_qual_long_reads = PACBIO_RAW_READS
-        if pd.notna(PACBIO_RAW_READS) and sample_stats_dict["CORRECT_PACBIO_MEAN_QUAL"] < sample_stats_dict["FILT_PACBIO_MEAN_QUAL"]:
-            highest_mean_qual_long_reads = filtered_PACBIO_reads
+        if pd.notna(PACBIO_RAW_READS) and sample_stats_dict["RAW_PACBIO_MEAN_QUAL"] < sample_stats_dict["FILT_PACBIO_MEAN_QUAL"]:
+            highest_mean_qual_long_reads = gzipped_filtered_PACBIO_reads
             highest_mean_qual = sample_stats_dict["FILT_PACBIO_MEAN_QUAL"]
         else:
-            highest_mean_qual = sample_stats_dict["CORRECT_ONT_MEAN_QUAL"]
+            highest_mean_qual = sample_stats_dict["RAW_ONT_MEAN_QUAL"]
     try:
         log_print(f"Highest Mean Quality Long reads: {highest_mean_qual_long_reads}")
         log_print(f"Mean Quality: {highest_mean_qual}")
@@ -2487,7 +2500,7 @@ if __name__ == "__main__":
 
     results_df = pd.DataFrame()
     for index, row in input_csv_df.iterrows():
-        if pd.isna(row["ONT_SRA"]) and pd.isna(row["ILLUMINA_SRA"]) and pd.isna(row["EST_SIZE"]) and not pd.isna(row["REF_SEQ_GCA"]):
+        if pd.isna(row["ONT_SRA"]) and pd.isna(row["ILLUMINA_SRA"]) and pd.isna(row["PACBIO_SRA"]) and pd.isna(row["EST_SIZE"]) and pd.notna(row["REF_SEQ_GCA"]):
             final_assembly_path, input_csv_df = process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB)
         else:
             final_assembly_path, input_csv_df = egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB)
