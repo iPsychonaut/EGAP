@@ -1,7 +1,7 @@
 # EGAP Pipeline
 
 <div align="center">
-  <img src="EGAP_banner.png" alt="EGAP Banner" width="500">
+  <img src="resources/EGAP_banner.png" alt="EGAP Banner" width="500">
 </div>
 
 <div align="center">
@@ -67,6 +67,7 @@ Currently, the pipeline supports only the following combinations:
 - **PacBio input only + Reference sequence**  
 - **Illumina input + PacBio input**
 - **Illumina input + PacBio input + Reference sequence**
+- **Assembly Only Input (for Assembly QC analysis)**
 
 NOTE: it is typically not recommended to use a Reference Sequence when assembling Fungal genomes as it can mask rearrangements.
 
@@ -89,14 +90,6 @@ NOTE: it is typically not recommended to use a Reference Sequence when assemblin
 11. [License](#license)
 
 ## Installation
-
-A shell script (e.g., `EGAP_setup.sh`) can install most dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
-
-1. **Run**:
-
-```bash
-bash /path/to/EGAP_setup.sh
-```
 
 The following tools are installed:
 - [Trimmomatic](https://github.com/usadellab/Trimmomatic)
@@ -122,7 +115,13 @@ The following tools are installed:
 - [QUAST](https://github.com/ablab/quast)
 - [CompleAsm](https://github.com/bioinformatics-centre/compleasm)
 
-Alternatively, you can install the Entheome Ecosystem via Docker. Open a (Linux) terminal in the directory where the `Dockerfile` is located.
+The available shell script (e.g., `EGAP_setup.sh`) can install a;; dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
+
+```bash
+bash /path/to/EGAP_setup.sh
+```
+
+Alternatively, you can install the Entheome Ecosystem via Docker. Open a terminal in the directory where the `Dockerfile` is located.
 
 ```bash
 docker build -t entheome_ecosystem .
@@ -140,7 +139,6 @@ Inside the Docker container, load the pre-generated EGAP environment:
 source /EGAP_env/bin/activate
 ```
 
-*Future developments include support for:*
 - Anaconda installation in a dedicated environment through the Bioconda channel with the following command:
 
 ```bash
@@ -150,7 +148,7 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 ## Pipeline Flow
 
 <div align="center">
-  <img src="EGAP_pipeline.png" alt="EGAP Pipeline" width="500">
+  <img src="resources/EGAP_pipeline.png" alt="EGAP Pipeline" width="500">
 </div>
 
 ## Command-Line Usage
@@ -168,21 +166,23 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 - `--pacbio_sra`, `-psra` (str): PacBio Sequence Read Archive (SRA) Accession number. (if `-csv` = None; else None)
 - `--raw_pacbio_dir`, `-pdir` (str): Path to a directory containing all Raw PacBio Reads. (if `-csv` = None; else None)
 - `--raw_pacbio_reads`, `-preads` (str): Path to the combined Raw PacBio FASTQ reads. (if `-csv` = None; else REQUIRED)
-- `--species_id`, `-ID` (str): Species ID formatted as `<2-letters of Genus>_<full species name>`. (if `-csv` = None; else REQUIRED)
-- `--organism_kingdom`, `-Kg` (str): Kingdom the current organism data belongs to. (default: Funga)
-- `--organism_karyote`, `-Ka` (str): Karyote type of the organism. (default: Eukaryote)
-- `--compleasm_1`, `-c1` (str): Name of the first organism compleasm/BUSCO database to compare to. (default: basidiomycota)
-- `--compleasm_2`, `-c2` (str): Name of the second organism compleasm/BUSCO database to compare to. (default: agaricales)
-- `--est_size`, `-es` (str): Estimated size of the genome in Mbp (e.g., `60m`). (default: 60m)
+- `--species_id`, `-ID` (str): Species ID formatted as `<2-letters of Genus>_<full species name>-<other identifiers>`. (if `-csv` = None; else REQUIRED)
+- `--organism_kingdom`, `-Kg` (str): Kingdom the current organism data belongs to. (default: None)
+- `--organism_karyote`, `-Ka` (str): Karyote type of the organism. (default: None)
+- `--compleasm_1`, `-c1` (str): Name of the first organism compleasm/BUSCO database to compare to. (default: None)
+- `--compleasm_2`, `-c2` (str): Name of the second organism compleasm/BUSCO database to compare to. (default: None)
+- `--est_size`, `-es` (str): Estimated size of the genome in Mbp (e.g., `60m`). (default: None)
 - `--ref_seq_gca`, `-rgca` (str): Curated Genome Assembly (GCA) Accession number. (default = None)
 - `--ref_seq`, `-rf` (str): Path to the reference genome for assembly. (default: None)
-- `--percent_resources`, `-R` (float): Percentage of resources for processing. (default: 1.00)
-
+- `--percent_resources`, `-R` (float): Percentage of resources for processing. (default: 0.90)
+- `--cpu_threads`, `-T` (float): Exact number of CPU threads to use. (default: None)
+- `--ram_gb`, `-ram`, (float): Exact amount of RAM (in GB) to use. (default: None)
+                        
 ### Example Command:
 
 ```bash
-EGAP --raw_ont_reads /path/to/ont_reads.fq.gz \
-     --raw_illu_dir /path/to/illumina_reads/ \
+EGAP --raw_ont_reads /path/to/ont_reads.fq.gz \ # A combined reads file of all ONT raw reads
+     --raw_illu_dir /path/to/illumina_reads/ \ # A folder containing an md5 checksum file and individual Illumina reads files
      --species_id AB_speciesname \
      --organism_kingdom Funga \
      --organism_karyote Eukaryote \
@@ -203,7 +203,8 @@ EGAP --ont_sra SRR######## \
      --compleasm_1 basidiomycota \
      --compleasm_2 agaricales \
      --est_size 60m \
-     --percent_resources 0.8
+     --cpu_threads 10 \ # Providing a specific number for CPUs and NOT using percent resources requires the next line
+     --ram_gb 32 # Required if NOT using percent resources
 ```
 
 *Note:* Do not use multiple inputs for the same data type (e.g., do NOT use `illu_sra` and `raw_illu_dir` simultaneously).
@@ -229,7 +230,6 @@ The CSV file should have the following header and columns:
 | None          | None         | None                        | None          | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample3           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | None          | None     |
 | None          | None         | None                        | SRA00000002   | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample4_sub-name  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | GCA00000002.1 | None     |
 
-
 ### Column Descriptions
 
 - **ONT_SRA**: Oxford Nanopore Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
@@ -242,29 +242,21 @@ The CSV file should have the following header and columns:
 - **PACBIO_SRA**: PacBio Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
 - **PACBIO_RAW_DIR**: Path to the directory containing all Raw PacBio Reads. Use `None` if specifying individual files.
 - **PACBIO_RAW_READS**: Path to the combined Raw PacBio FASTQ reads (e.g., `/path/to/PACBIO/sample1.fq.gz`).
-- **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>` (e.g., `Ab_sample1`, optionally `Ab_sample4_sub-name`).
-- **ORGANISM_KINGDOM**: Kingdom of the organism (default: `Funga`).
-- **ORGANISM_KARYOTE**: Karyote type of the organism (default: `Eukaryote`).
-- **COMPLEASM_1**: Name of the first compleasm/BUSCO database (default: basidiomycota).
-- **COMPLEASM_2**: Name of the second compleasm/BUSCO database (default: agaricales).
-- **EST_SIZE**: Estimated genome size in Mbp (e.g., `60m`).
+- **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>-<other identifiers>` (e.g., `Ab_sample1`, optionally `Ab_sample4-sub-name`).
+- **ORGANISM_KINGDOM**: Kingdom of the organism (default: `None`).
+- **ORGANISM_KARYOTE**: Karyote type of the organism (default: `None`).
+- **COMPLEASM_1**: Name of the first compleasm/BUSCO database (default: `None`).
+- **COMPLEASM_2**: Name of the second compleasm/BUSCO database (default: `None`).
+- **EST_SIZE**: Estimated genome size in Mbp (e.g., `None`).
 - **REF_SEQ_GCA**: Curated Genome Assembly (GCA) Accession number (or `None`).
 - **REF_SEQ**: Path to the reference genome for assembly (or `None`).
-
-### Example CSV File (`samples.csv`)
-
-```csv
-ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIOT_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
-None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/ONT_MinION/,None,None,/mnt/d/TESTING_SPACE/Ps_zapotecorum/Illumina_PE150/,None,None,None,None,None,Ps_zapotecorum,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
-SRR27945394,None,None,SRR27945395,None,None,None,None,None,None,Ps_caeruleorhiza,Funga,Eukaryote,basidiomycota,agaricales,60m,None,None
-None,None,None,SRR5602600,None,None,None,None,None,None,My_speciosa,Flora,Eukaryote,embryophyta,eudicots,200m,GCA_024721245.1,None
-```
 
 ### Notes
 
 - If you provide a value for `ILLUMINA_RAW_DIR`, set `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS` to `None`. EGAP will automatically detect and process all paired-end reads within that directory. The same applies for `ONT_RAW_DIR`.
 - Ensure that all file paths are correct and accessible.
 - The CSV file should not contain extra spaces or special characters in the headers.
+- If you just want to perform QC analysis for an already built assembly: provide the path for the assembly or GCA Accession number to download, in the `REF_SEQ` or `REF_SEQ_GCA` field respectively, provide `ORGANISM_KARYOTE`, and the two compleasm databases (`COMPLEASM_1`, `COMPLEASM_2`) to use; **DO NOT PROVIDE ESTIMATED SIZE (`EST_SIZE`)**.
 
 ## Example Data & Instructions
 
@@ -273,90 +265,64 @@ None,None,None,SRR5602600,None,None,None,None,None,None,My_speciosa,Flora,Eukary
 First, create the main processing folder with the required sub-folders. Adjust "EGAP_Processing" as needed:
 
 ```bash
-mkdir -p /path/to/EGAP/EGAP_Processing/ONT /path/to/EGAP/EGAP_Processing/Illumina && cd /path/to/EGAP/EGAP_Processing
+mkdir -p /path/to/EGAP/EGAP_Processing/
 ```
 
-### Illumina-Only (with Reference Sequence) Assembly Example
+### Example CSV File
 
-*My. speciosa* assembled with reference to its own Reference Sequence.
+`EGAP_test.csv` is included in this repository to run test examples, to run all four files takes about 24hours on a 16 thread, 64GB system.
 
-Download the Reference Sequence into the main processing folder:
-
-```bash
-datasets download genome accession GCA_024721245.1 --include genome && unzip ncbi_dataset
+```csv
+ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
+None,None,None,None,None,None,None,SRP093873,None,None,Pa_papilionaceus,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
+None,None,None,SRR13870683,None,None,None,None,None,None,Ps_cubensis-B+,Funga,eukaryote,basidiomycota,agaricales,60m,GCF_017499595.1,None
+SRR25920759,None,None,SRR25920760,None,None,None,None,None,None,Ps_semilanceata,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
+None,None,None,None,None,None,None,None,None,None,De_subviscida,Funga,eukaryote,basidiomycota,agaricales,None,GCA_013368295.1,None
 ```
 
-Download the Illumina data into the Illumina folder (split into multiple files):
+### Local Data
+If you are providing your own data locally, be sure to have a species folder and *if needed a sub-folder matching your Species ID:
+Example: Illumina Only data for Psilocybe cubensis B+ with reference sequence of Psilocybe cubensis
+- /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/f_reads.fastq.gz
+- /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/r_reads.fastq.gz)
+- /path/to/EGAP/EGAP_Processing/Ps_cubensis/ref_seq.fasta
 
-```bash
-cd Illumina/ && prefetch SRR5602600 && fastq-dump --gzip --split-files SRR5602600 && rm -rf SRR5602600 && cd ..
-```
+If no sub-folder for sub-species is needed then place everything in the main species folder i.e.:
+- /path/to/EGAP/EGAP_Processing/Ps_semilanceata/Illumina/f_reads.fastq.gz
 
 ##### Illumina-Only (with Reference Sequence) Assembly Command
 
-Adjust the paths as needed:
-
 ```bash
-EGAP --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_1.fq.gz \
-     --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/My_speciosa/Illumina/SRR5602600_2.fq.gz \
-     --species_id My_speciosa \
-     --organism_kingdom Flora \
-     --organism_karyote Eukaryote \
-     --compleasm_1 embryophyta \
-     --compleasm_2 eudicots \
-     --est_size 693m \
-     --ref_seq /path/to/EGAP/EGAP_Processing/My_speciosa/ncbi_dataset/data/GCA_024721245.1/GCA_024721245.1_ASM2472124v1_genomic.fna
-```
-
-### ONT/Illumina Hybrid Assembly Example
-
-*Ps. caeruleorhiza*
-
-Download the ONT data into the ONT folder:
-
-```bash
-cd ONT && prefetch SRR13870478 && fastq-dump --gzip SRR27945394 && rm -rf SRR27945394 && cd ..
-```
-
-Download the Illumina data into the Illumina folder (split into multiple files):
-
-```bash
-cd Illumina && prefetch SRR13870478 && fastq-dump --gzip --split-files SRR27945395 && rm -rf SRR27945395 && cd ..
+EGAP --illu_sra SRR13870683 \
+     --species_id Ps_cubensis_B+ \
+     --organism_kingdom Funga \
+     --organism_karyote eukaryote \
+     --compleasm_1 agaricales \
+     --compleasm_2 basidiomycota \
+     --est_size 700m \
+     --ref_seq_gca GCF_017499595.1
 ```
 
 ##### ONT/Illumina Hybrid Assembly Command
 
-Adjust the paths as needed:
-
 ```bash
-EGAP --raw_ont_reads /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/ONT/SRR27945394.fastq.gz \
-     --raw_illu_reads_1 /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/Illumina/SRR27945395_1.fastq.gz \
-     --raw_illu_reads_2 /path/to/EGAP/EGAP_Processing/Ps_caeruleorhiza/Illumina/SRR27945395_2.fastq.gz \
-     --species_id Ps_caeruleorhiza \
+EGAP --ont_sra SRR25920759 \
+     --illu_sra SRR25920760 \
+     --species_id Ps_semilanceata \
      --organism_kingdom Funga \
-     --organism_karyote Eukaryote \
+     --organism_karyote eukaryote \
      --compleasm_1 agaricales \
      --compleasm_2 basidiomycota \
      --est_size 60m
 ```
 
-### PacBio-Only (no Reference Sequence) Assembly Example
-
-*Ps. subaeruginosa*
-
-Data is not available on NCBI, however there are reads available on JGI:
-
-https://genome.jgi.doe.gov/portal/pages/dynamicOrganismDownload.jsf?organism=Psisu1
-
 ##### PacBio-Only (no Reference Sequence) Assembly Command
 
-Adjust the paths as needed:
-
 ```bash
-EGAP --raw_pacbio_reads /path/to/EGAP/EGAP_Processing/Ps_subaeruginosa/PacBio/pbio-2517.24491.ccs.fastq.gz \
-     --species_id Ps_subaeruginosa \
+EGAP --pacbio_sra SRP093873 \
+     --species_id Pa_papilionaceus \
      --organism_kingdom Funga \
-     --organism_karyote Eukaryote \
+     --organism_karyote eukaryote \
      --compleasm_1 agaricales \
      --compleasm_2 basidiomycota \
      --est_size 60m
@@ -393,57 +359,51 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="My_speciosa_eudicots_odb10_busco.png" alt="My. speciosa eudicots BUSCO plot" width="400">
+      <img src="resources/Ps_cubensis_B+_masurca_sealed_scaffold_agaricales_odb10_busco.png" alt="Ps. cubensis B+ agaricales BUSCO plot" width="400">
       <br>
-      **My. speciosa eudicots BUSCO**
+      **Ps. cubensis B+ agaricales BUSCO**
     </td>
     <td align="center">
-      <img src="My_speciosa_embryophyta_odb10_busco.png" alt="My. speciosa embryophyta BUSCO plot" width="400">
+      <img src="resources/Ps_cubensis_B+_masurca_sealed_scaffold_basidiomycota_odb10_busco.png" alt="Ps. cubensis B+ basidiomycota BUSCO plot" width="400">
       <br>
-      **My. speciosa embryophyta BUSCO**
+      **Ps. cubensis B+ basidiomycota BUSCO**
     </td>
   </tr>
 </table>
-
-*Flora are known to have large amounts of duplicated genes.*
 
 #### ONT/Illumina Hybrid Assembly BUSCO Plots
 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="Ps_caeruleorhiza_agaricales_odb10_busco.png" alt="Ps. caeruleorhiza agaricales BUSCO plot" width="400">
+      <img src="resources/Ps_semilanceata_EGAP_assembly_agaricales_odb10_busco.png" alt="Ps. semilanceata agaricales BUSCO plot" width="400">
       <br>
-      **Ps. caeruleorhiza agaricales BUSCO**
+      **Ps. semilanceata agaricales BUSCO**
     </td>
     <td align="center">
-      <img src="Ps_caeruleorhiza_basidiomycota_odb10_busco.png" alt="Ps. caeruleorhiza basidiomycota BUSCO plot" width="400">
+      <img src="resources/Ps_semilanceata_EGAP_assembly_basidiomycota_odb10_busco.png" alt="Ps. semilanceata basidiomycota BUSCO plot" width="400">
       <br>
-      **Ps. caeruleorhiza basidiomycota BUSCO**
+      **Ps. semilanceata basidiomycota BUSCO**
     </td>
   </tr>
 </table>
-
-*Funga are known to have multinucleate cells and may exhibit higher levels of duplicated genes, though not as extensively as Flora.*
 
 #### PacBio-Only (no Reference Sequence) Assembly BUSCO Plots
 
 <table align="center">
   <tr>
     <td align="center">
-      <img src="Ps_subaeruginosa_agaricales_odb10_busco.png" alt="Ps. subaeruginosa agaricales BUSCO plot" width="400">
+      <img src="resources/Pa_papilionaceus_flye.purged_agaricales_odb10_busco.png" alt="Pa. papilionaceus agaricales BUSCO plot" width="400">
       <br>
-      **Ps. subaeruginosa agaricales BUSCO**
+      **Pa. papilionaceus agaricales BUSCO**
     </td>
     <td align="center">
-      <img src="Ps_subaeruginosa_basidiomycota_odb10_busco.png" alt="Ps. subaeruginosa basidiomycota BUSCO plot" width="400">
+      <img src="resources/Pa_papilionaceus_flye.purged_basidiomycota_odb10_busco.png" alt="Pa. papilionaceus basidiomycota BUSCO plot" width="400">
       <br>
-      **Ps. subaeruginosa basidiomycota BUSCO**
+      **Pa. papilionaceus basidiomycota BUSCO**
     </td>
   </tr>
 </table>
-
-*Funga are known to have multinucleate cells and may exhibit higher levels of duplicated genes, though not as extensively as Flora.*
 
 ## Future Improvements
 
@@ -458,32 +418,36 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 
 This pipeline was modified from two of the following pipelines:
 
-> Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR,  
-> Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes  
-> of ecologically and geographically diverse *Psilocybe* species. *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
+> Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR, Barlow C, Rockefeller A, Slot JC, Angel-Mosti V.
+> High-quality draft genomes of ecologically and geographically diverse *Psilocybe* species.
+> *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
 
-> Muñoz-Barrera A, Rubio-Rodríguez LA, Jáspez D, Corrales A, Marcelino-Rodriguez I,  
-> Lorenzo-Salazar JM, González-Montelongo R, Flores C. Benchmarking of bioinformatics  
-> tools for the hybrid de novo assembly of human whole-genome sequencing data.  
+> Muñoz-Barrera A, Rubio-Rodríguez LA, Jáspez D, Corrales A, Marcelino-Rodriguez I, Lorenzo-Salazar JM, González-Montelongo R, Flores C.
+> Benchmarking of bioinformatics tools for the hybrid de novo assembly of human whole-genome sequencing data.  
 > *bioRxiv* 2024.05.28.595812; doi: [10.1101/2024.05.28.595812](https://doi.org/10.1101/2024.05.28.595812)
 
 The example data are published in:
 
-> Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR,  
-> Barlow C, Rockefeller A, Slot JC, Angel-Mosti V. High-quality draft genomes  
-> of ecologically and geographically diverse *Psilocybe* species. *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
+> Bollinger IM, Singer H, Jacobs J, Tyler M, Scott K, Pauli CS, Miller DR, Barlow C, Rockefeller A, Slot JC, Angel-Mosti V.
+> High-quality draft genomes of ecologically and geographically diverse *Psilocybe* species.
+> *Microbiol Resour Announc* 0:e00250-24; doi: [10.1128/mra.00250-24](https://doi.org/10.1128/mra.00250-24)
 
-> Grassa CJ, Wenger JP, Dabney C, Poplawski SG, Motley ST, Michael TP, Schwartz  
-> CJ, Weiblen GD. A complete Cannabis chromosome assembly and adaptive admixture  
-> for elevated cannabidiol (CBD) content. *bioRxiv*, 458083; doi: [https://doi.org/10.1101/458083](https://doi.org/10.1101/458083).
+> McKernan K, Kane L, Helbert Y, Zhang L, Houde N, McLaughlin S.
+> A whole genome atlas of 81 Psilocybe genomes as a resource for psilocybin production.
+> F1000Research 2021, 10:961; doi: [10.12688/f1000research.55301.2](https://doi.org/10.12688/f1000research.55301.2)
 
-> Catcheside D, DOE Joint Genome Institute.
-> Psilocybe subaeruginosa BRI183 Annotated Standard Draft (Project ID: 1281328) from “Acquisition of the sequestrate (truffle-like) habit by basidiomycete macrofungi” (Proposal ID: 1956).
-> JGI CSP Fungal Program (Program Year: 2016). Released 2023-08-18; [Unpublished; no DOI].
+> Ruiz‐Dueñas FJ, Barrasa JM, Sánchez‐García M, Camarero S, Miyauchi S, Serrano A, Linde D, Babiker R, Drula E, Ayuso‐Fernández I, Pacheco R,
+> Padilla G, Ferreira P, Barriuso J, Kellner H, Castanera R, Alfaro M, Ramírez L, Pisabarro AG, Riley R, Kuo A, Andreopoulos W, LaButti K,
+> Pangilinan J, Tritt A, Lipzen A, He G, Yan M, Ng V, Grigoriev IV, Cullen D, Martin F, Rosso M, Henrissat B, Hibbett D, Martínez AT.
+> Genomic Analysis Enlightens Agaricales Lifestyle Evolution and Increasing Peroxidase Diversity. Molecular Biology and Evolution. 38(4): 1428-1446 (2020). [10.1093/molbev/msaa301](https://doi.org/10.1093/molbev/msaa301).
+
+> Floudas D, Bentzer J, Ahrén D, Johansson T, Persson P, Tunlid A.
+> Uncovering the hidden diversity of litter-decomposition mechanisms in mushroom-forming fungi.
+> ISME J 14, 2046–2059 (2020). [10.1038/s41396-020-0667-6](https://doi.org/10.1038/s41396-020-0667-6).
 
 ## Contribution
 
-If you would like to contribute to the EGAP Pipeline, please submit a pull request or open an issue on GitHub. For major changes, please discuss via an issue first.
+If you would like to contribute to the EGAP Pipeline, please submit a pull request or open an issue on GitHub. For major changes, please discuss via an issue first. 
 
 ## License
 
