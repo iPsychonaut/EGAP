@@ -67,6 +67,7 @@ Currently, the pipeline supports only the following combinations:
 - **PacBio input only + Reference sequence**  
 - **Illumina input + PacBio input**
 - **Illumina input + PacBio input + Reference sequence**
+- **Assembly Only Input (for Assembly QC analysis)**
 
 NOTE: it is typically not recommended to use a Reference Sequence when assembling Fungal genomes as it can mask rearrangements.
 
@@ -89,14 +90,6 @@ NOTE: it is typically not recommended to use a Reference Sequence when assemblin
 11. [License](#license)
 
 ## Installation
-
-A shell script (e.g., `EGAP_setup.sh`) can install most dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
-
-1. **Run**:
-
-```bash
-bash /path/to/EGAP_setup.sh
-```
 
 The following tools are installed:
 - [Trimmomatic](https://github.com/usadellab/Trimmomatic)
@@ -122,7 +115,13 @@ The following tools are installed:
 - [QUAST](https://github.com/ablab/quast)
 - [CompleAsm](https://github.com/bioinformatics-centre/compleasm)
 
-Alternatively, you can install the Entheome Ecosystem via Docker. Open a (Linux) terminal in the directory where the `Dockerfile` is located.
+The available shell script (e.g., `EGAP_setup.sh`) can install a;; dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
+
+```bash
+bash /path/to/EGAP_setup.sh
+```
+
+Alternatively, you can install the Entheome Ecosystem via Docker. Open a terminal in the directory where the `Dockerfile` is located.
 
 ```bash
 docker build -t entheome_ecosystem .
@@ -140,7 +139,6 @@ Inside the Docker container, load the pre-generated EGAP environment:
 source /EGAP_env/bin/activate
 ```
 
-*Future developments include support for:*
 - Anaconda installation in a dedicated environment through the Bioconda channel with the following command:
 
 ```bash
@@ -168,15 +166,15 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 - `--pacbio_sra`, `-psra` (str): PacBio Sequence Read Archive (SRA) Accession number. (if `-csv` = None; else None)
 - `--raw_pacbio_dir`, `-pdir` (str): Path to a directory containing all Raw PacBio Reads. (if `-csv` = None; else None)
 - `--raw_pacbio_reads`, `-preads` (str): Path to the combined Raw PacBio FASTQ reads. (if `-csv` = None; else REQUIRED)
-- `--species_id`, `-ID` (str): Species ID formatted as `<2-letters of Genus>_<full species name>`. (if `-csv` = None; else REQUIRED)
-- `--organism_kingdom`, `-Kg` (str): Kingdom the current organism data belongs to. (default: Funga)
-- `--organism_karyote`, `-Ka` (str): Karyote type of the organism. (default: Eukaryote)
-- `--compleasm_1`, `-c1` (str): Name of the first organism compleasm/BUSCO database to compare to. (default: basidiomycota)
-- `--compleasm_2`, `-c2` (str): Name of the second organism compleasm/BUSCO database to compare to. (default: agaricales)
-- `--est_size`, `-es` (str): Estimated size of the genome in Mbp (e.g., `60m`). (default: 60m)
+- `--species_id`, `-ID` (str): Species ID formatted as `<2-letters of Genus>_<full species name>-<other identifiers>`. (if `-csv` = None; else REQUIRED)
+- `--organism_kingdom`, `-Kg` (str): Kingdom the current organism data belongs to. (default: None)
+- `--organism_karyote`, `-Ka` (str): Karyote type of the organism. (default: None)
+- `--compleasm_1`, `-c1` (str): Name of the first organism compleasm/BUSCO database to compare to. (default: None)
+- `--compleasm_2`, `-c2` (str): Name of the second organism compleasm/BUSCO database to compare to. (default: None)
+- `--est_size`, `-es` (str): Estimated size of the genome in Mbp (e.g., `60m`). (default: None)
 - `--ref_seq_gca`, `-rgca` (str): Curated Genome Assembly (GCA) Accession number. (default = None)
 - `--ref_seq`, `-rf` (str): Path to the reference genome for assembly. (default: None)
-- `--percent_resources`, `-R` (float): Percentage of resources for processing. (default: 1.00)
+- `--percent_resources`, `-R` (float): Percentage of resources for processing. (default: 0.90)
 - `--cpu_threads`, `-T` (float): Exact number of CPU threads to use. (default: None)
 - `--ram_gb`, `-ram`, (float): Exact amount of RAM (in GB) to use. (default: None)
                         
@@ -244,29 +242,21 @@ The CSV file should have the following header and columns:
 - **PACBIO_SRA**: PacBio Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
 - **PACBIO_RAW_DIR**: Path to the directory containing all Raw PacBio Reads. Use `None` if specifying individual files.
 - **PACBIO_RAW_READS**: Path to the combined Raw PacBio FASTQ reads (e.g., `/path/to/PACBIO/sample1.fq.gz`).
-- **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>` (e.g., `Ab_sample1`, optionally `Ab_sample4_sub-name`).
-- **ORGANISM_KINGDOM**: Kingdom of the organism (default: `Funga`).
-- **ORGANISM_KARYOTE**: Karyote type of the organism (default: `Eukaryote`).
-- **COMPLEASM_1**: Name of the first compleasm/BUSCO database (default: basidiomycota).
-- **COMPLEASM_2**: Name of the second compleasm/BUSCO database (default: agaricales).
-- **EST_SIZE**: Estimated genome size in Mbp (e.g., `60m`).
+- **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>-<other identifiers>` (e.g., `Ab_sample1`, optionally `Ab_sample4-sub-name`).
+- **ORGANISM_KINGDOM**: Kingdom of the organism (default: `None`).
+- **ORGANISM_KARYOTE**: Karyote type of the organism (default: `None`).
+- **COMPLEASM_1**: Name of the first compleasm/BUSCO database (default: `None`).
+- **COMPLEASM_2**: Name of the second compleasm/BUSCO database (default: `None`).
+- **EST_SIZE**: Estimated genome size in Mbp (e.g., `None`).
 - **REF_SEQ_GCA**: Curated Genome Assembly (GCA) Accession number (or `None`).
 - **REF_SEQ**: Path to the reference genome for assembly (or `None`).
-
-### Example CSV File (`EGAP_test.csv` included in repository)
-
-```csv
-ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
-None,None,None,SRR13870683,None,None,None,None,None,None,Ps_cubensis_B+,Funga,eukaryote,basidiomycota,agaricales,60m,GCF_017499595.1,None
-SRR25920759,None,None,SRR25920760,None,None,None,None,None,None,Ps_semilanceata,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
-None,None,None,None,None,None,None,SRP093873,None,None,Pa_papilionaceus,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
-```
 
 ### Notes
 
 - If you provide a value for `ILLUMINA_RAW_DIR`, set `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS` to `None`. EGAP will automatically detect and process all paired-end reads within that directory. The same applies for `ONT_RAW_DIR`.
 - Ensure that all file paths are correct and accessible.
 - The CSV file should not contain extra spaces or special characters in the headers.
+- If you just want to perform QC analysis for an already built assembly: provide the path for the assembly or GCA Accession number to download, in the `REF_SEQ` or `REF_SEQ_GCA` field respectively, provide `ORGANISM_KARYOTE`, and the two compleasm databases (`COMPLEASM_1`, `COMPLEASM_2`) to use; **DO NOT PROVIDE ESTIMATED SIZE (`EST_SIZE`)**.
 
 ## Example Data & Instructions
 
@@ -278,6 +268,19 @@ First, create the main processing folder with the required sub-folders. Adjust "
 mkdir -p /path/to/EGAP/EGAP_Processing/
 ```
 
+### Example CSV File
+
+`EGAP_test.csv` is included in this repository to run test examples, to run all four files takes about 24hours on a 16 thread, 64GB system.
+
+```csv
+ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
+None,None,None,None,None,None,None,SRP093873,None,None,Pa_papilionaceus,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
+None,None,None,SRR13870683,None,None,None,None,None,None,Ps_cubensis-B+,Funga,eukaryote,basidiomycota,agaricales,60m,GCF_017499595.1,None
+SRR25920759,None,None,SRR25920760,None,None,None,None,None,None,Ps_semilanceata,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
+None,None,None,None,None,None,None,None,None,None,De_subviscida,Funga,eukaryote,basidiomycota,agaricales,None,GCA_013368295.1,None
+```
+
+### Local Data
 If you are providing your own data locally, be sure to have a species folder and *if needed a sub-folder matching your Species ID:
 Example: Illumina Only data for Psilocybe cubensis B+ with reference sequence of Psilocybe cubensis
 - /path/to/EGAP/EGAP_Processing/Ps_cubensis/Ps_cubensis_B+/Illumina/f_reads.fastq.gz
@@ -437,6 +440,10 @@ The example data are published in:
 > Padilla G, Ferreira P, Barriuso J, Kellner H, Castanera R, Alfaro M, Ramírez L, Pisabarro AG, Riley R, Kuo A, Andreopoulos W, LaButti K,
 > Pangilinan J, Tritt A, Lipzen A, He G, Yan M, Ng V, Grigoriev IV, Cullen D, Martin F, Rosso M, Henrissat B, Hibbett D, Martínez AT.
 > Genomic Analysis Enlightens Agaricales Lifestyle Evolution and Increasing Peroxidase Diversity. Molecular Biology and Evolution. 38(4): 1428-1446 (2020). [10.1093/molbev/msaa301](https://doi.org/10.1093/molbev/msaa301).
+
+> Floudas D, Bentzer J, Ahrén D, Johansson T, Persson P, Tunlid A.
+> Uncovering the hidden diversity of litter-decomposition mechanisms in mushroom-forming fungi.
+> ISME J 14, 2046–2059 (2020). [10.1038/s41396-020-0667-6](https://doi.org/10.1038/s41396-020-0667-6).
 
 ## Contribution
 
