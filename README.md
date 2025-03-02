@@ -22,58 +22,48 @@
 
 ## Overview
 
-EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline
-for hybrid genome assembly from Oxford Nanopore, Illumina, and PacBio data.
-It supports multiple input modes and assembly methods and determines the best 
-based on multiple metrics: BUSCO Completeness (Single + Duplicated), Assembly 
-Contig Count, Assembly N50, Assembly L50, and Assembly GC-content.
+EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline for hybrid genome assembly using Oxford Nanopore (ONT), Illumina, and PacBio data. It evaluates assemblies based on BUSCO Completeness (Single + Duplicated), Assembly Contig Count, and N50, with additional metrics like L50 and GC-content available via Quast.
 
 1. **Preprocess & QC Reads**  
-   - Merge or detect multiple FASTQ files.
-   - Perform read trimming and adapter removal (Trimmomatic, BBDuk).  
-   - Deduplicate reads (Clumpify).  
-   - Filter and correct ONT reads (Filtlong, Ratatosk).  
-   - Generate read metrics (FastQC, NanoPlot, BBMap-based insert-size checks).  
+   - Merges multiple FASTQ files (`ont_combine_fastq_gz`, `illumina_extract_and_check`).  
+   - Trims and removes adapters (Trimmomatic, BBDuk).  
+   - Deduplicates reads (Clumpify).  
+   - Filters and corrects ONT reads (Filtlong, Ratatosk).  
+   - Generates read metrics (FastQC, NanoPlot, BBMap insert-size stats).  
 
 2. **Assembly**  
-   - MaSuRCA - Will be performed with Illumina Only or with Hybrid (ONT or PacBio).
-   - Flye - Will be performed with ONT only or PacBio only.
-   - SPAdes - Will be performed with Illumina only or with Hybrid (ONT or PacBio).
-   - hifiasm - Will be performed with PacBio only.
-   
-3. **Assembly Polishing**
-   - Polishes assemblies with Racon (in ONT) and Pilon (if Illumina).  
-   - Removes haplotigs with purge_dups.
+   - MaSuRCA: Illumina-only or hybrid (ONT/PacBio).  
+   - Flye: ONT-only or PacBio-only.  
+   - SPAdes: Illumina-only or hybrid (ONT/PacBio).  
+   - hifiasm: PacBio-only.  
 
-4. **Assembly Curation**
-   - Scaffolds and patches using RagTag against a reference genome (if provided).  
-   - Performs final gap-closing with either TGS-GapCloser (if ONT) or ABySS-Sealer (if Illumina-only).  
+3. **Assembly Polishing**  
+   - Polishes with Racon (2x, if ONT/PacBio) and Pilon (if Illumina).  
+   - Removes haplotigs with purge_dups (if long reads).  
+
+4. **Assembly Curation**  
+   - Scaffolds and patches with RagTag (if reference provided).  
+   - Closes gaps with TGS-GapCloser (ONT) or Abyss-Sealer (Illumina-only).  
 
 5. **Quality Assessments & Classification**  
-   - Runs Compleasm (BUSCO) on two lineages to measure completeness.  
-   - Runs QUAST for contiguity statistics (N50, L50, GC%, etc.).  
-   - Rates the final assembly as **AMAZING**, **GREAT**, **OK**, or **POOR** based on combined metrics.  
-   - (Optional) Integrates coverage calculations against a reference or final assembly size.  
+   - Runs Compleasm (BUSCO) on two lineages for completeness.  
+   - Runs Quast for contiguity (N50, contig count, etc.).  
+   - Classifies assemblies as **AMAZING**, **GREAT**, **OK**, or **POOR**.  
 
-Though optimized for fungal genomes, EGAP can be adapted to many other organisms by switching up lineages, reference sequences, or default thresholds.
+Optimized for fungal genomes, EGAP is adaptable to other organisms by adjusting lineages and references.
 
-**Note on Supported Input Modes:**  
-Currently, the pipeline supports only the following combinations:
-- **Illumina input only** (SRA, DIR, or RAW FASTQ files)
-- **Illumina input + Reference sequence** (either GCA accession or a path to a FASTA file)
-- **Illumina input + ONT input** (SRA, DIR, or RAW FASTQ files)
-- **Illumina input + ONT input + Reference sequence**
-- **PacBio input only**  (SRA, DIR, or RAW FASTQ files)
-- **PacBio input only + Reference sequence**  
-- **Illumina input + PacBio input**
-- **Illumina input + PacBio input + Reference sequence**
-- **Assembly Only Input (for Assembly QC analysis)**
+**Supported Input Modes:**  
+- Illumina-only (SRA, DIR, or RAW FASTQ)  
+- Illumina + Reference (GCA or FASTA)  
+- Illumina + ONT (SRA, DIR, or RAW FASTQ)  
+- Illumina + ONT + Reference  
+- PacBio-only (SRA, DIR, or RAW FASTQ)  
+- PacBio + Reference  
+- Illumina + PacBio  
+- Illumina + PacBio + Reference  
+- Assembly-only (for QC analysis)  
 
-NOTE: it is typically not recommended to use a Reference Sequence when assembling Fungal genomes as it can mask rearrangements.
-
-*Future developments include support for:*
-- ONT input only
-- ONT input + Reference sequence
+*Future developments:* Support for ONT-only and ONT + Reference.
 
 ## Table of Contents
 
@@ -153,30 +143,29 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 
 ## Command-Line Usage
 
-### Parameters:
-
-- `--input_csv`, `-csv` (str): Path to a CSV containing multiple sample data. (default = None)
-- `--ont_sra`, `-osra` (str): Oxford Nanopore Sequence Read Archive (SRA) Accession number. (if `-csv` = None; else None)
-- `--raw_ont_dir`, `-odir` (str): Path to a directory containing all Raw ONT Reads. (if `-csv` = None; else REQUIRED)
-- `--raw_ont_reads`, `-i0` (str): Path to the combined Raw ONT FASTQ reads. (if `-csv` = None; else REQUIRED)
-- `--illu_sra`, `-isra` (str): Illumina Sequence Read Archive (SRA) Accession number. (if `-csv` = None; else None)
-- `--raw_illu_dir`, `-idir` (str): Path to a directory containing all Raw Illumina Reads. (if `-csv` = None; else None)
-- `--raw_illu_reads_1`, `-i1` (str): Path to the Raw Forward Illumina Reads. (if `-csv` = None; else REQUIRED)
-- `--raw_illu_reads_2`, `-i2` (str): Path to the Raw Reverse Illumina Reads. (if `-csv` = None; else REQUIRED)
-- `--pacbio_sra`, `-psra` (str): PacBio Sequence Read Archive (SRA) Accession number. (if `-csv` = None; else None)
-- `--raw_pacbio_dir`, `-pdir` (str): Path to a directory containing all Raw PacBio Reads. (if `-csv` = None; else None)
-- `--raw_pacbio_reads`, `-preads` (str): Path to the combined Raw PacBio FASTQ reads. (if `-csv` = None; else REQUIRED)
-- `--species_id`, `-ID` (str): Species ID formatted as `<2-letters of Genus>_<full species name>-<other identifiers>`. (if `-csv` = None; else REQUIRED)
-- `--organism_kingdom`, `-Kg` (str): Kingdom the current organism data belongs to. (default: None)
-- `--organism_karyote`, `-Ka` (str): Karyote type of the organism. (default: None)
-- `--compleasm_1`, `-c1` (str): Name of the first organism compleasm/BUSCO database to compare to. (default: None)
-- `--compleasm_2`, `-c2` (str): Name of the second organism compleasm/BUSCO database to compare to. (default: None)
-- `--est_size`, `-es` (str): Estimated size of the genome in Mbp (e.g., `60m`). (default: None)
-- `--ref_seq_gca`, `-rgca` (str): Curated Genome Assembly (GCA) Accession number. (default = None)
-- `--ref_seq`, `-rf` (str): Path to the reference genome for assembly. (default: None)
-- `--percent_resources`, `-R` (float): Percentage of resources for processing. (default: 0.90)
-- `--cpu_threads`, `-T` (float): Exact number of CPU threads to use. (default: None)
-- `--ram_gb`, `-ram`, (float): Exact amount of RAM (in GB) to use. (default: None)
+### Parameters
+- `--input_csv`, `-csv` (str): Path to CSV with sample data (default: None).
+- `--ont_sra`, `-osra` (str): ONT SRA accession (default: None).
+- `--raw_ont_dir`, `-odir` (str): Directory with raw ONT reads (default: None).
+- `--raw_ont_reads`, `-i0` (str): Combined ONT FASTQ (default: None).
+- `--illu_sra`, `-isra` (str): Illumina SRA accession (default: None).
+- `--raw_illu_dir`, `-idir` (str): Directory with raw Illumina reads (default: None).
+- `--raw_illu_reads_1`, `-i1` (str): Forward Illumina FASTQ (default: None).
+- `--raw_illu_reads_2`, `-i2` (str): Reverse Illumina FASTQ (default: None).
+- `--pacbio_sra`, `-pbsra` (str): PacBio SRA accession (default: None).
+- `--raw_pacbio_dir`, `-pbdir` (str): Directory with raw PacBio reads (default: None).
+- `--raw_pacbio_reads`, `-pb` (str): Combined PacBio FASTQ (default: None).
+- `--species_id`, `-ID` (str): Species ID (e.g., `Ps_cubensis`) (default: None).
+- `--organism_kingdom`, `-Kg` (str): Kingdom (default: None).
+- `--organism_karyote`, `-Ka` (str): Karyote (default: None).
+- `--compleasm_1`, `-c1` (str): First Compleasm lineage (default: None).
+- `--compleasm_2`, `-c2` (str): Second Compleasm lineage (default: None).
+- `--est_size`, `-es` (str): Estimated genome size (e.g., `60m`, `3.2g`) (default: None).
+- `--ref_seq_gca`, `-rgca` (str): GCA accession (default: None).
+- `--ref_seq`, `-rf` (str): Reference FASTA path (default: None).
+- `--percent_resources`, `-R` (float): Resource fraction (default: 1.0).
+- `--cpu_threads`, `-T` (int): CPU threads (default: None).
+- `--ram_gb`, `-ram` (int): RAM in GB (default: None).
                         
 ### Example Command:
 
@@ -338,19 +327,19 @@ EGAP generates final assemblies along with:
 ### Statistics Thresholds
 
 The current thresholds for each metric classification (subject to change) are:
-- **first_compleasm_c** = {"AMAZING": >98.5, "GREAT": >95.0, "OK": >80.0, "POOR": <80.0}
-- **second_compleasm_c** = {"AMAZING": >98.5, "GREAT": >95.0, "OK": >80.0, "POOR": <80.0}
+- **first_compleasm_c** = {"AMAZING": =>98.5, "GREAT": =>90.0, "OK": =>75.0, "POOR": <75.0}
+- **second_compleasm_c** = {"AMAZING": =>98.5, "GREAT": =>90.0, "OK": =>75.0, "POOR": <75.0}
 - **contigs_thresholds** = {"AMAZING": <100, "GREAT": <1000, "OK": <10000, "POOR": >10000}
-- **n50_thresholds** = {"AMAZING": >1000000, "GREAT": >100000, "OK": >1000, "POOR": <1000}
+- **n50_thresholds** = {"AMAZING": >100000, "GREAT": >10000, "OK": >1000, "POOR": <1000}
 - **l50_thresholds** = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #} (still determining best metrics)
 
 ### Compleasm BUSCO Plots
 
 BUSCO outputs are evaluated based on:
-- Greater than 98.5% Completion (sum of Single and Duplicated genes) for an AMAZING/Great Assembly
-- Greater than 95.0% Completion for a Good Assembly
-- Greater than 80% Completion for an OK Assembly
-- Less than 80% Completion for a POOR Assembly
+- Greater than or equal to 98.5% Completion (sum of Single and Duplicated genes) for an AMAZING/Great Assembly
+- Greater than 90.0% Completion for a Good Assembly
+- Greater than 75% Completion for an OK Assembly
+- Less than 75% Completion for a POOR Assembly
 
 Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with only duplicated genes are excluded from the plot (noted in the x-axis label).
 
