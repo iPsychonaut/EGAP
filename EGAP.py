@@ -3,7 +3,7 @@
 """
 Created on Sun Dec 22 19:57:46 2024
 
-@author: ian.bollinger@entheome.org
+@author: ian.bollinger@entheome.org/ian.michael.bollinger@gmail.com
 
 EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline
 for hybrid genome assembly from Oxford Nanopore, Illumina, and PacBio data.
@@ -19,13 +19,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from Bio import SeqIO
 from bs4 import BeautifulSoup
-
+from collections import Counter
 
 # Global Variables
 CPU_THREADS = 1  # Number of CPU threads to use.
 RAM_GB = 1  # Amount of RAM in GB to use.
 DEFAULT_LOG_FILE = None  # Default log file path.
-ENVIRONMENT_TYPE = None  # Type of environment (e.g., "WIN", "LINUX/WSL/MAC").
+ENVIRONMENT_TYPE = "LINUX/WSL/MAC"  # Type of environment (e.g., "WIN", "LINUX/WSL/MAC").
 
 
 def generate_log_file(log_file_path, use_numerical_suffix=False):
@@ -184,30 +184,42 @@ def get_resource_values(PERCENT_RESOURCES):
     return cpu_threads, ram_gb 
 
 
-def find_file(filename):
+def find_file(filename, folder=None):
     """
     Search the filesystem for a file with the given name.
 
     Walks the filesystem from the root (based on the OS) and returns the absolute path
-    of the first occurrence of the file.
+    of the first occurrence of the file, excluding paths containing "$RECYCLE.BIN".
 
     Parameters:
         filename (str): The file name to search for.
+        folder (str, optional): The starting directory for the search. If None, it defaults based on OS.
 
     Returns:
         str or None: The absolute path if found; otherwise, None.
     """
     global ENVIRONMENT_TYPE
     log_print(f"Looking for {filename}")
-    if ENVIRONMENT_TYPE == "WIN":
+
+    if pd.notna(folder):
+        root_directory = folder        
+    elif ENVIRONMENT_TYPE == "WIN":
         root_directory = "C:\\"
     elif ENVIRONMENT_TYPE in ["LINUX/WSL/MAC"]:
         root_directory = "/"
     else:
         raise ValueError("Unknown ENVIRONMENT_TYPE")
+
     for root, dirs, files in os.walk(root_directory):
+        # Skip paths containing "$RECYCLE.BIN"
+        if "$RECYCLE.BIN" in root:
+            continue
+        if "ncbi" in dirs:
+            continue
+
         if filename in files:
             return os.path.join(root, filename)
+
     return None
 
 
@@ -361,22 +373,23 @@ def classify_assembly(sample_stats):
         results (dict): Quality classifications per metric and an overall rating.
     """
     results = {}
-    if sample_stats["FIRST_COMPLEASM_C"] < 80.0:
-        results["FIRST_COMPLEASM_C"] = "POOR"
-    elif sample_stats["FIRST_COMPLEASM_C"] < 95.0:
-        results["FIRST_COMPLEASM_C"] = "OK"
-    elif sample_stats["FIRST_COMPLEASM_C"] < 98.5:
-        results["FIRST_COMPLEASM_C"] = "GREAT"
-    elif sample_stats["FIRST_COMPLEASM_C"] >= 98.5:
+    ranking = ["POOR", "OK", "GREAT", "AMAZING"]
+    if sample_stats["FIRST_COMPLEASM_C"] >= 98.5:
         results["FIRST_COMPLEASM_C"] = "AMAZING"
-    if sample_stats["SECOND_COMPLEASM_C"] < 80.0:
-        results["SECOND_COMPLEASM_C"] = "POOR"
-    elif sample_stats["SECOND_COMPLEASM_C"] < 95.0:
-        results["SECOND_COMPLEASM_C"] = "OK"
-    elif sample_stats["SECOND_COMPLEASM_C"] < 98.5:
-        results["SECOND_COMPLEASM_C"] = "GREAT"
-    elif sample_stats["SECOND_COMPLEASM_C"] >= 98.5:
+    elif sample_stats["FIRST_COMPLEASM_C"] > 90.0:
+        results["FIRST_COMPLEASM_C"] = "GREAT"
+    elif sample_stats["FIRST_COMPLEASM_C"] >= 75.0:
+        results["FIRST_COMPLEASM_C"] = "OK"
+    elif sample_stats["FIRST_COMPLEASM_C"] < 75.0:
+        results["FIRST_COMPLEASM_C"] = "POOR"
+    if sample_stats["SECOND_COMPLEASM_C"] >= 98.5:
         results["SECOND_COMPLEASM_C"] = "AMAZING"
+    elif sample_stats["SECOND_COMPLEASM_C"] > 90.0:
+        results["SECOND_COMPLEASM_C"] = "GREAT"
+    elif sample_stats["SECOND_COMPLEASM_C"] >= 75.0:
+        results["SECOND_COMPLEASM_C"] = "OK"
+    elif sample_stats["SECOND_COMPLEASM_C"] < 75.0:
+        results["SECOND_COMPLEASM_C"] = "POOR"
     if sample_stats["ASSEMBLY_CONTIGS"] <= 100:
         results["ASSEMBLY_CONTIGS"] = "AMAZING"
     elif sample_stats["ASSEMBLY_CONTIGS"] <= 1000:
@@ -393,14 +406,11 @@ def classify_assembly(sample_stats):
         results["ASSEMBLY_N50"] = "GREAT"
     elif sample_stats["ASSEMBLY_N50"] > 10000:
         results["ASSEMBLY_N50"] = "AMAZING"
-    if all(value == "AMAZING" for value in results.values()):
-        results["OVERALL"] = "AMAZING"
-    elif any(value == "POOR" for value in results.values()):
-        results["OVERALL"] = "POOR"
-    elif any(value == "OK" for value in results.values()):
-        results["OVERALL"] = "OK"
-    elif any(value == "GREAT" for value in results.values()):
-        results["OVERALL"] = "GREAT"
+    count = Counter(results.values())
+    max_count = max(count.values())
+    most_common = [key for key, value in count.items() if value == max_count]
+    most_common.sort(key=lambda x: ranking.index(x))
+    results["OVERALL"] = "/".join(most_common)
     return results
 
 
@@ -765,49 +775,53 @@ def get_total_bases(html_file):
 
 def process_read_file(read_path):
     """
-    Ensure an Illumina read file uses the '.fastq.gz' extension.
-
-    Renames or compresses the file as needed:
-      - Renames '.fq.gz' to '.fastq.gz'
-      - Gzips '.fq' or '.fastq' files
-
-    Parameters:
-        read_path (str): Path to the read file.
-
-    Returns:
-        read_path (str): The updated file path.
+    Ensure a read or reference file uses the '.fasta' extension (or '.fastq.gz' for reads).
+    Handles .fq, .fq.gz, .fastq, .fna, and .fna.gz extensions.
     """
     if not isinstance(read_path, str):
         log_print(f"Read path is not a string: {read_path}")
         return read_path
 
     dir_path, filename = os.path.split(read_path)
-    basename_list = filename.split(".")
-    basename = basename_list[0]
+    base, ext = os.path.splitext(filename)  # correctly splits off the extension
     new_read_path = read_path
 
     if read_path.endswith(".fastq.gz"):
         log_print(f"Read file already in .fastq.gz format: {read_path}")
         return read_path
+    elif read_path.endswith(".fasta"):
+        log_print(f"Reference file already in .fasta format: {read_path}")
+        return read_path
+    elif read_path.endswith(".fq.gz"):
+        new_read_path = os.path.join(dir_path, base + ".fastq.gz")
+        os.rename(read_path, new_read_path)
+        log_print(f"Renamed .fq.gz to .fastq.gz: {new_read_path}")
+        return new_read_path
     elif read_path.endswith(".fq"):
-        new_read_path = os.path.join(dir_path, basename + ".fastq.gz")
+        new_read_path = os.path.join(dir_path, base + ".fastq.gz")
         gzip_file(read_path, new_read_path)
         os.remove(read_path)
         log_print(f"Gzipped .fq to {new_read_path}")
         return new_read_path
-    elif read_path.endswith(".fq.gz"):
-        new_read_path = os.path.join(dir_path, basename + ".fastq.gz")
-        os.rename(read_path, new_read_path)
-        log_print(f"Renamed .fq.gz to .fastq.gz: {new_read_path}")
-        return new_read_path
     elif read_path.endswith(".fastq"):
-        new_read_path = os.path.join(dir_path, basename + ".fastq.gz")
+        new_read_path = os.path.join(dir_path, base + ".fastq.gz")
         gzip_file(read_path, new_read_path)
         os.remove(read_path)
-        log_print(f"Renamed .fastq to .fq and gzipped to {new_read_path}")
+        log_print(f"Gzipped .fastq to {new_read_path}")
+        return new_read_path
+    elif read_path.endswith(".fna.gz"):
+        unzipped_path = os.path.join(dir_path, base + ".fasta")
+        gunzip_file(read_path, unzipped_path)
+        os.remove(read_path)
+        log_print(f"Unzipped .fna.gz to {unzipped_path}")
+        return unzipped_path
+    elif read_path.endswith(".fna"):
+        new_read_path = os.path.join(dir_path, base + ".fasta")
+        os.rename(read_path, new_read_path)
+        log_print(f"Renamed .fna to .fasta: {new_read_path}")
         return new_read_path
     else:
-        log_print(f"Unrecognized file extension for read file: {read_path}")
+        log_print(f"Unrecognized file extension for file: {read_path}")
         return read_path
 
 
@@ -1088,12 +1102,21 @@ def qc_assembly(final_assembly_path, shared_root, cwd, ONT_RAW_READS, ILLUMINA_R
         log_print(f"SKIP\tQUAST Report already exists: {quast_report_tsv}.")
     else:
         if pd.isna(REF_SEQ):
-            quast_cmd = ["quast", "--threads", str(CPU_THREADS),
-                         f"--{karyote_id}", "-o", quast_dir, final_assembly_path]
+            if karyote_id == "eukaryote":
+                quast_cmd = ["quast", "--threads", str(CPU_THREADS),
+                             "--eukaryote", "-o", quast_dir, final_assembly_path]
+            else:
+                quast_cmd = ["quast", "--threads", str(CPU_THREADS),
+                             "-o", quast_dir, final_assembly_path]                
         else:
-            quast_cmd = ["quast", "--threads", str(CPU_THREADS),
-                         "-r", REF_SEQ, f"--{karyote_id}",
-                         "-o", quast_dir, final_assembly_path]
+            if karyote_id =="eukaryote":
+                quast_cmd = ["quast", "--threads", str(CPU_THREADS),
+                             "-r", REF_SEQ, "--eukaryote",
+                             "-o", quast_dir, final_assembly_path]
+            else:
+                quast_cmd = ["quast", "--threads", str(CPU_THREADS),
+                             "-r", REF_SEQ,
+                             "-o", quast_dir, final_assembly_path]                
         if kingdom_id == "Funga":
             quast_cmd.append("--fungus")
         _ = run_subprocess_cmd(quast_cmd, shell_check=False)
@@ -1433,95 +1456,126 @@ def download_test_data(SPECIES_ID, ILLUMINA_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GC
         EGAP_test_data_dir (str): Path to the directory data is being saved to.
     """
     cwd = os.getcwd()
-    EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
+    if "EGAP_Test_Data" in cwd:
+        EGAP_test_dir = cwd
+    else:
+        EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
     os.makedirs(EGAP_test_dir, exist_ok=True)
     if "-" in SPECIES_ID:
-        if len(SPECIES_ID.split("-")[0].split("_")[-1]) == 2 or len(SPECIES_ID.split("-")[0].split("_")[-1]) == 3:
-            EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
-        else:
-            EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID.split("-")[0])
+        EGAP_test_data_dir = os.path.join(EGAP_test_dir, SPECIES_ID.split("-")[0], SPECIES_ID)
+        log_print(f"Sub-Species Information Detected; parsing into {EGAP_test_data_dir} directory...")
     else:   
-        EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
+        log_print(f"No Sub-Species Information Detected in SPECIES_ID; parsing into {SPECIES_ID} directory...")
+        EGAP_test_data_dir = os.path.join(EGAP_test_dir, SPECIES_ID)
     os.makedirs(EGAP_test_data_dir, exist_ok=True)
     illu_sra_f = None
     illu_sra_r = None
     ont_sra = None
     pacbio_sra = None
     ref_seq_gca = None
-    if not pd.isna(PACBIO_SRA):
-        pacbio_test_dir = os.path.join(EGAP_test_data_dir, "PacBio")
-        os.makedirs(pacbio_test_dir, exist_ok=True)
-        os.chdir(pacbio_test_dir)
-        pacbio_sra = os.path.join(pacbio_test_dir, f"{PACBIO_SRA}.fastq.gz")
-        sra_list = [os.path.abspath(os.path.join(root, file))
-                    for root, _, files in os.walk(pacbio_test_dir)
-                    for file in files if file.endswith(".sra")]
-        if len(sra_list) > 0:
-            log_print("SKIP:\tPrefetch {pacbio_sra}, already exists.")
+    if pd.notna(PACBIO_SRA):
+        pacbio_sra = find_file(f"{PACBIO_SRA}.fastq.gz", EGAP_test_dir)
+        if pd.notna(pacbio_sra):
+            log_print(f"Found existing PacBio data: {pacbio_sra}.")
         else:
-            if os.path.exists(pacbio_sra):
-                log_print("SKIP:\tPrefetch {pacbio_sra}, already exists.")
-            else:
-                prefetch_cmd = ["prefetch", "--max-size", "100G", PACBIO_SRA]
-                _ = run_subprocess_cmd(prefetch_cmd, shell_check=False)
-                sra_list = [os.path.abspath(os.path.join(root, file))
-                            for root, _, files in os.walk(pacbio_test_dir)
-                            for file in files if file.endswith(".sra")]
-        sra_folder_list = [os.path.dirname(sra) for sra in sra_list]
-        if not os.path.exists(pacbio_sra):
+            log_print(f"Downloading PacBio reads for {PACBIO_SRA}...")
+            pacbio_test_dir = os.path.join(EGAP_test_data_dir, "PacBio")
             os.makedirs(pacbio_test_dir, exist_ok=True)
             os.chdir(pacbio_test_dir)
-            pacbio_cmd = f"fastq-dump --gzip --skip-technical --readids --read-filter pass --dumpbase --clip --stdout {' '.join(sra_list)} > {pacbio_sra}"
-            _ = run_subprocess_cmd(pacbio_cmd, shell_check=True)
-        else:
-            log_print(f"SKIP:\tPacBio SRA already exists: {pacbio_sra}")
-        for sra_folder in sra_folder_list:
-            if os.path.exists(sra_folder):
-                shutil.rmtree(sra_folder)
+            pacbio_sra = os.path.join(pacbio_test_dir, f"{PACBIO_SRA}.fastq.gz")
+            sra_list = [os.path.abspath(os.path.join(root, file))
+                        for root, _, files in os.walk(pacbio_test_dir)
+                        for file in files if file.endswith(".sra")]
+            if len(sra_list) > 0:
+                log_print("SKIP:\tPrefetch {pacbio_sra}, already exists.")
+            else:
+                if os.path.exists(pacbio_sra):
+                    log_print("SKIP:\tPrefetch {pacbio_sra}, already exists.")
+                else:
+                    prefetch_cmd = ["prefetch", "--max-size", "100G", PACBIO_SRA]
+                    _ = run_subprocess_cmd(prefetch_cmd, shell_check=False)
+                    sra_list = [os.path.abspath(os.path.join(root, file))
+                                for root, _, files in os.walk(pacbio_test_dir)
+                                for file in files if file.endswith(".sra")]
+            sra_folder_list = [os.path.dirname(sra) for sra in sra_list]
+            if not os.path.exists(pacbio_sra):
+                os.makedirs(pacbio_test_dir, exist_ok=True)
+                os.chdir(pacbio_test_dir)
+                pacbio_cmd = f"fastq-dump --gzip --skip-technical --readids --read-filter pass --dumpbase --clip --stdout {' '.join(sra_list)} > {pacbio_sra}"
+                _ = run_subprocess_cmd(pacbio_cmd, shell_check=True)
+            else:
+                log_print(f"SKIP:\tPacBio SRA already exists: {pacbio_sra}")
+            for sra_folder in sra_folder_list:
+                if os.path.exists(sra_folder):
+                    shutil.rmtree(sra_folder)
     os.chdir(EGAP_test_data_dir)
-    if not pd.isna(ILLUMINA_SRA):
-        illumina_test_dir = os.path.join(EGAP_test_data_dir, "Illumina")
-        illu_sra_f = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_1.fastq.gz")
-        illu_sra_r = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_2.fastq.gz")
-        if not os.path.exists(illu_sra_f) and not os.path.exists(illu_sra_r):
-            os.makedirs(illumina_test_dir, exist_ok=True)
-            os.chdir(illumina_test_dir)
-            illu_cmd = f"prefetch {ILLUMINA_SRA} && fastq-dump --gzip --split-files {ILLUMINA_SRA} && rm -rf {ILLUMINA_SRA}"
-            _ = run_subprocess_cmd(illu_cmd, shell_check=True)
+    if pd.notna(ILLUMINA_SRA):
+        illu_sra_f = find_file(f"{ILLUMINA_SRA}_1.fastq.gz", EGAP_test_dir)
+        illu_sra_r = find_file(f"{ILLUMINA_SRA}_2.fastq.gz", EGAP_test_dir)
+        if pd.notna(illu_sra_f) and pd.notna(illu_sra_r):
+            log_print(f"Found existing Illumina data: {illu_sra_f}, {illu_sra_r}.")
         else:
-            log_print(f"SKIP:\tIllumina SRAs already exist: {illu_sra_f}; {illu_sra_r}")
+            log_print(f"Downloading Illumina Reads for: {ILLUMINA_SRA}...")
+            illumina_test_dir = os.path.join(EGAP_test_data_dir, "Illumina")
+            illu_sra_f = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_1.fastq.gz")
+            illu_sra_r = os.path.join(illumina_test_dir, f"{ILLUMINA_SRA}_2.fastq.gz")
+            if not os.path.exists(illu_sra_f) and not os.path.exists(illu_sra_r):
+                os.makedirs(illumina_test_dir, exist_ok=True)
+                os.chdir(illumina_test_dir)
+                illu_cmd = f"prefetch {ILLUMINA_SRA} && fastq-dump --gzip --split-files {ILLUMINA_SRA} && rm -rf {ILLUMINA_SRA}"
+                _ = run_subprocess_cmd(illu_cmd, shell_check=True)
+            else:
+                log_print(f"SKIP:\tIllumina SRAs already exist: {illu_sra_f}; {illu_sra_r}")
     os.chdir(EGAP_test_data_dir)
-    if not pd.isna(ONT_SRA):
-        ont_test_dir = os.path.join(EGAP_test_data_dir, "ONT")
-        ont_sra = os.path.join(ont_test_dir, f"{ONT_SRA}.fastq.gz")
-        if not os.path.exists(ont_sra):
-            os.makedirs(ont_test_dir, exist_ok=True)
-            os.chdir(ont_test_dir)
-            ont_cmd = f"prefetch {ONT_SRA} && fastq-dump --gzip {ONT_SRA} && rm -rf {ONT_SRA}"
-            _ = run_subprocess_cmd(ont_cmd, shell_check=True)
+    if pd.notna(ONT_SRA):
+        ont_sra = find_file(f"{ONT_SRA}.fastq.gz", EGAP_test_dir)
+        if pd.notna(ont_sra):
+            log_print(f"Found existing ONT data: {ont_sra}.")
         else:
-            log_print(f"SKIP:\tONT SRAs already exists: {ont_sra}")
-    os.chdir(EGAP_test_data_dir)
+            log_print(f"Downloading ONT Reads for: {ONT_SRA}...")
+            ont_test_dir = os.path.join(EGAP_test_data_dir, "ONT")
+            ont_sra = os.path.join(ont_test_dir, f"{ONT_SRA}.fastq.gz")
+            if not os.path.exists(ont_sra):
+                os.makedirs(ont_test_dir, exist_ok=True)
+                os.chdir(ont_test_dir)
+                ont_cmd = f"prefetch {ONT_SRA} && fastq-dump --gzip {ONT_SRA} && rm -rf {ONT_SRA}"
+                _ = run_subprocess_cmd(ont_cmd, shell_check=True)
+            else:
+                log_print(f"SKIP:\tONT SRAs already exists: {ont_sra}")
     if pd.notna(REF_SEQ_GCA) and "." not in REF_SEQ_GCA:
         log_print(f"ERROR:\tReference Sequence GCA requires version number: {REF_SEQ_GCA} has no '.#' ")
-    ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
-    renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
-    if not pd.isna(REF_SEQ_GCA):
-        if not os.path.exists(renamed_gca):
-            try:
-                ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]
-                if not os.path.exists(ref_seq_gca):
+    existing_gca = find_file(f"{REF_SEQ_GCA}.fasta", EGAP_test_dir)   
+    renamed_gca = None
+    if pd.notna(existing_gca):
+        log_print(f"Found existing Reference Sequence: {existing_gca}.")
+    if existing_gca == None:        
+        ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
+        renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
+        if not pd.isna(REF_SEQ_GCA):
+            os.chdir(EGAP_test_data_dir)
+            log_print(f"Downloading Reference Sequence Assembly for: {REF_SEQ_GCA}")
+            if not os.path.exists(renamed_gca):
+                try:
+                    ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]
+                    if not os.path.exists(ref_seq_gca):
+                        ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome &&  unzip -o ncbi_dataset -d {EGAP_test_data_dir}"
+                        _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
+                except IndexError:
                     ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome &&  unzip -o ncbi_dataset -d {EGAP_test_data_dir}"
                     _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
-            except IndexError:
-                ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome &&  unzip -o ncbi_dataset -d {EGAP_test_data_dir}"
-                _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
-            ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]
-            shutil.move(ref_seq_gca, renamed_gca)
-        else:
-            log_print(f"SKIP:\tREF_SEQ GCA already exists: {renamed_gca}")
+                ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]
+                log_print(f"PASS:\tSuccessfully downloaded the GCA to: {ref_seq_gca}.")
+                shutil.move(ref_seq_gca, renamed_gca)
+                log_print(f"PASS:\tSuccessfully moved and renamed the GCA to: {renamed_gca}.")
+            else:
+                log_print(f"SKIP:\tREF_SEQ GCA already exists: {renamed_gca}")
+    else:
+        renamed_gca = existing_gca
+    if "None" in renamed_gca:
+        renamed_gca = None
+    print(renamed_gca)
     os.chdir(EGAP_test_dir)
-    return illu_sra_f, illu_sra_r, ont_sra, pacbio_sra, ref_seq_gca, EGAP_test_data_dir
+    return illu_sra_f, illu_sra_r, ont_sra, pacbio_sra, renamed_gca, EGAP_test_data_dir
 
 
 def process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB, final_assembly_path=None, sample_stats_dict=None):
@@ -1545,25 +1599,33 @@ def process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB, f
     """
     SPECIES_ID = row["SPECIES_ID"]
     REF_SEQ_GCA = row["REF_SEQ_GCA"]
-    cwd = os.getcwd()
-    EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
-    os.makedirs(EGAP_test_dir, exist_ok=True)
-    EGAP_test_data_dir = os.path.join(cwd, "EGAP_Test_Data", SPECIES_ID)
+    REF_SEQ = row["REF_SEQ"]
+    if pd.notna(REF_SEQ) and os.path.exists(REF_SEQ):
+        cwd = os.path.dirname(REF_SEQ)        
+    elif pd.notna(REF_SEQ_GCA):        
+        cwd = os.getcwd()
+    else:
+        cwd = os.path.dirname(final_assembly_path)
+    if "-" in SPECIES_ID:
+        EGAP_test_data_dir = cwd
+    else:
+        print(cwd)
+        EGAP_test_data_dir = os.path.join(cwd, SPECIES_ID)
+   
+    print(f"MAKING EGAP_test_data_dir: {EGAP_test_data_dir}")
+
     os.makedirs(EGAP_test_data_dir, exist_ok=True)
-    ref_seq_gca_dir = os.path.join(EGAP_test_data_dir, f"ncbi_dataset/data/{REF_SEQ_GCA}/")
-    ref_seq_gca_fasta = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))
-    renamed_gca = os.path.join(EGAP_test_data_dir, f"{REF_SEQ_GCA}.fasta")
-    if not pd.isna(REF_SEQ_GCA):
-        if not os.path.exists(renamed_gca):
-            if len(ref_seq_gca_fasta) == 0:
-                ref_seq_cmd = f"datasets download genome accession {REF_SEQ_GCA} --include genome && unzip -o ncbi_dataset -d {EGAP_test_data_dir}"
-                _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
-            ref_seq_gca_fasta = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]            
-            shutil.move(ref_seq_gca_fasta, renamed_gca)
-        else:
-            log_print(f"SKIP:\tREF_SEQ GCA already exists: {renamed_gca}")
+    
     if pd.isna(final_assembly_path):
-        final_assembly_path = renamed_gca
+        if pd.notna(REF_SEQ):
+            final_assembly_path = os.path.join(EGAP_test_data_dir, os.path.basename(REF_SEQ))
+            if os.path.exists(final_assembly_path):
+                pass
+            else:
+                try:
+                    shutil.move(REF_SEQ, final_assembly_path)
+                except FileNotFoundError:
+                    pass
     shared_root = EGAP_test_data_dir
     ONT_RAW_READS = row["ONT_RAW_READS"]
     ILLUMINA_RAW_F_READS = row["ILLUMINA_RAW_F_READS"]
@@ -1588,6 +1650,7 @@ def process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB, f
     quality_classifications = classify_assembly(sample_stats_dict)
     for metric, classification in quality_classifications.items():
         log_print(f"{metric}: {classification}")
+        
     result_row = pd.DataFrame([quality_classifications], index=[index])
     results_df = pd.concat([results_df, result_row])
     for key, value in sample_stats_dict.items():
@@ -1657,7 +1720,9 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
             # ALL
             ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, ONT_RAW_READS, PACBIO_RAW_READS, REF_SEQ, EGAP_test_data_dir = download_test_data(SPECIES_ID, ILLU_SRA, ONT_SRA, PACBIO_SRA, REF_SEQ_GCA)
     os.makedirs(EGAP_test_data_dir, exist_ok=True)
-
+    if pd.notna(REF_SEQ):
+        REF_SEQ = process_read_file(REF_SEQ)
+        
     if type(PACBIO_RAW_DIR) == str:
         shared_root = PACBIO_RAW_DIR
         initialize_logging_environment(shared_root)
@@ -1666,10 +1731,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         # TODO: run ccs on Raw PacBio reads to turn them into HiFi reads using the bam file
 
     if type(ONT_RAW_DIR) == str:
-        if type(ILLU_RAW_DIR) != str:
-            shared_root = os.path.join(ONT_RAW_DIR, SPECIES_ID)
-        else:
-            shared_root = os.path.commonpath([ONT_RAW_DIR, ILLU_RAW_DIR])
+        shared_root = ONT_RAW_DIR        
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
         ONT_RAW_READS = ont_combine_fastq_gz(ONT_RAW_DIR)
@@ -1695,10 +1757,7 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
     elif type(ONT_RAW_READS) == str:
-        if type(ILLUMINA_RAW_F_READS) != str and type(ILLUMINA_RAW_R_READS) != str:
-            shared_root = os.path.join(os.path.dirname(ONT_RAW_READS), SPECIES_ID)
-        else:
-            shared_root = os.path.commonpath([ONT_RAW_READS, ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
+        shared_root = "/".join(os.path.dirname(ONT_RAW_READS).split("/")[:-1])
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
     else:
@@ -1706,6 +1765,8 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
             shared_root = EGAP_test_data_dir
         elif type(ILLUMINA_RAW_F_READS) == str and type(ILLUMINA_RAW_R_READS) == str:
             shared_root = os.path.commonpath([ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS])
+        elif type(REF_SEQ) == str:
+            shared_root = os.path.dirname(REF_SEQ)
         initialize_logging_environment(shared_root)
         log_print(f"Running Entheome Genome Assembly Pipeline on: {shared_root}")
 
@@ -1787,8 +1848,9 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
         data_dir = REF_SEQ.split("ncbi")[0].replace("/ncbi","")
         gca_number= REF_SEQ.split("/")[-1].split(".")[0] + "." + REF_SEQ.split("/")[-1].split(".")[1].split("_")[0] + ".fasta"
         REF_SEQ = data_dir  + f"{gca_number}"
-
-    print(REF_SEQ)
+    if pd.notna(REF_SEQ):
+        if "nan" in REF_SEQ:
+            REF_SEQ = None
 
 ###############################################################################
     # Reads Pre-Processing
@@ -2393,8 +2455,13 @@ def egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB):
 
 if __name__ == "__main__":
     # Argument Parsing & Test Data
-    parser = argparse.ArgumentParser(description="Run Entheome Genome Assembly Pipeline (EGAP)")
-    default_input_csv = os.path.join(os.getcwd(), "resources", "EGAP_test.csv")
+    parser = argparse.ArgumentParser(description="Run Entheome Genome Assembly Pipeline (EGAP)")   
+    try:
+        default_input_csv = os.path.join(os.getcwd(), "resources", "EGAP_test.csv")
+        if not os.path.exists(default_input_csv):
+            raise FileNotFoundError  # Manually raising the error if the file does not exist
+    except FileNotFoundError:
+        default_input_csv = None
     default_ont_sra = None
     default_raw_ont_dir = None
     default_ont_reads = None
@@ -2474,9 +2541,9 @@ if __name__ == "__main__":
                        "ILLUMINA_RAW_DIR": [args.raw_illu_dir],
                        "ILLUMINA_RAW_F_READS": [args.raw_illu_reads_1],
                        "ILLUMINA_RAW_R_READS": [args.raw_illu_reads_2],
-                       "PACBIO_SRA": [args.ont_sra],
-                       "PACBIO_RAW_DIR": [args.raw_ont_dir],
-                       "PACBIO_RAW_READS": [args.raw_ont_reads],
+                       "PACBIO_SRA": [args.pacbio_sra],
+                       "PACBIO_RAW_DIR": [args.raw_pacbio_dir],
+                       "PACBIO_RAW_READS": [args.raw_pacbio_reads],
                        "SPECIES_ID": [args.species_id],
                        "ORGANISM_KINGDOM": [args.organism_kingdom],
                        "ORGANISM_KARYOTE": [args.organism_karyote],
@@ -2497,18 +2564,43 @@ if __name__ == "__main__":
         _, RAM_GB = get_resource_values(PERCENT_RESOURCES)
     elif pd.notna(PERCENT_RESOURCES) and pd.notna(RAM_GB) and pd.isna(CPU_THREADS):
         CPU_THREADS, _ = get_resource_values(PERCENT_RESOURCES)
-
     results_df = pd.DataFrame()
     for index, row in input_csv_df.iterrows():
-        if pd.isna(row["ONT_SRA"]) and pd.isna(row["ILLUMINA_SRA"]) and pd.isna(row["PACBIO_SRA"]) and pd.isna(row["EST_SIZE"]) and pd.notna(row["REF_SEQ_GCA"]):
-            final_assembly_path, input_csv_df = process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB)
+        if pd.isna(row["ONT_SRA"]) and pd.isna(row["ILLUMINA_SRA"]) and pd.isna(row["PACBIO_SRA"]) and pd.isna(row["EST_SIZE"]):
+            if pd.notna(row["REF_SEQ_GCA"]):
+                log_print(f"Running Assembly QC Analysis on {row['REF_SEQ_GCA']}...")
+                cwd = os.getcwd()
+                EGAP_test_dir = os.path.join(cwd, "EGAP_Test_Data")
+                os.makedirs(EGAP_test_dir, exist_ok=True)
+                EGAP_test_data_dir = os.path.join(cwd, row["SPECIES_ID"])
+                os.makedirs(EGAP_test_data_dir, exist_ok=True)
+                ILLUMINA_RAW_F_READS, ILLUMINA_RAW_R_READS, ONT_RAW_READS, PACBIO_RAW_READS, REF_SEQ, EGAP_test_data_dir = download_test_data(row["SPECIES_ID"], row["ILLUMINA_SRA"], row["ONT_SRA"], row["PACBIO_SRA"], row["REF_SEQ_GCA"])
+                row["REF_SEQ"] = REF_SEQ
+                final_assembly_path, input_csv_df = process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB)
+            elif pd.notna(row["REF_SEQ"]):
+                log_print(f"Running Assembly QC Analysis on {row['REF_SEQ']}...")
+                cwd = os.path.dirname(row["REF_SEQ"])
+                EGAP_test_data_dir = os.path.join(cwd, row["SPECIES_ID"])
+                os.makedirs(EGAP_test_data_dir, exist_ok=True)
+                initialize_logging_environment(EGAP_test_data_dir)
+                final_assembly_path, input_csv_df = process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB)
+            elif pd.notna(row["REF_SEQ_GCA"]):
+                cwd = os.path.dirname(row["REF_SEQ"])
+                EGAP_test_data_dir = os.path.join(cwd, row["SPECIES_ID"])
+                row["REF_SEQ"] = find_file(f"{row['REF_SEQ_GCA']}.fasta", EGAP_test_data_dir)
+                if pd.isna(row["REF_SEQ"]):
+                    _, _, _, _, row["REF_SEQ"], EGAP_test_data_dir = download_test_data(row["SPECIES_ID"], row["ILLUMINA_SRA"], row["ONT_SRA"], row["PACBIO_SRA"], row["REF_SEQ_GCA"])
+                log_print(f"Running Assembly QC Analysis on {row['REF_SEQ']}...")
+                os.makedirs(EGAP_test_data_dir, exist_ok=True)
+                initialize_logging_environment(EGAP_test_data_dir)
+                final_assembly_path, input_csv_df = process_final_assembly(row, results_df, input_csv_df, CPU_THREADS, RAM_GB)                
         else:
             final_assembly_path, input_csv_df = egap_sample(row, results_df, input_csv_df, INPUT_CSV, CPU_THREADS, RAM_GB)
     
-    if INPUT_CSV is not None:
+    if pd.notna(INPUT_CSV):
         final_csv_filename = INPUT_CSV.replace(".csv", "_final_assembly_stats.csv")
     else:
-        final_csv_filename = input_csv_df.iloc[1]["FINAL_ASSEMBLY"].replace(".fasta", "_stats.csv")
+        final_csv_filename = input_csv_df.iloc[0]["FINAL_ASSEMBLY"].replace(".fasta", "_stats.csv")
     
     # Fill in any blanks in the input_csv_df with the string "None" and then save as CSV file
     input_csv_df.replace("", "None", inplace = True)
