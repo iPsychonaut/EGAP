@@ -1,353 +1,606 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl=2
+//
+// EGAP Version
+//
+def version = "3.0.0a"
 
-// Check if default input_csv exists, set to null if not. With CLI override capability
-params.no_file = params.no_file ?: "$projectDir/assets/NO_FILE" \\ TODO: in processing allow for no_file to occupy input_csv if it is not provided or and _reads paramter not provided or reference_sequence if it is not provided
-params.input_csv = params.input_csv ?: "${baseDir}/resources/EGAP_test.csv"
-params.input_csv = file(params.input_csv).exists() ? params.input_csv : null
+//
+// Define parameters
+//
+params.no_file = "$projectDir/assets/NO_FILE"
+params.input_csv = "/mnt/d/EGAP_Nextflow/EGAP_test.csv"
+params.output_dir = "/mnt/d/TESTING_SPACE/nextflow_test"
+params.cpu_threads = 12
+params.ram_gb = 40
 
-// Input parameters with CLI override capability
-params.ont_sra = null
-params.raw_ont_dir = null
-params.raw_ont_reads = null
-params.illu_sra = null
-params.raw_illu_dir = null
-params.raw_illu_reads_1 = null
-params.raw_illu_reads_2 = null
-params.pacbio_sra = null
-params.raw_pacbio_dir = null
-params.raw_pacbio_reads = null
-params.species_id = null
-params.organism_kingdom = null
-params.organism_karyote = null
-params.compleasm_1 = null
-params.compleasm_2 = null
-params.estimated_genome_size = null
-params.reference_sequence = null
-params.reference_sequence_gca = null
-params.percent_resources = 1.0
-params.cpu_threads = null
-params.ram_gb = null
-
-// Global process resource defaults
-process {
-    cpus = params.cpu_threads ?: 1
-    memory = params.ram_gb ? "${params.ram_gb} GB" : "4 GB"
-    container = "${workflow.projectDir}/bin/entheome.sif"
-}
-
+//
+// Print Banner & Parameters
+//
 log.info("""
-.---.________\\=/________.---. 
-|[_]|--------/=\\--------|[_]|   .---------.  .------.    .------.    .------.
-`---'~~~~~~~(===)~~~~~~~`---'  /|         |//        \\ //        \\ //        \\
- ||| .--     \\=/    ,--. |||  | |  .------'|   .-----/||   .--.   .|   .--.   .
- ||| |-      /=\\    |  _ |||  | |  |     | |   |----' ||   | /|   ||   | /|   |
- ||| `--    (===)   `--' |||  | |  `----.| |   |      ||   +--+   ||   +--+   |
- |||         \\=/         |||  | |       || |   | .----||          ||          |  
- |||         /=\\         |||  | |  .----'| |   |/|    ||   +--+   ||   +------'
- |||        (===)        |||  | |  |     | |   |/`-.  ||   | ||   ||   |-----'
- |||  __     \\=/    ,__. |||  | |  `------.|   `---'  ||   | ||   ||   |
- ||| /__\\    /=\\    |__| |||  \\ |         |`.        /'|   |\\||   ||   |
- ||| |  |   (===)   |    |||    `---------'  `------'  `---'  `---'`---'
-.---._____[:::::::]_____.---.  ╔═══════════════════════════════════════════╗
-|[_]|------|:::::|------|[_]|  ║     Entheome Genome Assembly Pipeline     ║
-`---'~~~~~~|:::::|~~~~~~`---'  ╚═══════════════════════════════════════════╝
+\033[91m.---.\033[92m________\\\033[38;5;208m=\033[96m/\033[92m________\033[91m.---.\033[0m 
+\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|\033[94m--------\033[96m/\033[91m=\033[92m\\\033[94m--------\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|   \033[94m.\033[96m---------.  \033[94m.\033[96m------.    \033[94m.\033[96m------.    \033[94m.\033[96m-------.\033[0m
+\033[91m`---'\033[96m~~~~~~~(\033[38;5;208m===\033[92m)\033[96m~~~~~~~\033[91m`---'  \033[94m/\033[96m|         |\033[94m/\033[96m/        \\ \033[94m/\033[96m/        \\ \033[94m/\033[96m/         \\\033[0m
+ \033[92m|\033[94m|\033[96m| \033[92m.--     \033[96m\\\033[91m=\033[92m/    \033[92m,--. \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  .------\033[94m'\033[96m|   .------\033[94m'\033[96m|   .--\033[94m.   \033[96m. |   .--\033[94m.\033[96m   .\033[0m
+ \033[92m|\033[94m|\033[96m| \033[94m|-      \033[92m/\033[38;5;208m=\033[96m\\    \033[94m|  _ \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  |\033[94m----"| \033[96m|   |\033[94m----"| \033[96m|   |\033[94m-'\033[96m|   | |   |\033[94m-'\033[96m|   |\033[0m
+ \033[92m|\033[94m|\033[96m| \033[96m`--    \033[92m(\033[91m===\033[96m)   \033[96m`--' \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  `----.\033[94m|\033[96m |   |     \033[94m| \033[96m|   +--+   | |   +--+   |\033[0m
+ \033[92m|\033[94m|\033[96m|         \033[92m\\\033[38;5;208m=\033[96m/         \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|       |\033[94m| \033[96m|   | \033[94m.\033[96m----.|          | |          |\033[0m
+ \033[92m|\033[94m|\033[96m|         \033[96m/\033[91m=\033[92m\\         \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  .----'\033[94m| \033[96m|   |\033[94m"\033[96m|    ||   +--+   | |   +------'\033[0m
+ \033[92m|\033[94m|\033[96m|        \033[96m(\033[38;5;208m===\033[92m)        \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  |\033[94m---" | \033[96m|   |\033[94m"\033[96m`-.  ||   |\033[94m| \033[96m|   | |   |\033[94m-----"\033[0m
+ \033[92m|\033[94m|\033[96m|  \033[96m__     \033[96m\\\033[91m=\033[92m/    \033[96m,__. \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  `------.|   `---'  ||   |\033[94m| \033[96m|   | |   |\033[0m
+ \033[92m|\033[94m|\033[96m| \033[94m/__\\    \033[92m/\033[38;5;208m=\033[96m\\    \033[94m|__| \033[96m|\033[94m|\033[92m|  \033[94m`.\033[96m|         |`.        \033[96m/\033[94m.\033[96m|   |\033[94m| \033[96m|   |\033[94m.\033[96m|   |\033[0m
+ \033[92m|\033[94m|\033[96m| \033[92m|  |   \033[92m(\033[91m===\033[96m)   \033[92m|    \033[96m|\033[94m|\033[92m|    \033[96m`---------'  `------'  `---' \033[94m`\033[96m'---' `---'\033[0m
+\033[91m.---.\033[96m_____\033[92m[:\033[94m:\033[96m::::\033[94m:\033[92m]\033[96m_____\033[91m.---.\033[92m    \033[92m╔═══════════════════════════════════════════╗\033[0m
+\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|\033[94m------\033[92m|:\033[94m:\033[96m::\033[94m:\033[92m|\033[94m------\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|    \033[92m║     \033[94mEnthe\033[96mome Ge\033[97mnome Assemb\033[96mly Pip\033[94meline     \033[92m║\033[0m
+\033[91m`---'\033[92m~~~~~~\033[92m|::\033[94m:\033[96m:\033[94m:\033[92m|~~~~~~\033[91m`---'    \033[92m╚═══════════════════════════════════════════╝\033[0m
 
-              Curated & Maintained by Ian M Bollinger               
-                   (ian.bollinger@entheome.org)                     
+                    Curated & Maintained by Ian M Bollinger
+                         (\033[94mian.bollinger@entheome.org)\033[0m
 
-                          draft_assembly.nf
+                              \033[92mdraft_assembly.nf\033[0m
+                                version ${version}
                                   
-FLOWCHART -> 
+ Input-Setup \033[94m-\033[92m>\033[0m Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess""")
+sleep(1500)
+log.info("""
+\033[91m================================================================================\033[0m
 
-===============================================================================
+    \033[92minput-setup settings
+        \033[94mstarted at                       \033[0m: ${workflow.start}
+        \033[94mconfig  files                    \033[0m: ${workflow.configFiles}
+        \033[94mcontainer                        \033[0m: ${workflow.containerEngine}:${workflow.container}
+        \033[94mRAM GB                           \033[0m: ${params.ram_gb}
+        \033[94mCPU threads                      \033[0m: ${params.cpu_threads}
+        \033[94minput csv                        \033[0m: ${params.input_csv}
+        \033[94moutput to                        \033[0m: ${params.output_dir}
 
-    input from   : ${params.base_folder}
-    output to    : ${params.output_dir}
-    ----------------------------------------------------------------
-    run as       : ${workflow.commandLine}
-    started at   : ${workflow.start}
-    config files : ${workflow.configFiles}
-    container    : ${workflow.containerEngine}:${workflow.container}
+    \033[96m-----------------------------------------------------------------------\033[0m""")
+sleep(250)
+log.info("""
+    \033[92mtrimmomatic settings
+        \033[94mmode                             \033[0m: -PE
+        \033[94mphred version                    \033[0m: -phred33
+        \033[94milluminaclip adapter             \033[0m: /opt/conda/envs/EGAP_env/share/trimmomatic-0.39-2/adapters/TruSeq3-PE.fa
+        \033[94mfastaWithAdaptersEtc             \033[0m: 2
+        \033[94mseed mismatches                  \033[0m: 30
+        \033[94mpalindrome clip threshold        \033[0m: 10
+        \033[94msimple clip threshold            \033[0m: 11
+        \033[94mHEADCROP                         \033[0m: 10
+        \033[94mCROP                             \033[0m: 145
+        \033[94mSLIDINGWINDOW                    \033[0m: 50:25
+        \033[94mMINLEN                           \033[0m: 125
+        
+    \033[92mbbduk settings
+        \033[94mktrim                            \033[0m: -r
+        \033[94mk                                \033[0m: 23
+        \033[94mmink                             \033[0m: 11
+        \033[94mhdist                            \033[0m: 1
+        \033[94mtrimpairsevenly                  \033[0m: -tpe
+        \033[94mtrimbyoverlap                    \033[0m: -tbo
+        \033[94mqtrim                            \033[0m: -rl
+        \033[94mtrimq                            \033[0m: 20
 
-===============================================================================
+    \033[92mclumpify settings
+        \033[94mremove duplicate reads           \033[0m: -dedupe
+
+    \033[96m-----------------------------------------------------------------------\033[0m""")
+sleep(250)
+log.info("""
+    \033[92mfiltlong settings
+        \033[94mmin_length                       \033[0m: 1000
+        \033[94mmin_mean_q                       \033[0m: 8
+        \033[94mkeep_percent                     \033[0m: 90 
+        \033[94mcoverage                         \033[0m: 75
+        \033[94mtarget_bases                     \033[0m: estimated size (bp) * 75 (coverage)
+        
+    \033[92mratatosk settings
+        \033[94mgzip output                      \033[0m: -G
+        \033[94mverbose output                   \033[0m: -v
+
+    \033[96m-----------------------------------------------------------------------\033[0m""")
+sleep(250)
+log.info("""
+    \033[92mmasurca settings
+        \033[94mconfiguration file sections      \033[0m: DATA, PARAMETERS
+        \033[94mgraph kmer size                  \033[0m: auto
+        \033[94muse linking mates                \033[0m: (0 if Hybrid assembly, else 1)
+        \033[94mclose gaps                       \033[0m: (0 if Hybrid assembly, else 1)
+        \033[94mmega reads one pass              \033[0m: 0
+        \033[94mlimit jump coverage              \033[0m: 300
+        \033[94mca parameters                    \033[0m: cgwErrorRate=0.15
+        \033[94mjellyfish hash size              \033[0m: based on the estimated size of the genome provided
+        \033[94msoap assembly                    \033[0m: 0 (disabled to force CABOG assembly)
+        \033[94mflye assembly                    \033[0m: 0 (disabled to force CABOG assembly)
+                                    
+    \033[92mspades settings
+        \033[94mhigh-cov. isolate & multi-cell   \033[0m: --isolate
+        \033[94mcoverage cutoff                  \033[0m: auto
+
+    \033[92mflye settings
+        \033[94mestimated genome size            \033[0m: est_size
+        \033[94mnumber of polishing iterations   \033[0m: 3
+        \033[94mcollapse alternative haplotypes  \033[0m: --keep-haplotypes
+        
+    \033[92mhifasm settings
+        \033[0mdefault settings
+
+    \033[96m-----------------------------------------------------------------------\033[0m""")
+sleep(250)
+log.info("""
+    \033[92mracon settings 
+        \033[0mdefault settings
+
+    \033[92mpilon settings 
+        \033[94mchange file generation           \033[0m: -changes
+        \033[94mvcf file generation              \033[0m: -vcf
+        \033[94mtracks file generation           \033[0m: -tracks
+        \033[94mlargest chunksize limit          \033[0m: str(5000000)
+        \033[94mfix list                         \033[0m: indels, local, snps
+
+    \033[96m-----------------------------------------------------------------------\033[0m""")
+sleep(250)
+log.info("""
+    \033[92mragtag settings 
+        \033[0mscaffold
+           \033[94mconcatenate unplaced          \033[0m: -C
+           \033[94madd suffix to unplaced        \033[0m: -u
+        \033[0mcorrect
+           \033[94madd suffix to unaltered       \033[0m: -u
+        \033[0mpatch
+           \033[94madd suffix to unplaced        \033[0m: -u
+        
+    \033[92mtgs-gapcloser settings
+        \033[94mdo not error correct             \033[0m: -ne
+            
+    \033[92mabyss-sealer settings
+        \033[94mpseudoreads length used          \033[0m: 400
+        \033[94mbloom filter size                \033[0m: 500M
+
+    \033[96m-----------------------------------------------------------------------\033[0m""")
+sleep(250)
+log.info("""
+    \033[92mfastqc settings
+       \033[0mdefault settings
+    
+    \033[92mnanoplot settings
+       \033[94mbivariate plots                   \033[0m: kde, dot
+       \033[94mshow logarithmic lengths scaling  \033[0m: --loglength
+       \033[94mN50 mark in read length histogram \033[0m: --N50
+       \033[94mlog messages to terminal          \033[0m: --verbose
+
+    \033[96m-----------------------------------------------------------------------\033[0m""")
+sleep(250)
+log.info("""
+    \033[92mbusco settings
+       \033[94mmode                              \033[0m: genome
+       \033[94mforce overwrite                   \033[0m: -f
+    
+    \033[0m*\033[92mcompleasm settings
+       \033[0mdefault settings
+    
+    \033[92mquast settings
+       \033[0mdefault settings
+
+    \033[0m*: Currently disabled since version 3.0.0
+
+\033[91m================================================================================\033[0m
 """)
 
-// Process to handle input validation and resource calculation
-process setup_inputs {
-    publishDir "${params.output_dir}/inputs", mode: 'copy'
-
+//
+// Processes
+//
+// Preprocess phase
+process preprocess_refseq {
+    tag "Preprocess Reference Sequence"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    maxForks 1
+        
     input:
-    path input_csv from params.input_csv ? Channel.fromPath(params.input_csv, checkIfExists: false) : Channel.fromPath(params.no_file)
+    val sample_id
 
     output:
-    path "processed_inputs.csv" into input_ch
-    val "${file('cpu.txt').text.trim()}" into cpu_ch
-    val "${file('ram.txt').text.trim()}" into ram_ch
-
+    val true, emit: refseq_preprocess_done
+    
     script:
     """
-    python3 ${baseDir}/process_inputs.py \\
-        "${params.input_csv}" \\
-        '${params}' \\
-        ${params.percent_resources} \\
-        "${params.cpu_threads ?: 'None'}" \\
-        "${params.ram_gb ?: 'None'}" \\
-        ${task.cpus} \\
-        ${task.memory.toGiga()}
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+        
+    echo "DEBUG: sample_id=${sample_id}"
+    echo "DEBUG: input_csv=${params.input_csv}"
+    echo "DEBUG: output_dir=${params.output_dir}"
+    echo "DEBUG: cpu_threads=${params.cpu_threads}"
+    echo "DEBUG: ram_gb=${params.ram_gb}"
+    
+    python3 "${workflow.projectDir}/bin/preprocess_refseq.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
+
 
 process preprocess_illumina {
-    publishDir "${params.output_dir}/preprocess_illumina", mode: 'copy'
-
+    tag "Preprocess Illumina Raw Reads"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    maxForks 1
+        
     input:
-    tuple val(sample), path(csv) from illumina_samples_ch
+    val sample_id
+    val refseq_preprocess_done
 
     output:
-    tuple val(sample), path(csv), path("${sample.SPECIES_ID}_*_dedup.fastq.gz") optional true into illumina_preprocessed_ch
-
+    val true, emit: illumina_preprocess_done
+    
     script:
     """
-    python3 ${baseDir}/preprocess_illumina.py \\
-        "${sample.ILLUMINA_RAW_F_READS}" \\
-        "${sample.ILLUMINA_RAW_R_READS}" \\
-        "${sample.SPECIES_ID}" \\
-        "${sample.RAW_ILLU_DIR}" \\
-        "${sample.ILLU_SRA}" \\
-        ${task.cpus}
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+        
+    echo "DEBUG: sample_id=${sample_id}"
+    echo "DEBUG: input_csv=${params.input_csv}"
+    echo "DEBUG: output_dir=${params.output_dir}"
+    echo "DEBUG: cpu_threads=${params.cpu_threads}"
+    echo "DEBUG: ram_gb=${params.ram_gb}"
+    
+    python3 "${workflow.projectDir}/bin/preprocess_illumina.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
+
 
 process preprocess_ont {
-    publishDir "${params.output_dir}/preprocess_ont", mode: 'copy'
-
+    tag "Preprocess ONT Raw Reads"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    maxForks 1
+    
     input:
-    tuple val(sample), path(csv) from ont_samples_ch
-    tuple val(illumina_sample), path(illumina_csv), path(illumina_files) from illumina_preprocessed_ch.ifEmpty([null, null, []])
-
-    output:
-    tuple val(sample), path(csv), path(illumina_files), path("${sample.SPECIES_ID}_ont_corrected.fastq.gz") optional true into ont_preprocessed_ch
-
-    script:
-    """
-    python3 ${baseDir}/preprocess_ont.py \\
-        "${sample.ONT_RAW_READS}" \\
-        "${sample.EST_SIZE}" \\
-        "${sample.SPECIES_ID}" \\
-        "${sample.RAW_ONT_DIR}" \\
-        "${sample.ONT_SRA}" \\
-        "${illumina_files ? illumina_files[0] : 'None'}" \\
-        "${illumina_files ? illumina_files[1] : 'None'}" \\
-        ${task.cpus}
-    """
-}
-
-process preprocess_pacbio {
-    publishDir "${params.output_dir}/preprocess_pacbio", mode: 'copy'
-
-    input:
-    tuple val(sample), path(csv) from pacbio_samples_ch
-
-    output:
-    tuple val(sample), path(csv), path([]), path("${sample.SPECIES_ID}_pacbio_filtered.fastq.gz") optional true into pacbio_preprocessed_ch
-
-    script:
-    """
-    python3 ${baseDir}/preprocess_pacbio.py \\
-        "${sample.PACBIO_RAW_READS}" \\
-        "${sample.EST_SIZE}" \\
-        "${sample.SPECIES_ID}" \\
-        "${sample.RAW_PACBIO_DIR}" \\
-        "${sample.PACBIO_SRA}" \\
-        ${task.cpus}
-    """
-}
-
-process select_long_reads {
-    publishDir "${params.output_dir}/preprocess_long_reads", mode: 'copy'
-
-    input:
-    tuple val(sample), path(csv), path(illumina_files), path(ont_file) from ont_preprocessed_ch.ifEmpty([null, null, [], "None"])
-    tuple val(sample_pacbio), path(csv_pacbio), path(illumina_files_pacbio), path(pacbio_file) from pacbio_preprocessed_ch.ifEmpty([null, null, [], "None"])
+    val sample_id
+    val illumina_preprocess_done
     
     output:
-    tuple val(sample), path(csv), path(illumina_files), path("highest_qual_long_reads.fastq.gz") optional true into preprocessed_ch
-
-    when:
-    ont_file != "None" || pacbio_file != "None"
+    val true, emit: ont_preprocess_done
 
     script:
     """
-    python3 ${baseDir}/select_long_reads.py \\
-        "${ont_file}" \\
-        "${pacbio_file}" \\
-        "${sample ? sample.SPECIES_ID : sample_pacbio.SPECIES_ID}"
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    
+    echo "DEBUG: sample_id=${sample_id}"
+    echo "DEBUG: input_csv=${params.input_csv}"
+    echo "DEBUG: output_dir=${params.output_dir}"
+    echo "DEBUG: cpu_threads=${params.cpu_threads}"
+    echo "DEBUG: ram_gb=${params.ram_gb}"
+    
+    python3 "${workflow.projectDir}/bin/preprocess_ont.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}"  "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
-process assemble_masurca {
-    publishDir "${params.output_dir}/assembly_masurca", mode: 'copy'
 
+process preprocess_pacbio {
+    tag "Preprocess PacBio Raw Reads"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    maxForks 1
+    
     input:
-    tuple val(sample), path(csv), path(illumina_files), path(long_reads) from preprocessed_ch
-    val ram_gb from setup_inputs.out.ram_ch
+    val sample_id
+    val ont_preprocess_done
+        
+    output:
+    val true, emit: pacbio_preprocess_done
+
+    script:
+    """
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    
+    echo "DEBUG: sample_id=${sample_id}"
+    echo "DEBUG: input_csv=${params.input_csv}"
+    echo "DEBUG: output_dir=${params.output_dir}"
+    echo "DEBUG: cpu_threads=${params.cpu_threads}"
+    echo "DEBUG: ram_gb=${params.ram_gb}"
+    
+    python3 "${workflow.projectDir}/bin/preprocess_pacbio.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+    """
+}
+
+
+// Assembly phase
+process masurca_assemble {
+    tag "MaSuRCA Assembly"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    maxForks 1
+    
+    input:
+    val sample_id
+    val refseq_preprocess_done
+    val illumina_preprocess_done
+    val ont_preprocess_done
+    val pacbio_preprocess_done
 
     output:
-    tuple val(sample), path(csv), path("${sample.SPECIES_ID}_masurca.fasta") optional true into masurca_ch
-
-    when:
-    illumina_files.size() > 0  // Requires Illumina reads
+    val true, emit: masurca_assembly_done
 
     script:
     """
-    python3 ${baseDir}/assemble_masurca.py \\
-        "${illumina_files[0]}" \\
-        "${illumina_files[1]}" \\
-        "${long_reads}" \\
-        "${sample.SPECIES_ID}" \\
-        "${sample.EST_SIZE}" \\
-        "${sample.REF_SEQ}" \\
-        ${task.cpus} \\
-        ${ram_gb}
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    export MPLCONFIGDIR=/tmp/matplotlib-cache
+    python3 "${workflow.projectDir}/bin/assemble_masurca.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
-process assemble_spades {
-    publishDir "${params.output_dir}/assembly_spades", mode: 'copy'
 
+process spades_assemble {
+    tag "SPAdes Assembly"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    maxForks 1
+    
     input:
-    tuple val(sample), path(csv), path(illumina_files), path(long_reads) from preprocessed_ch
-    val ram_gb from setup_inputs.out.ram_ch
+    val sample_id
+    val masurca_assembly_done
 
     output:
-    tuple val(sample), path(csv), path("${sample.SPECIES_ID}_spades.fasta") optional true into spades_ch
-
-    when:
-    illumina_files.size() > 0  // Requires Illumina reads
+    val true, emit: spades_assembly_done
 
     script:
     """
-    python3 ${baseDir}/assemble_spades.py \\
-        "${illumina_files[0]}" \\
-        "${illumina_files[1]}" \\
-        "${long_reads}" \\
-        "${sample.SPECIES_ID}" \\
-        "${sample.REF_SEQ}" \\
-        ${task.cpus} \\
-        ${ram_gb}
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    export MPLCONFIGDIR=/tmp/matplotlib-cache
+    python3 "${workflow.projectDir}/bin/assemble_spades.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
-process assemble_flye {
-    publishDir "${params.output_dir}/assembly_flye", mode: 'copy'
 
+process flye_assemble {
+    tag "Flye Assembly"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    maxForks 1
+    
     input:
-    tuple val(sample), path(csv), path(illumina_files), path(long_reads) from preprocessed_ch
+    val sample_id
+    val spades_assembly_done
 
     output:
-    tuple val(sample), path(csv), path("${sample.SPECIES_ID}_flye.fasta") optional true into flye_ch
-
-    when:
-    long_reads != "None"  // Requires long reads
+    val true, emit: flye_assembly_done
 
     script:
     """
-    python3 ${baseDir}/assemble_flye.py \\
-        "${long_reads}" \\
-        "${sample.SPECIES_ID}" \\
-        "${sample.EST_SIZE}" \\
-        ${task.cpus}
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    export MPLCONFIGDIR=/tmp/matplotlib-cache
+    python3 "${workflow.projectDir}/bin/assemble_flye.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
-process assemble_hifiasm {
-    publishDir "${params.output_dir}/assembly_hifiasm", mode: 'copy'
 
+process hifiasm_assemble {
+    tag "HiFiasm Assembly"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    maxForks 1
+    
     input:
-    tuple val(sample), path(csv), path(illumina_files), path(long_reads) from preprocessed_ch
+    val sample_id
+    val flye_assembly_done
 
     output:
-    tuple val(sample), path(csv), path("${sample.SPECIES_ID}_hifiasm.fasta") optional true into hifiasm_ch
-
-    when:
-    long_reads != "None" && sample.PACBIO_RAW_READS != "None"  // Requires PacBio reads
+    val true, emit: hifiasm_assembly_done
 
     script:
     """
-    python3 ${baseDir}/assemble_hifiasm.py \\
-        "${long_reads}" \\
-        "${sample.SPECIES_ID}" \\
-        ${task.cpus}
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    export MPLCONFIGDIR=/tmp/matplotlib-cache
+    python3 "${workflow.projectDir}/bin/assemble_hifiasm.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
+
 
 process compare_assemblies {
-    publishDir "${params.output_dir}/assembly_comparison", mode: 'copy'
-
+    tag "Compare Assemblies"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    cpus params.cpu_threads
+    memory "${params.ram_gb} GB"
+    
     input:
-    tuple val(sample), path(csv), path(illumina_files), path(long_reads) from preprocessed_ch
-    tuple val(masurca_sample), path(masurca_csv), path(masurca_assembly) from masurca_ch.ifEmpty([null, null, "None"])
-    tuple val(spades_sample), path(spades_csv), path(spades_assembly) from spades_ch.ifEmpty([null, null, "None"])
-    tuple val(flye_sample), path(flye_csv), path(flye_assembly) from flye_ch.ifEmpty([null, null, "None"])
-    tuple val(hifiasm_sample), path(hifiasm_csv), path(hifiasm_assembly) from hifiasm_ch.ifEmpty([null, null, "None"])
+    val sample_id
+    val hifiasm_assembly_done
 
     output:
-    tuple val(sample), path(csv), path("${sample.SPECIES_ID}_best_assembly.fasta") into best_assembly_ch
+    val true, emit: compare_assembly_done
 
     script:
     """
-    python3 ${baseDir}/compare_assemblies.py \\
-        "${masurca_assembly}" \\
-        "${spades_assembly}" \\
-        "${flye_assembly}" \\
-        "${hifiasm_assembly}" \\
-        "${sample.SPECIES_ID}" \\
-        "${sample.COMPLEASM_1}" \\
-        "${sample.COMPLEASM_2}" \\
-        "${sample.ORGANISM_KARYOTE}" \\
-        "${sample.ORGANISM_KINGDOM}" \\
-        ${task.cpus}
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    python3 "${workflow.projectDir}/bin/compare_assemblies.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
-// Updated workflow
+
+process polish_assembly{
+    tag "Polish Assembly"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    maxForks 1
+    
+    input:
+    val sample_id
+    val compare_assembly_done
+    
+    output:
+    val true, emit: polish_done
+    
+    script:
+    """
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    python3 "${workflow.projectDir}/bin/polish_assembly.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+    """
+}
+
+
+process curate_assembly{
+    tag "Curate Assembly"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    maxForks 1
+    
+    input:
+    val sample_id
+    val polish_done
+    
+    output:
+    val true, emit: curate_done
+    
+    script:
+    """
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env
+    python3 "${workflow.projectDir}/bin/curate_assembly.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+    """
+}
+
+
+process final_assembly_qc {
+    tag "Final Assembly QC"
+    container "${workflow.projectDir}/bin/entheome.sif"
+    maxForks 1
+    
+    input:
+    val sample_id
+    val curate_done
+
+    script:
+    """
+    source /opt/conda/etc/profile.d/conda.sh 
+    conda activate EGAP_env    
+    mkdir -p .temp
+    mkdir -p .temp/fontconfig
+    export MPLCONFIGDIR=\$PWD/.temp
+    export FC_CACHEDIR=\$PWD/.temp/fontconfig
+
+    python3 "${workflow.projectDir}/bin/assembly_assessment.py" final "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"    
+    """
+}
+
+
+//
+// Main workflow
+//
 workflow {
-    setup_inputs()
-    setup_inputs.out.input_ch
-        .splitCsv(header: true, strip: true)
-        .branch {
-            illumina: it.ILLUMINA_RAW_F_READS || it.ILLUMINA_RAW_R_READS || it.RAW_ILLU_DIR || it.ILLU_SRA
-            ont: it.ONT_RAW_READS || it.RAW_ONT_DIR || it.ONT_SRA
-            pacbio: it.PACBIO_RAW_READS || it.RAW_PACBIO_DIR || it.PACBIO_SRA
+// Input-Setup
+    // Parse the input CSV into sample channels (i.e. one sample_id per row)
+    def all_samples_ch = Channel
+        .fromPath(params.input_csv)
+        .splitCsv(header: true)
+        .map { row ->
+            [
+                row.ONT_SRA             ?: "None",  // [0]
+                row.ONT_RAW_DIR         ?: "None",  // [1]
+                row.ONT_RAW_READS       ?: "None",  // [2]
+                row.ILLUMINA_SRA        ?: "None",  // [3]
+                row.ILLUMINA_RAW_DIR    ?: "None",  // [4]
+                row.ILLUMINA_RAW_F_READS?: "None",  // [5]
+                row.ILLUMINA_RAW_R_READS?: "None",  // [6]
+                row.PACBIO_SRA          ?: "None",  // [7]
+                row.PACBIO_RAW_DIR      ?: "None",  // [8]
+                row.PACBIO_RAW_READS    ?: "None",  // [9]
+                row.SAMPLE_ID,                      // [10]
+                row.SPECIES_ID,                     // [11]
+                row.ORGANISM_KINGDOM,               // [12]
+                row.ORGANISM_KARYOTE,               // [13]
+                row.BUSCO_1,                        // [14]
+                row.BUSCO_2,                        // [15]
+                row.EST_SIZE,                       // [16]
+                row.REF_SEQ_GCA         ?: "None",  // [17]
+                row.REF_SEQ             ?: "None"   // [18]
+            ]
         }
-        .set { branched_samples }
 
-    preprocess_illumina(branched_samples.illumina)
-    preprocess_ont(branched_samples.ont, preprocess_illumina.out)
-    preprocess_pacbio(branched_samples.pacbio)
+// Preprocess
+    preprocess_refseq(
+        all_samples_ch.map { it[10] } // sample_id
+    )
 
-    preprocess_ont.out
-        .mix(preprocess_pacbio.out)
-        .groupTuple(by: 0)
-        .map { it -> [it[0], it[1][0], it[2][0], it[3][0] ?: "None", it[3][1] ?: "None"] }
-        .set { combined_preprocessed_ch }
+    preprocess_illumina(
+        all_samples_ch.map { it[10] }, // sample_id
+        preprocess_refseq.out.refseq_preprocess_done
+    )
 
-    select_long_reads(combined_preprocessed_ch)
+    preprocess_ont(
+        all_samples_ch.map { it[10] }, // sample_id
+        preprocess_illumina.out.illumina_preprocess_done
+    )
 
-    assemble_masurca(select_long_reads.out, setup_inputs.out.ram_ch)
-    assemble_spades(select_long_reads.out, setup_inputs.out.ram_ch)
-    assemble_flye(select_long_reads.out)
-    assemble_hifiasm(select_long_reads.out)
+    preprocess_pacbio(
+        all_samples_ch.map { it[10] }, // sample_id
+        preprocess_ont.out.ont_preprocess_done
+    )
 
-    // Combine assembly outputs for comparison
-    select_long_reads.out
-        .join(assemble_masurca.out, remainder: true)
-        .join(assemble_spades.out, remainder: true)
-        .join(assemble_flye.out, remainder: true)
-        .join(assemble_hifiasm.out, remainder: true)
-        .map { it -> [it[0], it[1], it[2], it[3], it[5] ?: "None", it[7] ?: "None", it[9] ?: "None", it[11] ?: "None"] }
-        .set { assembly_comparison_ch }
+// Assemble
+    // MaSuRCA assemble if Illumina Only or Long Reads (ONT or PacBio) and Illumina are provided
+    masurca_assemble(
+        all_samples_ch.map { it[10] }, // sample_id
+        preprocess_refseq.out.refseq_preprocess_done,
+        preprocess_illumina.out.illumina_preprocess_done,
+        preprocess_ont.out.ont_preprocess_done,
+        preprocess_pacbio.out.pacbio_preprocess_done
+    )
 
-    compare_assemblies(assembly_comparison_ch)
+    // SPAdes assemble if Illumina Only or Long Reads (ONT or PacBio) and Illumina are provided
+    spades_assemble(
+        all_samples_ch.map { it[10] }, // sample_id
+        masurca_assemble.out.masurca_assembly_done
+    )
+    
+    // Flye assemble if Long Reads (ONT or PacBio) are provided
+    flye_assemble(
+        all_samples_ch.map { it[10] }, // sample_id
+        spades_assemble.out.spades_assembly_done
+    )
+    
+    // HiFiasm assembly if PacBio Reads are provided
+    hifiasm_assemble(
+        all_samples_ch.map { it[10] }, // sample_id
+        flye_assemble.out.flye_assembly_done
+    )
+
+// Compare
+    compare_assemblies(
+        all_samples_ch.map { it[10] }, // sample_id
+        hifiasm_assemble.out.hifiasm_assembly_done    
+    )
+
+// Polish
+    // Polishing waits for Assembly
+    polish_assembly(
+        all_samples_ch.map { it[10] }, // sample_id
+        compare_assemblies.out.compare_assembly_done
+    )
+    
+// Curate
+    // Curation waits for Polishish
+    curate_assembly(
+        all_samples_ch.map { it[10] }, // sample_id
+        polish_assembly.out.polish_done
+    )
+
+// Assess
+    // Assessment waits for Curation
+    final_assembly_qc(
+        all_samples_ch.map { it[10] }, // sample_id
+        curate_assembly.out.curate_done
+    )
 }
