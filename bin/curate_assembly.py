@@ -458,20 +458,26 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     os.chdir(curation_out_dir)
     
     # Set and validate polished assembly path
-    polished_assembly_gz = os.path.join(sample_dir, f"{sample_id}_final_polish.fasta.gz")
+    polished_assembly_gz = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta.gz")
     polished_assembly = polished_assembly_gz.replace(".gz", "")
+    print(f"DEBUG - Checking polished assembly: {polished_assembly_gz}, {polished_assembly}")
     if not os.path.exists(polished_assembly_gz) and not os.path.exists(polished_assembly):
         print(f"ERROR:\tPolished assembly not found at: {polished_assembly_gz} or {polished_assembly}")
         return None
     if os.path.exists(polished_assembly_gz) and not os.path.exists(polished_assembly):
         print(f"NOTE:\tUnzipping {polished_assembly_gz}")
-        polished_assembly = pigz_decompress(polished_assembly_gz, cpu_threads)
-        if not os.path.exists(polished_assembly):
-            print(f"ERROR:\tFailed to decompress polished assembly: {polished_assembly_gz}")
+        try:
+            polished_assembly = pigz_decompress(polished_assembly_gz, cpu_threads)
+            if not os.path.exists(polished_assembly):
+                print(f"ERROR:\tFailed to decompress polished assembly: {polished_assembly_gz}")
+                return None
+            print(f"DEBUG - Successfully decompressed: {polished_assembly}")
+        except Exception as e:
+            print(f"ERROR:\tDecompression failed for {polished_assembly_gz}: {str(e)}")
             return None
 
     # Check for and remove any existing polished assembly copy in curated_assembly
-    curated_polished_copy = os.path.join(curation_out_dir, f"{sample_id}_final_polish.fasta")
+    curated_polished_copy = os.path.join(curation_out_dir, f"{sample_id}_final_polish_assembly.fasta")
     if os.path.exists(curated_polished_copy):
         print(f"NOTE:\tRemoving existing polished assembly copy: {curated_polished_copy}")
         os.remove(curated_polished_copy)
@@ -485,6 +491,7 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
         illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq.gz")
         illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq.gz")
+        print(f"DEBUG - Checking Illumina deduplicated reads: {illu_dedup_f_reads}, {illu_dedup_r_reads}")
         if not os.path.exists(illu_dedup_f_reads) or not os.path.exists(illu_dedup_r_reads):
             print(f"ERROR:\tIllumina deduplicated reads not found: {illu_dedup_f_reads}, {illu_dedup_r_reads}")
             return None
@@ -508,6 +515,7 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # Validate and ensure long-read .gz file exists
     if (pd.notna(pacbio_raw_reads) or pd.notna(ont_raw_reads)) and highest_mean_qual_long_reads_gz:
+        print(f"DEBUG - Checking long reads: {highest_mean_qual_long_reads_gz}")
         if not os.path.exists(highest_mean_qual_long_reads_gz):
             if os.path.exists(highest_mean_qual_long_reads):
                 print(f"NOTE:\tCompressing {highest_mean_qual_long_reads} to {highest_mean_qual_long_reads_gz}")
@@ -522,6 +530,7 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # -------------------------------------------------------------------------
     # Step 1: Purge duplicates (haplotigs) if ONT or PacBio reads are present.
     # -------------------------------------------------------------------------
+    print(f"DEBUG - Starting purge duplicates for {sample_id}")
     if pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads):
         print("Purging Haplotigs using Long Reads (ONT or PacBio)...")
         dup_purged_assembly = long_reads_purge_dups(curation_out_dir,
@@ -532,24 +541,36 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                                                     pacbio_raw_reads,
                                                     highest_mean_qual_long_reads_gz,
                                                     sample_id, cpu_threads)
+        if not os.path.exists(dup_purged_assembly):
+            print(f"ERROR:\tPurge duplicates failed to produce output: {dup_purged_assembly}")
+            return None
     else:
         print("SKIP:\tPurge Duplicates; No Long Reads (ONT or PacBio) Provided.")
         dup_purged_assembly = polished_assembly
 
+    print(f"DEBUG - Purge duplicates output: {dup_purged_assembly}")
+
     # -------------------------------------------------------------------------
     # Step 2: Perform RagTag correction/scaffolding if a reference sequence is provided.
     # -------------------------------------------------------------------------
-    if pd.notna(ref_seq):
+    print(f"DEBUG - Starting RagTag correction for {sample_id}")
+    if pd.notna(ref_seq) and os.path.exists(ref_seq):
         print("Running RagTag with Reference Sequence...")
         ragtag_ref_assembly = ref_seq_ragtag(dup_purged_assembly, ref_seq, curation_out_dir,
                                              sample_id, cpu_threads, ram_gb)
+        if not os.path.exists(ragtag_ref_assembly):
+            print(f"ERROR:\tRagTag correction failed to produce output: {ragtag_ref_assembly}")
+            return None
     else:
-        print("SKIP:\tRagTag; No Reference Sequence Provided.")
+        print(f"SKIP:\tRagTag; No valid Reference Sequence Provided: {ref_seq}")
         ragtag_ref_assembly = dup_purged_assembly
+
+    print(f"DEBUG - RagTag output: {ragtag_ref_assembly}")
 
     # -------------------------------------------------------------------------
     # Step 3: Gap closing with ONT or Illumina reads (if available).
     # -------------------------------------------------------------------------
+    print(f"DEBUG - Starting gap closing for {sample_id}")
     if pd.notna(ont_raw_reads):
         print("Running TGS-GapCloser with ONT Reads...")
         curated_assembly_gz = ont_tgs_gapcloser(curation_out_dir, ragtag_ref_assembly,
@@ -564,7 +585,6 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print("SKIP:\tGap Closing; PacBio reads were used or no other option provided.")
         curated_assembly_gz = ragtag_ref_assembly
     else:
-        # If no reads for gap closing, we just keep the RagTag or purged assembly.
         print("SKIP:\tNo available read type for gap closing.")
         curated_assembly_gz = ragtag_ref_assembly
 
