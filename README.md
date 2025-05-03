@@ -114,7 +114,7 @@ bash /path/to/EGAP/bin/EGAP_setup.sh
 ```
 
 ##### Install Via Docker:
-Open a terminal in the directory where the `Dockerfile` is located.
+Open a terminal in the directory where the `Dockerfile` is located and run:
 
 ```bash
 docker build -t entheome_ecosystem .
@@ -123,7 +123,7 @@ docker build -t entheome_ecosystem .
 Run the container (adjust the path accordingly):
 
 ```bash
-docker run -it -v /path/to/data:/path/to/data entheome_ecosystem bash
+docker run -it -v /path/to/data/mnt:/path/to/data/mnt entheome_ecosystem bash
 ```
 
 Inside the Docker container, load the pre-generated EGAP environment:
@@ -133,18 +133,26 @@ source /EGAP_env/bin/activate
 ```
 
 ##### Install Via Nextflow/Singularity: 
-DESCRIPTION
+Open a terminal in the directory where the `entheome.sif.def` is located and run:
 
 ```bash
-
+sudo singularity build entheome.sif entheome.sif.def 
 ```
 
-```bash
+Edit the parameters in the nextflow.config and run:
 
+```bash
+nextflow draft_assembly.nf -with-singularity {PWD}/bin/entheome.sif
 ```
 
-```bash
+OR
 
+Load into the Singularity image, load the pre-generated EGAP environment:
+
+```bash
+singularity shell entheome.sif -B /path/to/data/mnt:/path/to/data/mnt && \
+source /opt/conda/etc/profile.d/conda.sh && \
+conda activate EGAP_env
 ```
 
 ##### Install Via Anaconda:
