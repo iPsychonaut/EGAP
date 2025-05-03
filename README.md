@@ -46,7 +46,7 @@ EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline 
    - Closes gaps with TGS-GapCloser (ONT) or Abyss-Sealer (Illumina-only).  
 
 5. **Quality Assessments & Classification**  
-   - Runs Compleasm (BUSCO) on two lineages for completeness.  
+   - Runs BUSCO/Compleasm on two lineages for completeness.  
    - Runs Quast for contiguity (N50, contig count, etc.).  
    - Classifies assemblies as **AMAZING**, **GREAT**, **OK**, or **POOR**.  
 
@@ -58,24 +58,21 @@ Optimized for fungal genomes, EGAP is adaptable to other organisms by adjusting 
 - Illumina + ONT (SRA, DIR, or RAW FASTQ)  
 - Illumina + ONT + Reference  
 - PacBio-only (SRA, DIR, or RAW FASTQ)  
-- PacBio + Reference  
-- Illumina + PacBio  
-- Illumina + PacBio + Reference  
 - Assembly-only (for QC analysis)  
 
 *Future developments:* Support for ONT-only and ONT + Reference.
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Installation](#installation)
-3. [Pipeline Flow](#pipeline-flow)
-4. [Command-Line Usage](#command-line-usage)
-5. [CSV Generation](#csv-generation)
-6. [Example Data & Instructions](#example-data--instructions)
-7. [Quality Control Output Review](#quality-control-output-review)
-8. [Future Improvements](#future-improvements)
-9. [References](#references)
+1.  [Overview](#overview)
+2.  [Installation](#installation)
+3.  [Pipeline Flow](#pipeline-flow)
+4.  [Command-Line Usage](#command-line-usage)
+5.  [CSV Generation](#csv-generation)
+6.  [Example Data & Instructions](#example-data--instructions)
+7.  [Quality Control Output Review](#quality-control-output-review)
+8.  [Future Improvements](#future-improvements)
+9.  [References](#references)
 10. [Contribution](#contribution)
 11. [License](#license)
 
@@ -103,15 +100,18 @@ The following tools are installed:
 - [TGS-GapCloser](https://github.com/BGI-Qingdao/TGS-GapCloser)
 - [ABYSS-Sealer](https://github.com/bcgsc/abyss/blob/master/Sealer/sealer.cc)
 - [QUAST](https://github.com/ablab/quast)
-- [CompleAsm](https://github.com/bioinformatics-centre/compleasm)
+- [BUSCO](https://gitlab.com/ezlab/busco)
+- [Compleasm](https://github.com/bioinformatics-centre/compleasm)
 
+#####Install Via Bash:
 The available shell script (e.g., `EGAP_setup.sh`) can install a;; dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
 
 ```bash
 bash /path/to/EGAP_setup.sh
 ```
 
-Alternatively, you can install the Entheome Ecosystem via Docker. Open a terminal in the directory where the `Dockerfile` is located.
+#####Install Via Docker:
+Open a terminal in the directory where the `Dockerfile` is located.
 
 ```bash
 docker build -t entheome_ecosystem .
@@ -129,7 +129,23 @@ Inside the Docker container, load the pre-generated EGAP environment:
 source /EGAP_env/bin/activate
 ```
 
-Anaconda installation in a dedicated environment through the Bioconda channel with the following command:
+#####Install Via Nextflow/Singularity: 
+DESCRIPTION
+
+```bash
+
+```
+
+```bash
+
+```
+
+```bash
+
+```
+
+#####Install Via Anaconda:
+In a dedicated environment through the Bioconda channel with the following command:
 
 ```bash
 conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install -y -c bioconda egap
@@ -145,79 +161,34 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
 
 ### Parameters
 - `--input_csv`, `-csv` (str): Path to CSV with sample data (default: None).
-- `--ont_sra`, `-osra` (str): ONT SRA accession (default: None).
-- `--raw_ont_dir`, `-odir` (str): Directory with raw ONT reads (default: None).
-- `--raw_ont_reads`, `-i0` (str): Combined ONT FASTQ (default: None).
-- `--illu_sra`, `-isra` (str): Illumina SRA accession (default: None).
-- `--raw_illu_dir`, `-idir` (str): Directory with raw Illumina reads (default: None).
-- `--raw_illu_reads_1`, `-i1` (str): Forward Illumina FASTQ (default: None).
-- `--raw_illu_reads_2`, `-i2` (str): Reverse Illumina FASTQ (default: None).
-- `--pacbio_sra`, `-pbsra` (str): PacBio SRA accession (default: None).
-- `--raw_pacbio_dir`, `-pbdir` (str): Directory with raw PacBio reads (default: None).
-- `--raw_pacbio_reads`, `-pb` (str): Combined PacBio FASTQ (default: None).
-- `--species_id`, `-ID` (str): Species ID (e.g., `Ps_cubensis`) (default: None).
-- `--organism_kingdom`, `-Kg` (str): Kingdom (default: None).
-- `--organism_karyote`, `-Ka` (str): Karyote (default: None).
-- `--compleasm_1`, `-c1` (str): First Compleasm lineage (default: None).
-- `--compleasm_2`, `-c2` (str): Second Compleasm lineage (default: None).
-- `--est_size`, `-es` (str): Estimated genome size (e.g., `60m`, `3.2g`) (default: None).
-- `--ref_seq_gca`, `-rgca` (str): GCA accession (default: None).
-- `--ref_seq`, `-rf` (str): Reference FASTA path (default: None).
-- `--percent_resources`, `-R` (float): Resource fraction (default: 1.0).
-- `--cpu_threads`, `-T` (int): CPU threads (default: None).
-- `--ram_gb`, `-ram` (int): RAM in GB (default: None).
+- `--output_dir`, `-o` (str): Path to the desired output directory (default: None).
+- `--cpu_threads`, `-t` (int): CPU threads (default: 1).
+- `--ram_gb`, `-r` (int): RAM in GB (default: 8).
                         
 ### Example Command:
 
+Anaconda/Docker
 ```bash
-EGAP --raw_ont_reads /path/to/ont_reads.fq.gz \ # A combined reads file of all ONT raw reads
-     --raw_illu_dir /path/to/illumina_reads/ \ # A folder containing an md5 checksum file and individual Illumina reads files
-     --species_id AB_speciesname \
-     --organism_kingdom Funga \
-     --organism_karyote Eukaryote \
-     --compleasm_1 basidiomycota \
-     --compleasm_2 agaricales \
-     --est_size 60m \
-     --percent_resources 0.8
 ```
 
-Or, providing SRA numbers (which will download the files into the current working directory):
-
+Nextflow/Singularity
 ```bash
-EGAP --ont_sra SRR######## \
-     --illu_sra SRR######## \
-     --species_id AB_speciesname \
-     --organism_kingdom Funga \
-     --organism_karyote Eukaryote \
-     --compleasm_1 basidiomycota \
-     --compleasm_2 agaricales \
-     --est_size 60m \
-     --cpu_threads 10 \ # Providing a specific number for CPUs and NOT using percent resources requires the next line
-     --ram_gb 32 # Required if NOT using percent resources
-```
-
-*Note:* Do not use multiple inputs for the same data type (e.g., do NOT use `illu_sra` and `raw_illu_dir` simultaneously).
-
-Alternatively, using a CSV file for multiple samples:
-
-```bash
-EGAP --input_csv /path/to/samples.csv
 ```
 
 ## CSV Generation
 
-To run EGAP with multiple samples, provide a CSV file containing the necessary information for each sample.
+It is necssary to provide a CSV file containing the necessary information for each sample.
 
 ### CSV Format
 
 The CSV file should have the following header and columns:
 
-| ONT_SRA       | ONT_RAW_DIR  | ONT_RAW_READS               | ILLUMINA_SRA  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | PACBIO_SRA | PACBIO_RAW_DIR | PACBIO_RAW_READS          | SPECIES_ID           | ORGANISM_KINGDOM  | ORGANISM_KARYOTE  | COMPLEASM_1    | COMPLEASM_2  | EST_SIZE  | REF_SEQ_GCA   | REF_SEQ                    |
-|---------------|--------------|-----------------------------|---------------|--------------------|-------------------------------------|-------------------------------------|------------|----------------|---------------------------|----------------------|-------------------|-------------------|----------------|--------------|-----------|---------------|----------|
-| None          | None         | None                        | SRA00000001   | None               | None                                | None                                | None       | None           | None                      | Ab_sample1           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | GCA00000001.1 | None     |
-| None          | None         | /path/to/ONT/sample1.fq.gz  | None          | None               | /path/to/Illumina/sample1_1.fq.gz   | /path/to/Illumina/sample1_2.fq.gz   | None       | None           | None                      | Ab_sample2           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 60m       | None          | None     |
-| None          | None         | None                        | None          | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample3           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | None          | None     |
-| None          | None         | None                        | SRA00000002   | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample4_sub-name  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | GCA00000002.1 | None     |
+| ONT_SRA       | ONT_RAW_DIR  | ONT_RAW_READS               | ILLUMINA_SRA  | ILLUMINA_RAW_DIR   | ILLUMINA_RAW_F_READS                | ILLUMINA_RAW_R_READS                | PACBIO_SRA | PACBIO_RAW_DIR | PACBIO_RAW_READS          | SPECIES_ID           | SAMPLE_ID            | ORGANISM_KINGDOM  | ORGANISM_KARYOTE  | BUSCO_1        | BUSCO_2      | EST_SIZE  | REF_SEQ_GCA   | REF_SEQ  |
+|---------------|--------------|-----------------------------|---------------|--------------------|-------------------------------------|-------------------------------------|------------|----------------|---------------------------|----------------------|----------------------|-------------------|-------------------|----------------|--------------|-----------|---------------|----------|
+| None          | None         | None                        | SRA00000001   | None               | None                                | None                                | None       | None           | None                      | Ab_sample1           | Ab_sample1           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | GCA00000001.1 | None     |
+| None          | None         | /path/to/ONT/sample1.fq.gz  | None          | None               | /path/to/Illumina/sample1_1.fq.gz   | /path/to/Illumina/sample1_2.fq.gz   | None       | None           | None                      | Ab_sample2           | Ab_sample2           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 60m       | None          | None     |
+| None          | None         | None                        | None          | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample3           | Ab_sample3           | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | None          | None     |
+| None          | None         | None                        | SRA00000002   | None               | None                                | None                                | None       | None           | /path/to/pacbio.fastq.gz  | Ab_sample4           | Ab_sample4_sub-name  | Funga             | Eukaryote         | basidiomycota  | agaricales   | 55m       | GCA00000002.1 | None     |
 
 ### Column Descriptions
 
@@ -231,11 +202,12 @@ The CSV file should have the following header and columns:
 - **PACBIO_SRA**: PacBio Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
 - **PACBIO_RAW_DIR**: Path to the directory containing all Raw PacBio Reads. Use `None` if specifying individual files.
 - **PACBIO_RAW_READS**: Path to the combined Raw PacBio FASTQ reads (e.g., `/path/to/PACBIO/sample1.fq.gz`).
-- **SPECIES_ID**: Species ID formatted as `<2-letters of Genus>_<full species name>-<other identifiers>` (e.g., `Ab_sample1`, optionally `Ab_sample4-sub-name`).
+- **SPECIES_ID**: Species ID formatted as `<full species name>` (e.g., `Escherichia_coli`).
+- **SAMPLE_ID**: Species ID formatted as `<full species name>-<other identifiers>` (e.g., `Escherichia_coli-Illu-SRR32496875`).
 - **ORGANISM_KINGDOM**: Kingdom of the organism (default: `None`).
 - **ORGANISM_KARYOTE**: Karyote type of the organism (default: `None`).
-- **COMPLEASM_1**: Name of the first compleasm/BUSCO database (default: `None`).
-- **COMPLEASM_2**: Name of the second compleasm/BUSCO database (default: `None`).
+- **BUSCO_1**: Name of the first compleasm/BUSCO database (default: `None`).
+- **BUSCO_2**: Name of the second compleasm/BUSCO database (default: `None`).
 - **EST_SIZE**: Estimated genome size in Mbp (e.g., `None`).
 - **REF_SEQ_GCA**: Curated Genome Assembly (GCA) Accession number (or `None`).
 - **REF_SEQ**: Path to the reference genome for assembly (or `None`).
@@ -245,17 +217,7 @@ The CSV file should have the following header and columns:
 - If you provide a value for `ILLUMINA_RAW_DIR`, set `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS` to `None`. EGAP will automatically detect and process all paired-end reads within that directory. The same applies for `ONT_RAW_DIR`.
 - Ensure that all file paths are correct and accessible.
 - The CSV file should not contain extra spaces or special characters in the headers.
-- If you just want to perform QC analysis for an already built assembly: provide the path for the assembly or GCA Accession number to download, in the `REF_SEQ` or `REF_SEQ_GCA` field respectively, provide `ORGANISM_KARYOTE`, and the two compleasm databases (`COMPLEASM_1`, `COMPLEASM_2`) to use; **DO NOT PROVIDE ESTIMATED SIZE (`EST_SIZE`)**.
-
-## Example Data & Instructions
-
-### Create the Folder Structure
-
-First, create the main processing folder with the required sub-folders. Adjust "EGAP_Processing" as needed:
-
-```bash
-mkdir -p /path/to/EGAP/EGAP_Processing/
-```
+- If you just want to perform QC analysis for an already built assembly: provide the path for the assembly or GCA Accession number to download, in the `REF_SEQ` or `REF_SEQ_GCA` field respectively, provide `ORGANISM_KARYOTE`, and the two compleasm databases (`BUSCO_1`, `BUSCO_2`) to use; **DO NOT PROVIDE ESTIMATED SIZE (`EST_SIZE`)**.
 
 ### Example CSV File
 
@@ -279,56 +241,18 @@ Example: Illumina Only data for Psilocybe cubensis B+ with reference sequence of
 If no sub-folder for sub-species is needed then place everything in the main species folder i.e.:
 - /path/to/EGAP/EGAP_Processing/Ps_semilanceata/Illumina/f_reads.fastq.gz
 
-##### Illumina-Only (with Reference Sequence) Assembly Command
-
-```bash
-EGAP --illu_sra SRR13870683 \
-     --species_id Ps_cubensis_B+ \
-     --organism_kingdom Funga \
-     --organism_karyote eukaryote \
-     --compleasm_1 agaricales \
-     --compleasm_2 basidiomycota \
-     --est_size 700m \
-     --ref_seq_gca GCF_017499595.1
-```
-
-##### ONT/Illumina Hybrid Assembly Command
-
-```bash
-EGAP --ont_sra SRR25920759 \
-     --illu_sra SRR25920760 \
-     --species_id Ps_semilanceata \
-     --organism_kingdom Funga \
-     --organism_karyote eukaryote \
-     --compleasm_1 agaricales \
-     --compleasm_2 basidiomycota \
-     --est_size 60m
-```
-
-##### PacBio-Only (no Reference Sequence) Assembly Command
-
-```bash
-EGAP --pacbio_sra SRP093873 \
-     --species_id Pa_papilionaceus \
-     --organism_kingdom Funga \
-     --organism_karyote eukaryote \
-     --compleasm_1 agaricales \
-     --compleasm_2 basidiomycota \
-     --est_size 60m
-```
-
 ## Quality Control Output Review
 
 EGAP generates final assemblies along with:
 - **QUAST** metrics (contig count, N50, L50, GC%, coverage)
-- **Compleasm (BUSCO)** plots showing Single, Duplicated, Fragmented & Missing scores.
+- **BUSCO/Compleasm** plots showing Single, Duplicated, Fragmented & Missing scores.
 - Final assembly classification: **AMAZING, GREAT, OK,** or **POOR**
 
 ### Statistics Thresholds
 
 The current thresholds for each metric classification (subject to change) are:
-- **first_compleasm_c** = {"AMAZING": =>98.5, "GREAT": =>90.0, "OK": =>75.0, "POOR": <75.0}
-- **second_compleasm_c** = {"AMAZING": =>98.5, "GREAT": =>90.0, "OK": =>75.0, "POOR": <75.0}
+- **first_busco_c** = {"AMAZING": =>98.5, "GREAT": =>90.0, "OK": =>75.0, "POOR": <75.0}
+- **second_busco_c** = {"AMAZING": =>98.5, "GREAT": =>90.0, "OK": =>75.0, "POOR": <75.0}
 - **contigs_thresholds** = {"AMAZING": <100, "GREAT": <1000, "OK": <10000, "POOR": >10000}
 - **n50_thresholds** = {"AMAZING": >100000, "GREAT": >10000, "OK": >1000, "POOR": <1000}
 - **l50_thresholds** = {"AMAZING": #, "GREAT": #, "OK": #, "POOR": #} (still determining best metrics)
