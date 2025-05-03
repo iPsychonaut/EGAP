@@ -103,14 +103,14 @@ The following tools are installed:
 - [BUSCO](https://gitlab.com/ezlab/busco)
 - [Compleasm](https://github.com/bioinformatics-centre/compleasm)
 
-#####Install Via Bash:
+##### Install Via Bash:
 The available shell script (e.g., `EGAP_setup.sh`) can install a;; dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
 
 ```bash
-bash /path/to/EGAP_setup.sh
+bash /path/to/EGAP/bin/EGAP_setup.sh
 ```
 
-#####Install Via Docker:
+##### Install Via Docker:
 Open a terminal in the directory where the `Dockerfile` is located.
 
 ```bash
@@ -129,7 +129,7 @@ Inside the Docker container, load the pre-generated EGAP environment:
 source /EGAP_env/bin/activate
 ```
 
-#####Install Via Nextflow/Singularity: 
+##### Install Via Nextflow/Singularity: 
 DESCRIPTION
 
 ```bash
@@ -144,7 +144,7 @@ DESCRIPTION
 
 ```
 
-#####Install Via Anaconda:
+##### Install Via Anaconda:
 In a dedicated environment through the Bioconda channel with the following command:
 
 ```bash
