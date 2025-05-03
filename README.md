@@ -104,7 +104,7 @@ The following tools are installed:
 - [Compleasm](https://github.com/bioinformatics-centre/compleasm)
 
 ##### Install Via Bash:
-The available shell script (e.g., `EGAP_setup.sh`) can install a;; dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
+The available shell script: `EGAP_setup.sh`, can install all dependencies (Python 3.8+, Conda, and the main bioinformatics tools):
 
 ```bash
 bash /path/to/EGAP/bin/EGAP_setup.sh
