@@ -29,16 +29,16 @@ EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline 
    - Trims and removes adapters (Trimmomatic, BBDuk).  
    - Deduplicates reads (Clumpify).  
    - Filters and corrects ONT reads (Filtlong, Ratatosk).  
-   - Generates read metrics (FastQC, NanoPlot, BBMap insert-size stats).  
+   - Generates Read Metrics (FastQC, NanoPlot, BBMap insert-size stats).  
 
 2. **Assembly**  
    - MaSuRCA: Illumina-only or hybrid (ONT/PacBio).  
    - Flye: ONT-only or PacBio-only.  
    - SPAdes: Illumina-only or hybrid (ONT/PacBio).  
    - hifiasm: PacBio-only.
-   - Best Assembly Selection based on EGAP Metrics from all available assemblies.
+   - Best Assembly Selection based on Read Metrics from all available assemblies.
      - Runs BUSCO/Compleasm on two lineages for completeness.  
-     - Runs Quast for contiguity (N50, contig count, etc.). 
+     - Runs QUAST for contiguity (N50, contig count, etc.). 
 
 3. **Assembly Polishing**  
    - Polishes with Racon (2x, if ONT/PacBio) and Pilon (if Illumina).  
