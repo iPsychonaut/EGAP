@@ -231,11 +231,11 @@ The CSV file should have the following header and columns:
 `EGAP_test.csv` is included in this repository to run test examples, to run all four files takes about 24hours on a 16 thread, 64GB system.
 
 ```csv
-ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,COMPLEASM_1,COMPLEASM_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
-None,None,None,None,None,None,None,SRP093873,None,None,Pa_papilionaceus,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
-None,None,None,SRR13870683,None,None,None,None,None,None,Ps_cubensis-B+,Funga,eukaryote,basidiomycota,agaricales,60m,GCF_017499595.1,None
-SRR25920759,None,None,SRR25920760,None,None,None,None,None,None,Ps_semilanceata,Funga,eukaryote,basidiomycota,agaricales,60m,None,None
-None,None,None,None,None,None,None,None,None,None,De_subviscida,Funga,eukaryote,basidiomycota,agaricales,None,GCA_013368295.1,None
+ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SAMPLE_ID,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,BUSCO_1,BUSCO_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
+None,None,None,None,None,None,None,None,None,None,Escherichia_coli-RefSeq,Escherichia_coli,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,None,GCA_000005845.2,None
+None,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-Illu-RefSeq,Escherichia_coli,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,GCA_000005845.2,None
+SRR32405433,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-ONT-Illu,Escherichia_coli,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,None,None
+None,None,None,None,None,None,None,SRR31460895,None,None,Escherichia_coli-PacBio,Escherichia_coli,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,None,None
 ```
 
 ### Local Data
