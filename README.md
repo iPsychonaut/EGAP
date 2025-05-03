@@ -178,12 +178,8 @@ conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install 
                         
 ### Example Command:
 
-Anaconda/Docker
 ```bash
-```
-
-Nextflow/Singularity
-```bash
+EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 1 -r 8
 ```
 
 ## CSV Generation
