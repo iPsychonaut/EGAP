@@ -9,9 +9,9 @@ This script runs Hifiasm assembly with PacBio reads.
 
 @author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
 """
-import os, sys, shutil
+import os, sys
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, pigz_compress, pigz_decompress
+from utilities import run_subprocess_cmd, get_current_row_data
 from qc_assessment import qc_assessment
 
 
@@ -52,7 +52,7 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         return None
     
     if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq.gz")
+        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
 
     print(f"DEBUG - pacbio_sra - {pacbio_sra}")
     print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
@@ -60,70 +60,43 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - ref_seq - {ref_seq}")   
     print(f"DEBUG - species_id - {species_id}")
     
-    # Set long-read paths (NEW: Simplified to match original, using raw reads if preprocessed unavailable)
-    highest_mean_qual_long_reads_gz = os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq.gz")
-    highest_mean_qual_long_reads = highest_mean_qual_long_reads_gz.replace(".gz", "")
+    # Set long-read paths (ONT or PacBio), prefer prefiltered, fallback to raw
+    highest_mean_qual_long_reads = None
+    if pd.notna(pacbio_raw_reads):
+        print("DEBUG - PACBIO RAW READS EXIST!")
+        candidate = os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq")
+        highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else pacbio_raw_reads
 
-    print(f"DEBUG - highest_mean_qual_long_reads_gz - {highest_mean_qual_long_reads_gz}")
+    print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
     sample_dir = os.path.join(species_dir, sample_id)
     hifiasm_out_dir = os.path.join(sample_dir, "hifiasm_assembly")
     os.makedirs(hifiasm_out_dir, exist_ok=True)
     
     egap_hifiasm_assembly_path = os.path.join(hifiasm_out_dir, f"{sample_id}_hifiasm.fasta")
-    egap_hifiasm_assembly_path_gz = egap_hifiasm_assembly_path + ".gz"
-    
-    # Unzip long-read file if necessary (NEW: Ensure decompression of preprocessed file)
-    if pd.notna(pacbio_raw_reads) and highest_mean_qual_long_reads_gz:
-        if os.path.exists(highest_mean_qual_long_reads_gz):
-            if not os.path.exists(highest_mean_qual_long_reads):
-                print(f"NOTE:\tUnzipping {highest_mean_qual_long_reads_gz}")
-                highest_mean_qual_long_reads = pigz_decompress(highest_mean_qual_long_reads_gz, cpu_threads)
-        
-    print(f"DEBUG - highest_mean_qual_long_reads - {highest_mean_qual_long_reads}")
-
-    # HiFi Assembly of PacBio only reads
-    read_file = highest_mean_qual_long_reads
-    if os.path.exists(highest_mean_qual_long_reads_gz) and not os.path.exists(read_file):
-        print(f"NOTE:\tUnzipping {highest_mean_qual_long_reads_gz}")
-        read_file = pigz_decompress(highest_mean_qual_long_reads_gz, cpu_threads)
-    elif os.path.exists(highest_mean_qual_long_reads_gz):
-        read_file = highest_mean_qual_long_reads
-
-    # sanity check
-    if not os.path.exists(read_file):
-        raise FileNotFoundError(f"Cannot find reads for Hifiasm at {read_file}")
-    print(f"DEBUG - reads passed to Hifiasm - {read_file}")
 
     # Run Hifiasm
-    pacbio_prefix = os.path.join(
-        hifiasm_out_dir,
-        os.path.basename(pacbio_raw_reads).split(".")[0]
-    )
+    pacbio_prefix = os.path.join(hifiasm_out_dir,
+                                 os.path.basename(pacbio_raw_reads).split(".")[0])
     hifiasm_path = pacbio_prefix + ".asm"
     hifiasm_gfa  = pacbio_prefix + ".asm.bp.p_ctg.gfa"
 
     if os.path.exists(hifiasm_gfa):
         print(f"SKIP:\tHiFi Assembly already exists: {hifiasm_gfa}")
     else:
-        hifiasm_cmd = [
-            "hifiasm",
-            "-o", hifiasm_path,
-            "-t", str(cpu_threads),
-            read_file
-        ]
+        hifiasm_cmd = ["hifiasm",
+                       "-o", hifiasm_path,
+                       "-t", str(cpu_threads),
+                       highest_mean_qual_long_reads]
         _ = run_subprocess_cmd(hifiasm_cmd, shell_check=False)
 
     # Convert GFA to FASTA
     gfa_cmd = f"gfatools gfa2fa {hifiasm_gfa} > {egap_hifiasm_assembly_path}"
     _ = run_subprocess_cmd(gfa_cmd, shell_check=True)         
     
-    if os.path.exists(egap_hifiasm_assembly_path) and not os.path.exists(egap_hifiasm_assembly_path_gz):
-        egap_hifiasm_assembly_path_gz = pigz_compress(egap_hifiasm_assembly_path, cpu_threads)
+    egap_hifiasm_assembly_path, hifiasm_stats_list, _ = qc_assessment("hifiasm", input_csv, sample_id, output_dir, cpu_threads, ram_gb)        
 
-    egap_hifiasm_assembly_path_gz, hifiasm_stats_list, _ = qc_assessment("hifiasm", input_csv, sample_id, output_dir, cpu_threads, ram_gb)        
-
-    return egap_hifiasm_assembly_path_gz
+    return egap_hifiasm_assembly_path
 
 
 if __name__ == "__main__":
@@ -132,7 +105,7 @@ if __name__ == "__main__":
             "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
         
-    egap_hifiasm_assembly_path_gz = assemble_hifiasm(sys.argv[1],       # sample_id
+    egap_hifiasm_assembly_path = assemble_hifiasm(sys.argv[1],       # sample_id
                                                      sys.argv[2],       # input_csv
                                                      sys.argv[3],       # output_dir
                                                      str(sys.argv[4]),  # cpu_threads
