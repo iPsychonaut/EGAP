@@ -12,7 +12,7 @@ Handles raw directory concatenation and SRA downloads.
 """
 import sys, os, glob, shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, pigz_compress, get_current_row_data, select_long_reads
+from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads
 from qc_assessment import nanoplot_qc_reads
 
 # --------------------------------------------------------------
@@ -32,7 +32,7 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         ram_gb (int or str): Available RAM in GB.
 
     Returns:
-        str or None: Path to the highest quality compressed PacBio reads file, or None if no reads are available.
+        str or None: Path to the highest quality PacBio reads file, or None if no reads are available.
     """
     print(f"Preprocessing PacBio reads for {sample_id}...")
     # Parse the CSV and retrieve relevant row data
@@ -56,24 +56,20 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     species_dir = os.path.join(output_dir, species_id)
     os.makedirs(species_dir, exist_ok=True)
-    sample_dir = os.path.join(species_dir, sample_id)
-    os.makedirs(sample_dir, exist_ok=True)
     pacbio_dir = os.path.join(species_dir, "PacBio")
     os.makedirs(pacbio_dir, exist_ok=True)
     os.chdir(pacbio_dir)
     pacbio_raw_reads = os.path.join(pacbio_dir, f"{pacbio_sra}.fastq")
-    pacbio_raw_reads_gz = pacbio_raw_reads + ".gz"
 
     # Handle Raw Data Directory    
     if pacbio_raw_dir != "None" and not pacbio_raw_reads != "None":
         print(f"NOTE:\tConcatenating PacBio files from {pacbio_raw_dir}")
-        pacbio_files = sorted(glob.glob(f"{pacbio_raw_dir}/*.fastq.gz"))
+        pacbio_files = sorted(glob.glob(f"{pacbio_raw_dir}/*.fastq"))
         if not pacbio_files:
             print(f"ERROR:\tNo PacBio files found in {pacbio_raw_dir}")
             sys.exit(1)
-        pacbio_raw_reads = f"{species_id}_pacbio_combined.fastq.gz"
+        pacbio_raw_reads = f"{species_id}_pacbio_combined.fastq"
         run_subprocess_cmd(["cat"] + pacbio_files + [">", pacbio_raw_reads], True)
-        pacbio_raw_reads_gz = pigz_compress(pacbio_raw_reads, cpu_threads)
 
     if not pacbio_raw_reads or pacbio_raw_reads == "None":
         print("SKIP:\tPacBio preprocessing; no valid reads")
@@ -84,20 +80,9 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print(f"Downloading SRA {pacbio_sra} from GenBank...")
         if os.path.exists(pacbio_raw_reads) :
             print(f"SKIP:\tSRA download already exists: {pacbio_raw_reads}.")
-            pacbio_raw_reads_gz = pigz_compress(pacbio_raw_reads, cpu_threads)
-        elif os.path.exists(pacbio_raw_reads_gz):
-            print(f"SKIP:\tSRA download already exists: {pacbio_raw_reads_gz}.")
         else:
             run_subprocess_cmd(["fasterq-dump", "--threads", str(cpu_threads), pacbio_sra], False)
-            pacbio_raw_reads_gz = pigz_compress(pacbio_raw_reads, cpu_threads)
     
-    if pd.isna(pacbio_raw_reads) and not os.path.exists(pacbio_raw_reads_gz):
-        print(f"SKIP:\tInput files not found: {pacbio_raw_reads_gz}.")
-        return None   
-    
-    if os.path.exists(pacbio_raw_reads):
-        pacbio_raw_reads_gz = pigz_compress(pacbio_raw_reads, cpu_threads)
-
     # Parse estimated genome size
     if isinstance(est_size, float):
         estimated_size = est_size
@@ -111,10 +96,10 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         est_size_bp = 25000000
 
     # NanoPlot Raw Reads
-    sample_stats_dict = nanoplot_qc_reads(pacbio_raw_reads_gz, "Raw_PacBio_", cpu_threads, sample_stats_dict)    
+    sample_stats_dict = nanoplot_qc_reads(pacbio_raw_reads, "Raw_PacBio_", cpu_threads, sample_stats_dict)    
 
     # Filtlong
-    filtered_pacbio = os.path.join(pacbio_dir, os.path.basename(pacbio_raw_reads_gz.replace(f"{pacbio_sra}", f"{species_id}_filtered")))
+    filtered_pacbio = os.path.join(pacbio_dir, os.path.basename(pacbio_raw_reads.replace(f"{pacbio_sra}", f"{species_id}_filtered")))
     coverage = 75
     target_bases = est_size_bp * coverage
     filt_min_trim_length = 1000
@@ -122,7 +107,7 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     filt_keep_percent = 90
 
     if not os.path.exists(filtered_pacbio):
-        filtlong_cmd = f"filtlong --min_length {filt_min_trim_length} --min_mean_q {filt_min_mean_q} --keep_percent {filt_keep_percent} --target_bases {target_bases} {pacbio_raw_reads_gz} | pigz -p {cpu_threads} > {filtered_pacbio}"
+        filtlong_cmd = f"filtlong --min_length {filt_min_trim_length} --min_mean_q {filt_min_mean_q} --keep_percent {filt_keep_percent} --target_bases {target_bases} {pacbio_raw_reads} > {filtered_pacbio}"
         _ = run_subprocess_cmd(filtlong_cmd, True)
     else:
         print("SKIP\tFiltlong filtered reads exist: {filtered_pacbio}.")
@@ -131,17 +116,18 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     sample_stats_dict = nanoplot_qc_reads(filtered_pacbio, "Filt_PacBio_", cpu_threads, sample_stats_dict)    
     os.chdir(pacbio_dir)
 
-    highest_mean_qual_long_reads_gz = select_long_reads(output_dir, input_csv, sample_id, cpu_threads)
+    highest_mean_qual_long_reads = select_long_reads(output_dir, input_csv, sample_id, cpu_threads)
 
-    print(f"PASS:\tPreprocessed Raw PacBio Reads for {sample_id}: {highest_mean_qual_long_reads_gz}.")
+    print(f"PASS:\tPreprocessed Raw PacBio Reads for {sample_id}: {highest_mean_qual_long_reads}.")
     
     # Force-renaming in case select_long_reads() didn't
-    canonical_path = os.path.join(pacbio_dir, f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq.gz")
+    canonical_path = os.path.join(pacbio_dir, f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq")
     if not os.path.exists(canonical_path):
         print(f"FALLBACK:\tCopying highest-mean-qual long reads to canonical path: {canonical_path}")
-        shutil.copy(highest_mean_qual_long_reads_gz, canonical_path)
+        shutil.copy(highest_mean_qual_long_reads, canonical_path)
     
     return canonical_path
+
 
 if __name__ == "__main__":
     # Log raw sys.argv immediately
@@ -172,4 +158,4 @@ if __name__ == "__main__":
     print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' (converted to {cpu_threads})")
     print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' (converted to {ram_gb})")
     
-    highest_mean_qual_long_reads_gz = preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    highest_mean_qual_long_reads = preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
