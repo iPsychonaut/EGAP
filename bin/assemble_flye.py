@@ -12,7 +12,7 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 import os, sys, shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, pigz_compress, pigz_decompress
+from utilities import run_subprocess_cmd, get_current_row_data
 from qc_assessment import qc_assessment
 
 
@@ -22,8 +22,8 @@ from qc_assessment import qc_assessment
 def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     """Assemble genomic data using Flye with ONT or PacBio reads.
 
-    Executes Flye assembly on long reads, manages file compression, and performs
-    quality control on the resulting assembly.
+    Executes Flye assembly on long reads and performs quality control on the
+    resulting assembly.
 
     Args:
         sample_id (str): Sample identifier.
@@ -55,14 +55,14 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_dir = os.path.join(output_dir, species_id)
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
-        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq.gz")
+        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
     if pd.notna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
-        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq.gz")
-        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq.gz")    
+        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq")
+        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq")    
     if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq.gz")
+        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
-        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta.gz")
+        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
     print(f"DEBUG - illumina_sra - {illumina_sra}")
     print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
@@ -76,28 +76,18 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - species_id - {species_id}")
     print(f"DEBUG - est_size - {est_size}")
     
-    # Set long-read paths (NEW: Simplified to match original, using raw reads if preprocessed unavailable)
-    highest_mean_qual_long_reads_gz = None
+    # Set long-read paths (ONT or PacBio), prefer prefiltered, fallback to raw
     highest_mean_qual_long_reads = None
     if pd.notna(ont_raw_reads):
         print("DEBUG - ONT RAW READS EXIST!")
-        highest_mean_qual_long_reads_gz = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq.gz")
-        highest_mean_qual_long_reads = highest_mean_qual_long_reads_gz.replace(".gz", "")
+        candidate = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")
+        highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else ont_raw_reads
     elif pd.notna(pacbio_raw_reads):
         print("DEBUG - PACBIO RAW READS EXIST!")
-        highest_mean_qual_long_reads_gz = os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq.gz")
-        highest_mean_qual_long_reads = highest_mean_qual_long_reads_gz.replace(".gz", "")
+        candidate = os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq")
+        highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else pacbio_raw_reads
 
-    print(f"DEBUG - highest_mean_qual_long_reads_gz - {highest_mean_qual_long_reads_gz}")
-
-    # Unzip long-read file if necessary (NEW: Ensure decompression of preprocessed file)
-    if (pd.notna(pacbio_raw_reads) or pd.notna(ont_raw_reads)) and highest_mean_qual_long_reads_gz:
-        if os.path.exists(highest_mean_qual_long_reads_gz):
-            if not os.path.exists(highest_mean_qual_long_reads):
-                print(f"NOTE:\tUnzipping {highest_mean_qual_long_reads_gz}")
-                highest_mean_qual_long_reads = pigz_decompress(highest_mean_qual_long_reads_gz, cpu_threads)
-        
-    print(f"DEBUG - highest_mean_qual_long_reads - {highest_mean_qual_long_reads}")
+    print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
     if pd.isna(ont_raw_reads) and pd.isna(pacbio_raw_reads):
         print("SKIP:\tNo reads available for processing")
@@ -108,7 +98,6 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     flye_out_dir = os.path.join(sample_dir, "flye_assembly")
     os.makedirs(flye_out_dir, exist_ok=True)
     egap_flye_assembly_path = os.path.join(flye_out_dir, f"{sample_id}_flye.fasta")
-    egap_flye_assembly_path_gz = egap_flye_assembly_path + ".gz"
 
     # Flye Assemble of Long Reads Only (ONT or PacBio)
     flye_work_dir = os.path.join(os.getcwd(), "flye_assembly")
@@ -116,13 +105,9 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - flye_work_dir - {flye_work_dir}")
 
     flye_path = os.path.join(flye_work_dir, "assembly.fasta")
-    if os.path.exists(egap_flye_assembly_path) and not os.path.exists(egap_flye_assembly_path_gz):
-        egap_flye_assembly_path_gz = pigz_compress(egap_flye_assembly_path, cpu_threads)
-        egap_flye_assembly_path_gz, flye_stats_list, _ = qc_assessment("flye", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        print(f"SKIP:\tFinal Flye Assembly already exists: {egap_flye_assembly_path_gz}.")
-    elif not os.path.exists(egap_flye_assembly_path) and os.path.exists(egap_flye_assembly_path_gz):
-        egap_flye_assembly_path_gz, flye_stats_list, _ = qc_assessment("flye", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        print(f"SKIP:\tFinal Flye Assembly already exists: {egap_flye_assembly_path_gz}.")
+    if os.path.exists(egap_flye_assembly_path):
+        egap_flye_assembly_path, flye_stats_list, _ = qc_assessment("flye", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
+        print(f"SKIP:\tFinal Flye Assembly already exists: {egap_flye_assembly_path}.")
     else:
         if pd.notna(ont_raw_reads):
             flye_cmd = ["flye",
@@ -138,15 +123,12 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                         "--iterations", "3", "--keep-haplotypes"]
         _ = run_subprocess_cmd(flye_cmd, shell_check = False)
 
-    if os.path.exists(flye_path) and not os.path.exists(egap_flye_assembly_path) and not os.path.exists(egap_flye_assembly_path_gz):    
+    if os.path.exists(flye_path) and not os.path.exists(egap_flye_assembly_path):    
         shutil.move(flye_path, egap_flye_assembly_path)
-    
-    if os.path.exists(egap_flye_assembly_path) and not os.path.exists(egap_flye_assembly_path_gz):
-        egap_flye_assembly_path_gz = pigz_compress(egap_flye_assembly_path, cpu_threads)
-        
-    egap_flye_assembly_path_gz, flye_stats_list, _ = qc_assessment("flye", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
+            
+    egap_flye_assembly_path, flye_stats_list, _ = qc_assessment("flye", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
 
-    return egap_flye_assembly_path_gz
+    return egap_flye_assembly_path
 
 
 if __name__ == "__main__":
@@ -155,7 +137,7 @@ if __name__ == "__main__":
             "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
         
-    egap_flye_assembly_path_gz = assemble_flye(sys.argv[1],       # sample_id
+    egap_flye_assembly_path = assemble_flye(sys.argv[1],       # sample_id
                                                sys.argv[2],       # input_csv
                                                sys.argv[3],       # output_dir
                                                str(sys.argv[4]),  # cpu_threads
