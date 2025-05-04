@@ -6,7 +6,7 @@ nextflow.enable.dsl=2
 def version = "3.0.0a"
 
 //
-// Define parameters
+// Define Parameters
 //
 params.no_file = "$projectDir/assets/NO_FILE"
 params.input_csv = "/mnt/d/EGAP_Nextflow/EGAP_test.csv"
@@ -39,7 +39,7 @@ log.info("""
 
                               \033[92mdraft_assembly.nf\033[0m
                                 version ${version}
-                                  
+
  Input-Setup \033[94m-\033[92m>\033[0m Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess""")
 sleep(1500)
 log.info("""
@@ -47,7 +47,7 @@ log.info("""
 
     \033[92minput-setup settings
         \033[94mstarted at                       \033[0m: ${workflow.start}
-        \033[94mconfig  files                    \033[0m: ${workflow.configFiles}
+        \033[94mconfig files                     \033[0m: ${workflow.configFiles}
         \033[94mcontainer                        \033[0m: ${workflow.containerEngine}:${workflow.container}
         \033[94mRAM GB                           \033[0m: ${params.ram_gb}
         \033[94mCPU threads                      \033[0m: ${params.cpu_threads}
@@ -94,7 +94,6 @@ log.info("""
         \033[94mtarget_bases                     \033[0m: estimated size (bp) * 75 (coverage)
         
     \033[92mratatosk settings
-        \033[94mgzip output                      \033[0m: -G
         \033[94mverbose output                   \033[0m: -v
 
     \033[96m-----------------------------------------------------------------------\033[0m""")
@@ -134,7 +133,7 @@ log.info("""
         \033[94mchange file generation           \033[0m: -changes
         \033[94mvcf file generation              \033[0m: -vcf
         \033[94mtracks file generation           \033[0m: -tracks
-        \033[94mlargest chunksize limit          \033[0m: str(5000000)
+        \033[94mlargest chunksize limit          \033[0m: 5000000
         \033[94mfix list                         \033[0m: indels, local, snps
 
     \033[96m-----------------------------------------------------------------------\033[0m""")
@@ -185,6 +184,31 @@ log.info("""
 
 \033[91m================================================================================\033[0m
 """)
+log.info("""
+\033[91m.---.\033[92m________\\\033[38;5;208m=\033[96m/\033[92m________\033[91m.---.\033[0m 
+\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|\033[94m--------\033[96m/\033[91m=\033[92m\\\033[94m--------\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|   \033[94m.\033[96m---------.  \033[94m.\033[96m------.    \033[94m.\033[96m------.    \033[94m.\033[96m-------.\033[0m
+\033[91m`---'\033[96m~~~~~~~(\033[38;5;208m===\033[92m)\033[96m~~~~~~~\033[91m`---'  \033[94m/\033[96m|         |\033[94m/\033[96m/        \\ \033[94m/\033[96m/        \\ \033[94m/\033[96m/         \\\033[0m
+ \033[92m|\033[94m|\033[96m| \033[92m.--     \033[96m\\\033[91m=\033[92m/    \033[92m,--. \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  .------\033[94m'\033[96m|   .------\033[94m'\033[96m|   .--\033[94m.   \033[96m. |   .--\033[94m.\033[96m   .\033[0m
+ \033[92m|\033[94m|\033[96m| \033[94m|-      \033[92m/\033[38;5;208m=\033[96m\\    \033[94m|  _ \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  |\033[94m----"| \033[96m|   |\033[94m----"| \033[96m|   |\033[94m-'\033[96m|   | |   |\033[94m-'\033[96m|   |\033[0m
+ \033[92m|\033[94m|\033[96m| \033[96m`--    \033[92m(\033[91m===\033[96m)   \033[96m`--' \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  `----.\033[94m|\033[96m |   |     \033[94m| \033[96m|   +--+   | |   +--+   |\033[0m
+ \033[92m|\033[94m|\033[96m|         \033[92m\\\033[38;5;208m=\033[96m/         \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|       |\033[94m| \033[96m|   | \033[94m.\033[96m----.|          | |          |\033[0m
+ \033[92m|\033[94m|\033[96m|         \033[96m/\033[91m=\033[92m\\         \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  .----'\033[94m| \033[96m|   |\033[94m"\033[96m|    ||   +--+   | |   +------'\033[0m
+ \033[92m|\033[94m|\033[96m|        \033[96m(\033[38;5;208m===\033[92m)        \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  |\033[94m---" | \033[96m|   |\033[94m"\033[96m`-.  ||   |\033[94m| \033[96m|   | |   |\033[94m-----"\033[0m
+ \033[92m|\033[94m|\033[96m|  \033[96m__     \033[96m\\\033[91m=\033[92m/    \033[96m,__. \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  `------.|   `---'  ||   |\033[94m| \033[96m|   | |   |\033[0m
+ \033[92m|\033[94m|\033[96m| \033[94m/__\\    \033[92m/\033[38;5;208m=\033[96m\\    \033[94m|__| \033[96m|\033[94m|\033[92m|  \033[94m`.\033[96m|         |`.        \033[96m/\033[94m.\033[96m|   |\033[94m| \033[96m|   |\033[94m.\033[96m|   |\033[0m
+ \033[92m|\033[94m|\033[96m| \033[92m|  |   \033[92m(\033[91m===\033[96m)   \033[92m|    \033[96m|\033[94m|\033[92m|    \033[96m`---------'  `------'  `---' \033[94m`\033[96m'---' `---'\033[0m
+\033[91m.---.\033[96m_____\033[92m[:\033[94m:\033[96m::::\033[94m:\033[92m]\033[96m_____\033[91m.---.\033[92m    \033[92m╔═══════════════════════════════════════════╗\033[0m
+\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|\033[94m------\033[92m|:\033[94m:\033[96m::\033[94m:\033[92m|\033[94m------\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|    \033[92m║     \033[94mEnthe\033[96mome Ge\033[97mnome Assemb\033[96mly Pip\033[94meline     \033[92m║\033[0m
+\033[91m`---'\033[92m~~~~~~\033[92m|::\033[94m:\033[96m:\033[94m:\033[92m|~~~~~~\033[91m`---'    \033[92m╚═══════════════════════════════════════════╝\033[0m
+
+                    Curated & Maintained by Ian M Bollinger
+                         (\033[94mian.bollinger@entheome.org)\033[0m
+
+                              \033[92mdraft_assembly.nf\033[0m
+                                version ${version}
+
+\033[91m================================================================================\033[0m
+ """)
 
 //
 // Processes
@@ -465,7 +489,7 @@ process curate_assembly{
     val true, emit: curate_done
     
     script:
-    """
+    """   
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
     python3 "${workflow.projectDir}/bin/curate_assembly.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
@@ -491,7 +515,7 @@ process final_assembly_qc {
     export MPLCONFIGDIR=\$PWD/.temp
     export FC_CACHEDIR=\$PWD/.temp/fontconfig
 
-    python3 "${workflow.projectDir}/bin/assembly_assessment.py" final "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"    
+    python3 "${workflow.projectDir}/bin/qc_assessment.py" final "${params.input_csv}" "${sample_id}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"    
     """
 }
 
