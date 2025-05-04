@@ -13,7 +13,56 @@ with declumpified FASTQ file paths in ${params.output_dir}/${sample_prefix}/Illu
 """
 import os, sys
 import pandas as pd
-from utilities import run_subprocess_cmd, pigz_compress, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, md5_check
+
+
+# --------------------------------------------------------------
+# Combine and verify Illumina reads
+# --------------------------------------------------------------
+def illumina_extract_and_check(folder_name, SAMPLE_ID):
+    """Combine paired-end Illumina reads after MD5 verification.
+
+    Verifies MD5 checksums, concatenates forward and reverse FASTQ files.
+
+    Args:
+        folder_name (str): Directory containing Illumina FASTQ files and MD5.txt.
+        SAMPLE_ID (str): Sample identifier for naming output files.
+
+    Returns:
+        list or None: Paths to combined forward and reverse files, or None if failed.
+    """
+    print(f"Running MD5 Checksum Analysis on Raw Illumina FASTQ files in {folder_name}...")
+    illumina_df = pd.DataFrame(columns=["MD5", "Filename"])
+    base_folder = SAMPLE_ID.split("-")[0]  # e.g., "Es_coli"
+    illumina_dir = os.path.join(os.getcwd(), base_folder, "Illumina")  # Use current dir, not hardcoded EGAP_Test_Data
+    os.makedirs(illumina_dir, exist_ok=True)
+    combined_1_file = os.path.join(illumina_dir, f"{SAMPLE_ID}_combined_1.fq")
+    combined_2_file = os.path.join(illumina_dir, f"{SAMPLE_ID}_combined_2.fq")
+    combined_list = [combined_1_file, combined_2_file]
+    
+    if not os.path.isfile(combined_list[0]) or not os.path.isfile(combined_list[1]):
+        if not os.path.isfile(combined_1_file) or not os.path.isfile(combined_2_file):
+            md5_check(folder_name, illumina_df)
+            raw_1_list = []
+            raw_2_list = []
+            for filename in os.listdir(folder_name):
+                if "_1.fastq" in filename:
+                    raw_1_list.append(os.path.join(folder_name, filename))
+                elif "_2.fastq" in filename:
+                    raw_2_list.append(os.path.join(folder_name, filename))
+            if not raw_1_list or not raw_2_list:
+                print(f"ERROR:\tNo paired Illumina files found in {folder_name}")
+                return None
+            fwd_cat_cmd = f"cat {' '.join(raw_1_list)} > {combined_1_file}"
+            _ = run_subprocess_cmd(fwd_cat_cmd, shell_check=True)
+            rev_cat_cmd = f"cat {' '.join(raw_2_list)} > {combined_2_file}"
+            _ = run_subprocess_cmd(rev_cat_cmd, shell_check=True)
+        else:
+            print(f"SKIP:\tCombined FASTQ files already exist: {combined_list[0]}; {combined_list[1]}.")
+    else:
+        print(f"SKIP:\tGzipped Combined FASTQ files already exist: {combined_list[0]}; {combined_list[1]}.")
+
+    return combined_list if os.path.exists(combined_list[0]) and os.path.exists(combined_list[1]) else None
 
 
 # --------------------------------------------------------------
@@ -33,7 +82,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         ram_gb (int): Available RAM in GB.
 
     Returns:
-        tuple or (None, None): Paths to deduplicated forward and reverse FASTQ.GZ files,
+        tuple or (None, None): Paths to deduplicated forward and reverse FASTQ files,
                                or (None, None) if no reads are available or processing is skipped.
     """ 
     print(f"Preprocessing Illumina reads for {sample_id.split('-')[0]}...")
@@ -64,57 +113,51 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     species_dir = os.path.join(output_dir, species_id)
     os.makedirs(species_dir, exist_ok=True)
-    sample_dir = os.path.join(species_dir, sample_id)
-    os.makedirs(sample_dir, exist_ok=True)
     illumina_dir = os.path.join(species_dir, "Illumina")
     os.makedirs(illumina_dir, exist_ok=True)
     os.chdir(illumina_dir)
-    illu_raw_f_reads = os.path.join(illumina_dir, f"{illu_sra}_1.fastq")
-    illu_raw_r_reads = os.path.join(illumina_dir, f"{illu_sra}_2.fastq")
-    illu_raw_f_reads_gz = illu_raw_f_reads + ".gz"
-    illu_raw_r_reads_gz = illu_raw_r_reads + ".gz"
 
-    # Handle Raw Data Directory    
-    if isinstance(illu_raw_dir, str):
-        print("TODO: process raw direcotry")
-
-    # Handle SRA download
-    elif isinstance(illu_sra, str):
-        print(f"Downloading SRA {illu_sra} from GenBank...")
-        if os.path.exists(illu_raw_f_reads) and os.path.exists(illu_raw_r_reads):
-            print(f"SKIP:\tSRA downloads already exist: {illu_raw_f_reads} & {illu_raw_r_reads_gz}.")
-            illu_raw_f_reads_gz = pigz_compress(illu_raw_f_reads, cpu_threads)
-            illu_raw_r_reads_gz = pigz_compress(illu_raw_r_reads, cpu_threads)
-        elif os.path.exists(illu_raw_f_reads_gz) and os.path.exists(illu_raw_r_reads):
-            print(f"SKIP:\tSRA downloads already exist: {illu_raw_f_reads_gz} & {illu_raw_r_reads_gz}.")
+    if pd.notna(illu_sra) and pd.isna(illu_raw_r_reads) and pd.isna(illu_raw_f_reads):
+        if pd.isna(illu_raw_dir):
+            illu_raw_f_reads = os.path.join(illumina_dir, f"{illu_sra}_1.fastq")
+            illu_raw_r_reads = os.path.join(illumina_dir, f"{illu_sra}_2.fastq")
+            if not os.path.exists(illu_raw_f_reads) and not os.path.exists(illu_raw_r_reads):
+                print(f"Downloading Illumina SRA: {illu_sra}...")
+                os.chdir(illumina_dir)
+                illu_cmd = f"prefetch --force yes {illu_sra} && fasterq-dump -e {cpu_threads} -O {illumina_dir} {illu_sra}"
+                if run_subprocess_cmd(illu_cmd, True) != 0:
+                    print(f"ERROR:\tFailed to download Illumina SRA {illu_sra}")
+                    illu_raw_f_reads = None
+                    illu_raw_r_reads = None
+            else:
+                print(f"PASS:\tIllumina SRA processed: {illu_raw_f_reads}, {illu_raw_r_reads}")
         else:
-            run_subprocess_cmd(["fasterq-dump", "--threads", str(cpu_threads), illu_sra], False)
-            illu_raw_f_reads_gz = pigz_compress(illu_raw_f_reads, cpu_threads)
-            illu_raw_r_reads_gz = pigz_compress(illu_raw_r_reads, cpu_threads)
+            print(f"Process Illumina Raw Directory: {illu_raw_dir}...")
+            combined_list = illumina_extract_and_check(illu_raw_dir, sample_id)
+            if combined_list:
+                print("PASS:\tSucessfully processed Illumina Raw Directory.")
+                illu_raw_f_reads = combined_list[0]
+                illu_raw_r_reads = combined_list[1]
+                illu_sra = f"{combined_list[0]},{combined_list[1]}"  # Update ILLUMINA_SRA
+            else:
+                print(f"ERROR:\tFailed to process Illumina Raw Directory for {sample_id}")
+                return None, None
     
-    if pd.isna(illu_raw_r_reads) and not os.path.exists(illu_raw_f_reads_gz) and pd.isna(illu_raw_f_reads) and not os.path.exists(illu_raw_r_reads_gz):
-        print(f"SKIP:\tInput files not found: {illu_raw_f_reads_gz}, {illu_raw_r_reads_gz}.")
-        return None, None
-
-    species_dir = os.path.join(output_dir, species_id)
-    illumina_output_dir = os.path.join(species_dir, "Illumina")
-    os.makedirs(illumina_output_dir, exist_ok=True)
-
-    illu_dedup_f_reads = os.path.join(illumina_output_dir, f"{species_id}_illu_forward_dedup.fastq.gz")
-    illu_dedup_r_reads = os.path.join(illumina_output_dir, f"{species_id}_illu_reverse_dedup.fastq.gz")
+    illu_dedup_f_reads = os.path.join(illumina_dir, f"{species_id}_illu_forward_dedup.fastq")
+    illu_dedup_r_reads = os.path.join(illumina_dir, f"{species_id}_illu_reverse_dedup.fastq")
 
     if os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads):
         print(f"SKIP:\tIllumina preprocessing already completed: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
-        return None, None
+        return illu_dedup_f_reads, illu_dedup_r_reads
 
     # FastQC
-    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", "fastqc_results", illu_raw_f_reads_gz, illu_raw_r_reads_gz], False)
+    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", "fastqc_results", illu_raw_f_reads, illu_raw_r_reads], False)
 
     # Trimmomatic
-    trimmo_f_pair = illu_raw_f_reads_gz.replace("_1","_forward_paired") # os.path.join(illumina_output_dir, f"{species_id}_illu_forward_paired.fastq.gz")
-    trimmo_r_pair = illu_raw_r_reads_gz.replace("_2","_reverse_paired")# os.path.join(illumina_output_dir, f"{species_id}_illu_reverse_paired.fastq.gz")
-    trimmo_f_unpair = illu_raw_f_reads_gz.replace("_1","_forward_unpaired") # os.path.join(illumina_output_dir, f"{species_id}_illu_forward_paired.fastq.gz")
-    trimmo_r_unpair = illu_raw_r_reads_gz.replace("_2","_reverse_unpaired")# os.path.join(illumina_output_dir, f"{species_id}_illu_reverse_paired.fastq.gz")
+    trimmo_f_pair = illu_raw_f_reads.replace("_1","_forward_paired") 
+    trimmo_r_pair = illu_raw_r_reads.replace("_2","_reverse_paired")
+    trimmo_f_unpair = illu_raw_f_reads.replace("_1","_forward_unpaired")
+    trimmo_r_unpair = illu_raw_r_reads.replace("_2","_reverse_unpaired")
     
     if os.path.exists(trimmo_f_pair) and os.path.exists(trimmo_r_pair):
         print(f"SKIP:\tTrimmomatic files exist: {trimmo_f_pair} & {trimmo_r_pair}.")
@@ -122,8 +165,8 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         run_subprocess_cmd(["trimmomatic", "PE",
                             "-threads", str(cpu_threads),
                             "-phred33",
-                            illu_raw_f_reads_gz,        # Input R1
-                            illu_raw_r_reads_gz,        # Input R2
+                            illu_raw_f_reads,           # Input R1
+                            illu_raw_r_reads,           # Input R2
                             trimmo_f_pair,              # R1 paired output
                             trimmo_f_unpair,            # R1 unpaired output
                             trimmo_r_pair,              # R2 paired output
@@ -132,11 +175,11 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                             "HEADCROP:10",
                             "CROP:145",
                             "SLIDINGWINDOW:50:25",
-                            "MINLEN:125"
-                        ], False)
+                            "MINLEN:125"],
+                           False)
     # BBDuk
-    bbduk_f_map = illu_raw_f_reads_gz.replace("_1","_forward_mapped") # os.path.join(illumina_output_dir, f"{species_id}_illu_forward_mapped.fastq.gz")
-    bbduk_r_map = illu_raw_r_reads_gz.replace("_2","_reverse_mapped") # os.path.join(illumina_output_dir, f"{species_id}_illu_reverse_mapped.fastq.gz")
+    bbduk_f_map = illu_raw_f_reads.replace("_1","_forward_mapped") 
+    bbduk_r_map = illu_raw_r_reads.replace("_2","_reverse_mapped") 
     if os.path.exists(bbduk_f_map) and os.path.exists(bbduk_r_map):
         print(f"SKIP:\tbbduk mapped files exist: {bbduk_f_map} & {bbduk_r_map}.")
     else:
