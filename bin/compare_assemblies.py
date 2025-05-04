@@ -12,7 +12,8 @@ This script compares assemblies from MaSuRCA, SPAdes, Flye, and Hifiasm, selecti
 import os, sys, shutil
 from collections import Counter
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, pigz_compress, pigz_decompress
+from utilities import run_subprocess_cmd, get_current_row_data
+from collections import Counter
 
 
 # --------------------------------------------------------------
@@ -162,14 +163,14 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     sample_dir = os.path.join(species_dir, sample_id)    
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
-        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq.gz")
+        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
     if pd.notna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
-        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq.gz")
-        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq.gz")    
+        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq")
+        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq")    
     if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq.gz")
+        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
-        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta.gz")
+        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
     print(f"DEBUG - illumina_sra - {illumina_sra}")
     print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
@@ -191,12 +192,7 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     
     for method in all_methods:
          temp_assembly_path = os.path.join(sample_dir, f"{method.lower()}_assembly", f"{sample_id}_{method.lower()}.fasta")
-         temp_assembly_path_gz = temp_assembly_path + ".gz"
          if os.path.exists(temp_assembly_path):
-             assemblies[method] = temp_assembly_path
-             print(f"DEBUG - {method}_assembly - {temp_assembly_path}")
-         elif os.path.exists(temp_assembly_path_gz):
-             temp_assembly_path = pigz_decompress(temp_assembly_path_gz, cpu_threads)
              assemblies[method] = temp_assembly_path
              print(f"DEBUG - {method}_assembly - {temp_assembly_path}")
 
@@ -248,7 +244,6 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if len(assemblies) == 1:
         most_represented_method = list(assemblies.keys())[0]
     elif len(assemblies) > 0:
-        from collections import Counter
         counts = Counter(m for m in custom_stats if m != "Unknown")
         most_represented_method = counts.most_common(1)[0][0] if counts else "Unknown"
     if most_represented_method == "Unknown":
@@ -259,22 +254,14 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     for lbl, val in zip(labels, stats_dict[most_represented_method]):
         print(f"{lbl}: {val}")
 
-    # Copy (and compress) into sample_dir
+    # Copy into sample_dir
     orig = assemblies[most_represented_method]
     dest_fasta     = os.path.join(sample_dir, f"{species_id}_best_assembly.fasta")
-    dest_fasta_gz  = dest_fasta + ".gz"
     os.makedirs(sample_dir, exist_ok=True)
+    shutil.copy(orig, dest_fasta)
+    best_assembly = dest_fasta
 
-    if orig.endswith(".gz"):
-        # if the “best” is already gzipped, just copy
-        shutil.copy(orig, dest_fasta_gz)
-        best_assembly_gz = dest_fasta_gz
-    else:
-        shutil.copy(orig, dest_fasta)
-        # then gzip it
-        best_assembly_gz = pigz_compress(dest_fasta, cpu_threads)
-
-    return best_assembly_gz
+    return best_assembly
 
 
 if __name__ == "__main__":
