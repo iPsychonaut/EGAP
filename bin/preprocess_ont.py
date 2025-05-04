@@ -12,7 +12,7 @@ Handles raw directory concatenation and SRA downloads.
 """
 import os, shutil, sys, subprocess, glob
 import pandas as pd
-from utilities import run_subprocess_cmd, pigz_compress, get_current_row_data, select_long_reads
+from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads
 from qc_assessment import nanoplot_qc_reads
 
 
@@ -34,7 +34,7 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         ram_gb (int or str): Available RAM in GB.
 
     Returns:
-        str or None: Path to the highest quality compressed ONT reads file, or None if no reads are available.
+        str or None: Path to the highest quality ONT reads file, or None if no reads are available.
     """
     print(f"Preprocessing ONT reads for {sample_id}...")
     
@@ -59,16 +59,13 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     species_dir = os.path.join(output_dir, species_id)
     os.makedirs(species_dir, exist_ok=True)
-    sample_dir = os.path.join(species_dir, sample_id)
-    os.makedirs(sample_dir, exist_ok=True)
     ont_dir = os.path.join(species_dir, "ONT")
     os.makedirs(ont_dir, exist_ok=True)
     os.chdir(ont_dir)
     ont_raw_reads = os.path.join(ont_dir, f"{ont_sra}.fastq")
-    ont_raw_reads_gz = ont_raw_reads + ".gz"
 
-    illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq.gz")
-    illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq.gz")
+    illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
+    illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq")
 
     print(f"DEBUG - illu_dedup_f_reads - {illu_dedup_f_reads}")
     print(f"DEBUG - illu_dedup_r_reads - {illu_dedup_r_reads}")
@@ -76,32 +73,20 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # Handle Raw Data Directory    
     if isinstance(ont_raw_dir, str):
         print(f"NOTE:\tConcatenating ONT files from {ont_raw_dir}")
-        ont_files = sorted(glob.glob(f"{ont_raw_dir}/*.fastq.gz"))
+        ont_files = sorted(glob.glob(f"{ont_raw_dir}/*.fastq"))
         if not ont_files:
             print(f"ERROR:\tNo ONT files found in {ont_raw_dir}")
             sys.exit(1)
-        ont_raw_reads = f"{species_id}_ont_combined.fastq.gz"
+        ont_raw_reads = f"{species_id}_ont_combined.fastq"
         run_subprocess_cmd(["cat"] + ont_files + [">", ont_raw_reads], True)
-        ont_raw_reads_gz = pigz_compress(ont_raw_reads, cpu_threads)
 
     # Handle SRA download
     if isinstance(ont_sra, str):
-        print(f"Downloading SRA {ont_sra} from GenBank...")
-        if os.path.exists(ont_raw_reads) :
-            print(f"SKIP:\tSRA download already exists: {ont_raw_reads}.")
-            ont_raw_reads_gz = pigz_compress(ont_raw_reads, cpu_threads)
-        elif os.path.exists(ont_raw_reads_gz):
-            print(f"SKIP:\tSRA download already exists: {ont_raw_reads_gz}.")
+        if not os.path.exists(ont_raw_reads):
+            print(f"Downloading SRA {ont_sra} from GenBank...")
+            _ = run_subprocess_cmd(["fasterq-dump", "--threads", str(cpu_threads), ont_sra], False)
         else:
-            run_subprocess_cmd(["fasterq-dump", "--threads", str(cpu_threads), ont_sra], False)
-            ont_raw_reads_gz = pigz_compress(ont_raw_reads, cpu_threads)
-    
-    if pd.isna(ont_raw_reads) and not os.path.exists(ont_raw_reads_gz):
-        print(f"SKIP:\tInput files not found: {ont_raw_reads_gz}.")
-        return None
-    
-    if os.path.exists(ont_raw_reads):
-        ont_raw_reads_gz = pigz_compress(ont_raw_reads, cpu_threads)
+            print(f"SKIP:\tSRA already exists: {ont_raw_reads}")
 
     # Parse estimated genome size
     if isinstance(est_size, float):
@@ -116,16 +101,16 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         est_size_bp = 25000000
 
     # NanoPlot Raw Reads
-    sample_stats_dict = nanoplot_qc_reads(ont_raw_reads_gz, "Raw_ONT_", cpu_threads, sample_stats_dict)
+    sample_stats_dict = nanoplot_qc_reads(ont_raw_reads, "Raw_ONT_", cpu_threads, sample_stats_dict)
 
     # Filtlong
-    filtered_ont = os.path.join(ont_dir, os.path.basename(ont_raw_reads_gz.replace(f"{ont_sra}", f"{species_id}_ont_filtered")))
+    filtered_ont = os.path.join(ont_dir, os.path.basename(ont_raw_reads.replace(f"{ont_sra}", f"{species_id}_ont_filtered")))
     coverage = 75
     target_bases = est_size_bp * coverage
 
     if not os.path.exists(filtered_ont):
         illumina_opt = f"-1 {illu_dedup_f_reads} -2 {illu_dedup_r_reads}" if illu_dedup_f_reads != "None" and illu_dedup_r_reads != "None" else ""
-        filtlong_cmd = f"filtlong {illumina_opt} --trim --min_length 1000 --min_mean_q 8 --keep_percent 90 --target_bases {target_bases} {ont_raw_reads_gz} | pigz -p {cpu_threads} > {filtered_ont}"
+        filtlong_cmd = f"filtlong {illumina_opt} --trim --min_length 1000 --min_mean_q 8 --keep_percent 90 --target_bases {target_bases} {ont_raw_reads} > {filtered_ont}"
         _ = run_subprocess_cmd(filtlong_cmd, True)
     else:
         print(f"SKIP\tFiltlong filtered reads exist: {filtered_ont}.")
@@ -135,32 +120,32 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     os.chdir(ont_dir)
 
     # Ratatosk (only if Illumina reads available)
-    corrected_out = os.path.join(ont_dir, "ratatosk_corrected.fastq")
-    corrected_ont = os.path.join(ont_dir, os.path.basename(ont_raw_reads_gz).replace(f"{ont_sra}", f"{species_id}_ont_corrected"))
+    corrected_out = os.path.join(ont_dir, "ratatosk_corrected")
+    final_corrected_ont = os.path.join(ont_dir, os.path.basename(ont_raw_reads).replace(f"{ont_sra}", f"{species_id}_ont_corrected"))
     if illu_dedup_f_reads == "None" or illu_dedup_r_reads == "None":
         print("SKIP:\tRatatosk correction; no Illumina reads provided")
-        if not os.path.exists(corrected_ont):
-            subprocess.run(["ln", "-sf", filtered_ont, corrected_ont], check=True)
+        if not os.path.exists(corrected_out):
+            subprocess.run(["ln", "-sf", filtered_ont, corrected_out], check=True)
     else:
-        if os.path.exists(corrected_out + ".fastq.gz"):
-            shutil.move(corrected_out + ".fastq.gz", corrected_ont)
-        if not os.path.exists(corrected_ont):
+        if os.path.exists(corrected_out + ".fastq"):
+            shutil.move(corrected_out + ".fastq", final_corrected_ont)
+        if not os.path.exists(final_corrected_ont):
             ratatosk_cmd = ["Ratatosk", "correct", "-s", illu_dedup_f_reads, "-s", illu_dedup_r_reads,
-                            "-l", filtered_ont, "-o", corrected_out, "-c", str(cpu_threads), "-G", "-v"]
+                            "-l", filtered_ont, "-o", corrected_out, "-c", str(cpu_threads), "-v"]
             _ = run_subprocess_cmd(ratatosk_cmd, False)
-            shutil.move(corrected_out + ".fastq.gz", corrected_ont)
+            shutil.move(corrected_out + ".fastq", final_corrected_ont)
         else:
             print("SKIP:\tRatatosk correct reads exist: {corrected_ont}.")
 
     # NanoPlot Corrected Reads
-    sample_stats_dict = nanoplot_qc_reads(corrected_ont, "Corr_ONT_", cpu_threads, sample_stats_dict)    
+    sample_stats_dict = nanoplot_qc_reads(final_corrected_ont, "Corr_ONT_", cpu_threads, sample_stats_dict)    
     os.chdir(ont_dir)
     
-    highest_mean_qual_long_reads_gz = select_long_reads(output_dir, input_csv, sample_id, cpu_threads)
+    highest_mean_qual_long_reads = select_long_reads(output_dir, input_csv, sample_id, cpu_threads)
     
-    print(f"PASS:\tPreprocessed Raw ONT Reads for {sample_id}: {highest_mean_qual_long_reads_gz}.")
+    print(f"PASS:\tPreprocessed Raw ONT Reads for {sample_id}: {highest_mean_qual_long_reads}.")
     
-    return highest_mean_qual_long_reads_gz
+    return highest_mean_qual_long_reads
 
 
 if __name__ == "__main__":
@@ -192,4 +177,4 @@ if __name__ == "__main__":
     print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' (converted to {cpu_threads})")
     print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' (converted to {ram_gb})")
     
-    highest_mean_qual_long_reads_gz = preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    highest_mean_qual_long_reads = preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
