@@ -10,7 +10,7 @@ Updated on Sat Mar 29 2025
 """
 import os, sys, glob, shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, pigz_compress, get_current_row_data, find_file
+from utilities import run_subprocess_cmd, get_current_row_data, find_file
 
 # --------------------------------------------------------------
 # Preprocess reference sequence data
@@ -18,7 +18,7 @@ from utilities import run_subprocess_cmd, pigz_compress, get_current_row_data, f
 def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     """Preprocess reference sequence data for the assembly pipeline.
 
-    Downloads, verifies, and compresses reference sequence data (GCA or FASTA)
+    Downloads and verifies reference sequence data (GCA or FASTA)
     based on metadata from a CSV file.
 
     Args:
@@ -29,7 +29,7 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         ram_gb (int): Available RAM in GB.
 
     Returns:
-        str or None: Path to compressed reference sequence file, or None if no reference is available.
+        str or None: Path to reference sequence file, or None if no reference is available.
     """  
     print(f"Preprocessing Illumina reads for {sample_id.split('-')[0]}...")
     # Parse the CSV and retrieve relevant row data
@@ -48,14 +48,12 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     species_dir = os.path.join(output_dir, species_id)
     os.makedirs(species_dir, exist_ok=True)
-    sample_dir = os.path.join(species_dir, sample_id)
-    os.makedirs(sample_dir, exist_ok=True)
     refseq_dir = os.path.join(species_dir, "RefSeq")
     os.makedirs(refseq_dir, exist_ok=True)
     os.chdir(refseq_dir)
     
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
-        ref_seq = os.path.join(species_dir, "RefSeq", f"{ref_seq_gca}.fasta.gz")  
+        ref_seq = os.path.join(species_dir, "RefSeq", f"{ref_seq_gca}.fasta")  
 
     print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")   
     print(f"DEBUG - ref_seq - {ref_seq}")
@@ -97,12 +95,8 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         renamed_gca = None
     print(renamed_gca)
     
-    if ".gz" not in renamed_gca:
-        reference_sequence_gz = pigz_compress(renamed_gca, cpu_threads)
-    else:
-        reference_sequence_gz = renamed_gca
-        
-    return reference_sequence_gz
+    return renamed_gca
+
 
 if __name__ == "__main__":
     # Log raw sys.argv immediately
@@ -133,4 +127,4 @@ if __name__ == "__main__":
     print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' {sys.argv[4]} (converted to {cpu_threads}) {type(cpu_threads)}")
     print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' {sys.argv[5]} (converted to {ram_gb}) {type(ram_gb)}")
     
-    reference_sequence_gz = preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    renamed_gca = preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
