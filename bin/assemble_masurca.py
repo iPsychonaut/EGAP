@@ -11,7 +11,7 @@ This script runs MaSuRCA assembly with Illumina and optional long reads.
 """
 import os, sys, shutil, re
 import pandas as pd
-from utilities import run_subprocess_cmd, find_file, get_current_row_data, pigz_compress, pigz_decompress
+from utilities import run_subprocess_cmd, find_file, get_current_row_data
 from qc_assessment import qc_assessment
 
 
@@ -84,7 +84,7 @@ def bbmap_stats(input_folder, reads_list):
     Returns:
         tuple: (average insert size, standard deviation).
     """
-    bbmap_out_path = f"{input_folder}/bbmap_data.fq.gz"
+    bbmap_out_path = f"{input_folder}/bbmap_data.fq"
     insert_size_histogram_txt = f"{input_folder}/insert_size_histogram.txt"
     print(f"NOTE:\tCurrent bbmap out path: {bbmap_out_path}")
     default_bbmerge_path = "bbmerge.sh"
@@ -179,17 +179,19 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
     species_dir = os.path.join(output_dir, species_id)
-    masurca_out_dir = os.path.join(species_dir, sample_id, "masurca_assembly")    
+    sample_dir = os.path.join(species_dir, sample_id)
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
-        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq.gz")
+        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
     if pd.notna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
-        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq.gz")
-        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq.gz")    
+        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq")
+        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq")    
     if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq.gz")
+        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
-        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta.gz")
+        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
+
+    masurca_out_dir = os.path.join(sample_dir, "masurca_assembly")    
 
     print(f"DEBUG - illumina_sra - {illumina_sra}")
     print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
@@ -204,28 +206,28 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - est_size - {est_size}")
     print(f"DEBUG - masurca_out_dir - {masurca_out_dir}")
     
-    # Set long-read paths (NEW: Simplified to match original, using raw reads if preprocessed unavailable)
-    highest_mean_qual_long_reads_gz = None
-    highest_mean_qual_long_reads = None
-    if pd.notna(ont_raw_reads):
-        print("DEBUG - ONT RAW READS EXIST!")
-        highest_mean_qual_long_reads_gz = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq.gz")
-        highest_mean_qual_long_reads = highest_mean_qual_long_reads_gz.replace(".gz", "")
-    elif pd.notna(pacbio_raw_reads):
-        print("DEBUG - PACBIO RAW READS EXIST!")
-        highest_mean_qual_long_reads_gz = os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq.gz")
-        highest_mean_qual_long_reads = highest_mean_qual_long_reads_gz.replace(".gz", "")
-
     # Set Illumina deduplicated read paths only if Illumina reads are present
     illu_dedup_f_reads = None
     illu_dedup_r_reads = None
     if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
-        illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq.gz")
-        illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq.gz")
+        illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
+        illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq")
 
     print(f"DEBUG - illu_dedup_f_reads - {illu_dedup_f_reads}")
     print(f"DEBUG - illu_dedup_r_reads - {illu_dedup_r_reads}")
-    print(f"DEBUG - highest_mean_qual_long_reads_gz - {highest_mean_qual_long_reads_gz}")
+
+    # Set long-read paths (ONT or PacBio), prefer prefiltered, fallback to raw
+    highest_mean_qual_long_reads = None
+    if pd.notna(ont_raw_reads):
+        print("DEBUG - ONT RAW READS EXIST!")
+        candidate = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")
+        highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else ont_raw_reads
+    elif pd.notna(pacbio_raw_reads):
+        print("DEBUG - PACBIO RAW READS EXIST!")
+        candidate = os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq")
+        highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else pacbio_raw_reads
+
+    print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
     # Check if only reference or no Illumina reads are provided and skip (NEW: Skip PacBio-only runs)
     if pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
@@ -233,29 +235,6 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         return None
 
     os.makedirs(masurca_out_dir, exist_ok=True)
-
-    # Unzip deduplicated files if they are gzipped
-    dedup_unzip_list = []
-    if illu_dedup_f_reads and illu_dedup_r_reads:
-        dedup_unzip_list = [illu_dedup_f_reads.replace(".gz", ""), illu_dedup_r_reads.replace(".gz", "")]
-        for input_file in [illu_dedup_f_reads, illu_dedup_r_reads]:
-            if ".gz" in input_file and os.path.exists(input_file):
-                _ = run_subprocess_cmd(["pigz", "-d", "-p", str(cpu_threads), input_file], shell_check=False)
-
-    # Unzip long-read file if necessary (NEW: Ensure decompression of preprocessed file)
-    if (pd.notna(pacbio_raw_reads) or pd.notna(ont_raw_reads)) and highest_mean_qual_long_reads_gz:
-        if os.path.exists(highest_mean_qual_long_reads_gz):
-            if not os.path.exists(highest_mean_qual_long_reads):
-                print(f"NOTE:\tUnzipping {highest_mean_qual_long_reads_gz}")
-                highest_mean_qual_long_reads = pigz_decompress(highest_mean_qual_long_reads_gz, cpu_threads)
-
-    # Unzip reference sequence if necessary (NEW: Corrected to ensure decompressed path)
-    ref_seq_unzipped = ref_seq.replace(".gz","") if pd.notna(ref_seq) and ".gz" in ref_seq else ref_seq
-    if os.path.exists(ref_seq) and not os.path.exists(ref_seq_unzipped):
-        ref_seq_unzipped = ref_seq.replace(".gz", "")
-        if not os.path.exists(ref_seq_unzipped):
-            print(f"NOTE:\tUnzipping {ref_seq}")
-            ref_seq_unzipped = pigz_decompress(ref_seq, cpu_threads)
 
     # Calculate insert size and standard deviation based on read type
     if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
@@ -308,44 +287,25 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if os.path.exists(terminator_genome_scf):
         print(f"PASS:\tAssembly found at {terminator_genome_scf}, saving to work directory")
         shutil.copy(terminator_genome_scf, egap_masurca_assembly_path)
-        if ".gz" not in egap_masurca_assembly_path:
-            egap_masurca_assembly_path_gz = pigz_compress(egap_masurca_assembly_path, cpu_threads)
-        else:
-            egap_masurca_assembly_path_gz = egap_masurca_assembly_path
-        egap_masurca_assembly_path_gz, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        return egap_masurca_assembly_path_gz
+        egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
+        return egap_masurca_assembly_path
     elif os.path.exists(primary_genome_scf):
         print(f"PASS:\tInterrupted assembly found at {primary_genome_scf}, saving to work directory")
         shutil.copy(primary_genome_scf, egap_masurca_assembly_path)
-        if ".gz" not in egap_masurca_assembly_path:
-            egap_masurca_assembly_path_gz = pigz_compress(egap_masurca_assembly_path, cpu_threads)
-        else:
-            egap_masurca_assembly_path_gz = egap_masurca_assembly_path
-        egap_masurca_assembly_path_gz, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        return egap_masurca_assembly_path_gz
+        egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
+        return egap_masurca_assembly_path
     elif os.path.exists(egap_masurca_assembly_path):
         print(f"SKIP:\tMaSuRCA Assembly, scaffolded assembly already exists: {egap_masurca_assembly_path}.")
-        if ".gz" not in egap_masurca_assembly_path:
-            egap_masurca_assembly_path_gz = pigz_compress(egap_masurca_assembly_path, cpu_threads)
-        else:
-            egap_masurca_assembly_path_gz = egap_masurca_assembly_path
-        egap_masurca_assembly_path_gz, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        return egap_masurca_assembly_path_gz
-    elif os.path.exists(egap_masurca_assembly_path + ".gz"):
-        egap_masurca_assembly_path_gz = egap_masurca_assembly_path + ".gz"
-        egap_masurca_assembly_path_gz, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        print(f"SKIP:\tMaSuRCA Assembly, scaffolded assembly already exists: {egap_masurca_assembly_path_gz}.")
-        return egap_masurca_assembly_path_gz
+        egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
+        return egap_masurca_assembly_path
     else:
         # Build the configuration file (NEW: Restored original configuration logic)
         config_content = ["DATA\n"]
 
         # Add Illumina paired-end reads if available
-        if illu_dedup_f_reads and illu_dedup_r_reads and os.path.exists(illu_dedup_f_reads.replace(".gz", "")) and os.path.exists(illu_dedup_r_reads.replace(".gz", "")):
-            config_content.append(
-                f"PE= pe {int(avg_insert)} {int(std_dev)} "
-                f"{illu_dedup_f_reads.replace('.gz','')} {illu_dedup_r_reads.replace('.gz','')}\n"
-            )
+        if illu_dedup_f_reads and illu_dedup_r_reads:
+            config_content.append(f"PE= pe {int(avg_insert)} {int(std_dev)} "
+                                  f"{illu_dedup_f_reads} {illu_dedup_r_reads}\n")
 
         # Add long-read data (NEW: Use only determined long-read file)
         if highest_mean_qual_long_reads:
@@ -356,7 +316,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
         # Add reference if available (NEW: Use unzipped ref_seq path without transformations)
         if pd.notna(ref_seq):
-            config_content.append(f"REFERENCE={ref_seq_unzipped}\n")
+            config_content.append(f"REFERENCE={ref_seq}\n")
         config_content.append("END\n")
 
         # Add PARAMETERS section
@@ -410,17 +370,11 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             print(f"ERROR:\tNo assembly file found at {terminator_genome_scf} or {primary_genome_scf}")
             return None
 
-    # Compress and return (NEW: Compress in work dir, rely on publishDir)
-    if os.path.exists(egap_masurca_assembly_path) and ".gz" not in egap_masurca_assembly_path:
-        egap_masurca_assembly_path_gz = pigz_compress(egap_masurca_assembly_path, cpu_threads)
-    else:
-        egap_masurca_assembly_path_gz = egap_masurca_assembly_path
-
-    print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path_gz}")
-    egap_masurca_assembly_path_gz, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
+    print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path}")
+    egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
 
     # Return paths in work directory (NEW: Rely on publishDir for final output)
-    return egap_masurca_assembly_path_gz
+    return egap_masurca_assembly_path
 
 
 if __name__ == "__main__":
