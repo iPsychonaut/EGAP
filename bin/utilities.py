@@ -9,8 +9,61 @@ Created on Tue Apr  8 22:13:08 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, subprocess, datetime, platform, shutil
+import os, subprocess, datetime, platform, shutil, math, hashlib
 import pandas as pd
+
+
+# --------------------------------------------------------------
+# Verify MD5 checksums for Illumina files
+# --------------------------------------------------------------
+def md5_check(folder_name, illumina_df):
+    """Verify MD5 checksums for Illumina files in the specified folder.
+
+    Compares computed MD5 checksums against those listed in MD5.txt.
+
+    Args:
+        folder_name (str): Directory containing Illumina files and MD5.txt.
+        illumina_df (pandas.DataFrame): DataFrame to store MD5 and filename data.
+    """
+    md5_file = os.path.join(folder_name, "MD5.txt")
+    if not os.path.exists(md5_file):
+        print(f"WARNING: MD5.txt not found in {folder_name}. Skipping MD5 check.")
+        return
+    with open(md5_file, "r") as f:
+        for line in f:
+            md5, filename = line.strip().split()
+            illumina_df = illumina_df.append({"MD5": md5, "Filename": filename}, ignore_index=True)
+    
+    for index, row in illumina_df.iterrows():
+        file_path = os.path.join(folder_name, row["Filename"])
+        if os.path.exists(file_path):
+            with open(file_path, "rb") as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+            if file_hash == row["MD5"]:
+                print(f"PASS: MD5 check passed for {row['Filename']}")
+            else:
+                print(f"ERROR: MD5 check failed for {row['Filename']}. Expected {row['MD5']}, got {file_hash}")
+        else:
+            print(f"ERROR: File not found for MD5 check: {file_path}")
+            
+
+# --------------------------------------------------------------
+# Calculate resource allocation
+# --------------------------------------------------------------
+def get_resource_values(percent_resources, total_cpu, total_ram):
+    """Calculate CPU threads and RAM based on a percentage of total resources.
+
+    Args:
+        percent_resources (float): Percentage of resources to allocate (0.0 to 1.0).
+        total_cpu (int): Total available CPU threads.
+        total_ram (int): Total available RAM in GB.
+
+    Returns:
+        tuple: (number of CPU threads, RAM in GB).
+    """
+    cpu_threads = int(math.floor(total_cpu * percent_resources))
+    ram_gb = int(total_ram * percent_resources)
+    return cpu_threads, ram_gb
 
 
 # --------------------------------------------------------------
@@ -356,9 +409,9 @@ def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
     print(f"DEBUG - sample_id - {sample_id}")
     
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
-        ont_raw_reads = os.path.join(output_dir, species_id, "ONT", f"{ont_sra}.fastq.gz")
+        ont_raw_reads = os.path.join(output_dir, species_id, "ONT", f"{ont_sra}.fastq")
     if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        pacbio_raw_reads = os.path.join(output_dir, species_id, "PacBio", f"{pacbio_sra}.fastq.gz")
+        pacbio_raw_reads = os.path.join(output_dir, species_id, "PacBio", f"{pacbio_sra}.fastq")
  
     print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
     print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
@@ -367,15 +420,15 @@ def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
         print("DEBUG - PROCESSING ONT HIGHEST MEAN QUAL")
         reads_type = "ONT"
         reads_dir = os.path.dirname(ont_raw_reads)
-        filtered_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_filtered.fastq.gz")
-        corrected_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_corrected.fastq.gz")
+        filtered_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_filtered.fastq")
+        corrected_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_corrected.fastq")
         reads_origin_list = ["Raw_ONT_", "Filt_ONT_", "Corr_ONT_"]
     elif pd.notna(pacbio_raw_reads):
         print("DEBUG - PROCESSING PACBIO HIGHEST MEAN QUAL")
         reads_type = "PacBio"
         reads_dir = os.path.dirname(pacbio_raw_reads)
-        filtered_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_filtered.fastq.gz")
-        corrected_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_corrected.fastq.gz")
+        filtered_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_filtered.fastq")
+        corrected_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_corrected.fastq")
         reads_origin_list = ["Raw_PacBio_", "Filt_PacBio_"]
     else:
         print(f"ERROR:\tUNABLE TO PARSE LONG READS AS BOTH ONT AND PACBIO RAW READS ARE NONE: {ont_raw_reads} & {pacbio_raw_reads}")
@@ -402,31 +455,23 @@ def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
     print(f"Highest Mean Quality Long reads: {highest_mean_qual_long_reads}")
     print(f"Mean Quality: {highest_mean_qual}")
 
-    if ".gz" not in highest_mean_qual_long_reads:
-        highest_mean_qual_long_reads_gz = pigz_compress(highest_mean_qual_long_reads, cpu_threads)
-    else:
-        highest_mean_qual_long_reads_gz = highest_mean_qual_long_reads
-
-    renamed_highest_mean_qual_long_reads_gz = f"{species_id}_{reads_type}_highest_mean_qual_long_reads.fastq.gz"
+    renamed_highest_mean_qual_long_reads = f"{species_id}_{reads_type}_highest_mean_qual_long_reads.fastq"
     if not os.path.exists(highest_mean_qual_long_reads):
-        # try fallback: see if it's named like "Escherichia_coli_filtered.fastq.gz"
-        fallback_file = os.path.join(reads_dir, f"{species_id}_filtered.fastq.gz")
+        # try fallback: see if it's named like "Escherichia_coli_filtered.fastq"
+        fallback_file = os.path.join(reads_dir, f"{species_id}_filtered.fastq")
         if os.path.exists(fallback_file):
             print(f"FALLBACK:\tFound fallback filtered file: {fallback_file}")
             highest_mean_qual_long_reads = fallback_file
         else:
             print("ERROR:\tNo usable highest-mean-quality long read file found.")
             return None
-    
-    if ".gz" not in highest_mean_qual_long_reads:
-        highest_mean_qual_long_reads_gz = pigz_compress(highest_mean_qual_long_reads, cpu_threads)
-    else:
-        highest_mean_qual_long_reads_gz = highest_mean_qual_long_reads
-    
-    renamed_highest_mean_qual_long_reads_gz = os.path.join(reads_dir, f"{species_id}_{reads_type}_highest_mean_qual_long_reads.fastq.gz")
-    shutil.copy(highest_mean_qual_long_reads_gz, renamed_highest_mean_qual_long_reads_gz)
-    print(f"NOTE:\tSelected highest quality long reads: {renamed_highest_mean_qual_long_reads_gz} with mean quality {highest_mean_qual}")
-    return renamed_highest_mean_qual_long_reads_gz
+        
+    renamed_highest_mean_qual_long_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_highest_mean_qual_long_reads.fastq")
+    shutil.copy(highest_mean_qual_long_reads, renamed_highest_mean_qual_long_reads)
+
+    print(f"NOTE:\tSelected highest quality long reads: {renamed_highest_mean_qual_long_reads} with mean quality {highest_mean_qual}")
+
+    return renamed_highest_mean_qual_long_reads
 
 
 # --------------------------------------------------------------
