@@ -3,7 +3,7 @@ nextflow.enable.dsl=2
 //
 // EGAP Version
 //
-def version = "3.0.0a"
+def version = "3.0.0b"
 
 //
 // Define Parameters
