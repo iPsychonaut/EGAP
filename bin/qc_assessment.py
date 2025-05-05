@@ -15,7 +15,7 @@ import pandas as pd
 from Bio import SeqIO
 from collections import Counter
 import matplotlib.pyplot as plt
-from utilities import run_subprocess_cmd, pigz_decompress, pigz_compress, get_current_row_data, analyze_nanostats
+from utilities import run_subprocess_cmd, pigz_compress, pigz_decompress, get_current_row_data, analyze_nanostats
 
 
 # --------------------------------------------------------------
@@ -321,7 +321,7 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict, busco_count, bus
         _ = run_subprocess_cmd(busco_cmd, shell_check=False)
 
     # Generate BUSCO plot
-    comp_busco_svg = os.path.basename(assembly_path).replace(".gz", "").replace(".fasta", f"_{busco_odb}_busco.svg")
+    comp_busco_svg = os.path.basename(assembly_path).replace(".fasta", f"_{busco_odb}_busco.svg")
     busco_tsv = os.path.join(busco_dir, f"run_{busco_odb}_{busco_db_version}", "full_table.tsv")
     if not os.path.exists(comp_busco_svg):
         plot_busco(sample_id, "busco", busco_odb, busco_tsv, assembly_path, assembly_type)
@@ -367,7 +367,7 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
     Returns:
         str: Original assembly path.
     """
-    compleasm_dir = assembly_path.replace(".gz", "").replace(".fasta", f"_{busco_odb}_busco")
+    compleasm_dir = assembly_path.replace(".fasta", f"_{busco_odb}_busco")
     print(f"DEBUG PRINT - busco_odb - {busco_odb}")
     print(f"DEBUG PRINT - compleasm_dir - {compleasm_dir}")
 
@@ -389,7 +389,7 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
         _ = run_subprocess_cmd(compleasm_cmd, shell_check=False)
 
     # Generate a BUSCO-like plot if not already present
-    comp_1_busco_svg = assembly_path.replace(".gz", "").replace(".fasta", f"_{busco_odb}_busco.svg")
+    comp_1_busco_svg = assembly_path.replace(".fasta", f"_{busco_odb}_busco.svg")
     compleasm_tsv = os.path.join(compleasm_dir, f"{busco_odb}_odb12", "full_table_busco_format.tsv")
     if not os.path.exists(comp_1_busco_svg):
         plot_busco(sample_id, "compleasm", busco_odb, compleasm_tsv, assembly_path)
@@ -460,54 +460,37 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
     kingdom_id = current_series["ORGANISM_KINGDOM"]
     karyote_id = current_series["ORGANISM_KARYOTE"]
     species_id = current_series["SPECIES_ID"]
+    est_size = current_series["EST_SIZE"]
 
     species_dir = os.path.join(output_dir, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
-    labeled_assembly = os.path.join(sample_dir, f"{assembly_type}_assembly", f"{sample_id}_{assembly_type}.fasta")
-    labeled_assembly_gz = labeled_assembly + ".gz"
+    assembly_path = os.path.join(sample_dir, f"{assembly_type}_assembly", f"{sample_id}_{assembly_type}.fasta")
+    os.chdir(os.path.dirname(assembly_path))
 
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
-        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta.gz")
+        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
     print(f"Parsing final assembly for index {current_index} from {input_csv}:\n{current_row}")
 
-    # Decompress assembly if gzipped
-    if os.path.exists(labeled_assembly) and ".gz" in labeled_assembly:
-        unzipped_assembly_path = pigz_decompress(labeled_assembly_gz, cpu_threads)
-    elif os.path.exists(labeled_assembly_gz) and ".gz" in labeled_assembly_gz:
-        unzipped_assembly_path = pigz_decompress(labeled_assembly_gz, cpu_threads)
-    else:
-        unzipped_assembly_path = labeled_assembly
-
-    # Decompress reference if gzipped
-    if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
-        ref_seq = os.path.join(output_dir, species_id, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta.gz")
-    if isinstance(ref_seq, str) and os.path.exists(ref_seq) and ".gz" in ref_seq:
-        if os.path.exists(ref_seq.replace(".gz","")):
-            unzipped_ref_seq = ref_seq.replace(".gz","")
-        else:
-            unzipped_ref_seq = pigz_decompress(ref_seq, cpu_threads)
-    else:
-        unzipped_ref_seq = ref_seq
 
     # --------------------------------------------------------------
     # Compleasm/BUSCO QC: Run on two different lineages
     # --------------------------------------------------------------
-    busco_assembly(unzipped_assembly_path, sample_id, sample_stats_dict,
+    busco_assembly(assembly_path, sample_id, sample_stats_dict,
                    "first", first_busco_odb, assembly_type, cpu_threads)
-    busco_assembly(unzipped_assembly_path, sample_id, sample_stats_dict,
+    busco_assembly(assembly_path, sample_id, sample_stats_dict,
                    "second", second_busco_odb, assembly_type, cpu_threads)
 
     # # Compleasm QC CURRENTLY BREAKS DUE TO md5 checksum errors
-    #compleasm_assembly(unzipped_assembly_path, sample_id, sample_stats_dict,
+    #compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
     #                   "first", first_busco_odb, assembly_type, cpu_threads)
-    #compleasm_assembly(unzipped_assembly_path, sample_id, sample_stats_dict,
+    #compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
     #                   "second", second_busco_odb, assembly_type, cpu_threads)
     
     # --------------------------------------------------------------
     # QUAST QC
     # --------------------------------------------------------------
-    quast_dir = unzipped_assembly_path.replace(".gz", "").replace(".fasta", "_quast")
+    quast_dir = assembly_path.replace(".fasta", "_quast")
     os.makedirs(quast_dir, exist_ok=True)
     quast_report_tsv = os.path.join(quast_dir, "report.tsv")
 
@@ -518,39 +501,31 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
         if pd.isna(ref_seq):
             # No reference
             if karyote_id == "eukaryote":
-                quast_cmd = [
-                    "quast",
-                    "--threads", str(cpu_threads),
-                    "--eukaryote",
-                    "-o", quast_dir,
-                    unzipped_assembly_path
-                ]
+                quast_cmd = ["quast",
+                             "--threads", str(cpu_threads),
+                             "--eukaryote",
+                             "-o", quast_dir,
+                             assembly_path]
             else:
-                quast_cmd = [
-                    "quast",
-                    "--threads", str(cpu_threads),
-                    "-o", quast_dir,
-                    unzipped_assembly_path
-                ]
+                quast_cmd = ["quast",
+                             "--threads", str(cpu_threads),
+                             "-o", quast_dir,
+                             assembly_path]
         else:
             # With reference
             if karyote_id == "eukaryote":
-                quast_cmd = [
-                    "quast",
-                    "--threads", str(cpu_threads),
-                    "-r", unzipped_ref_seq,
-                    "--eukaryote",
-                    "-o", quast_dir,
-                    unzipped_assembly_path
-                ]
+                quast_cmd = ["quast",
+                             "--threads", str(cpu_threads),
+                             "-r", ref_seq,
+                             "--eukaryote",
+                             "-o", quast_dir,
+                             assembly_path]
             else:
-                quast_cmd = [
-                    "quast",
-                    "--threads", str(cpu_threads),
-                    "-r", unzipped_ref_seq,
-                    "-o", quast_dir,
-                    unzipped_assembly_path
-                ]
+                quast_cmd = ["quast",
+                             "--threads", str(cpu_threads),
+                             "-r", ref_seq,
+                             "-o", quast_dir,
+                             assembly_path]
 
         # Add fungus flag if kingdom is Funga
         if kingdom_id == "Funga":
@@ -572,7 +547,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
                     sample_stats_dict["ASSEMBLY_L50"] = float(line.split("\t")[-1].strip())
                 elif "GC (%)" in line:
                     sample_stats_dict["ASSEMBLY_GC"] = float(line.split("\t")[-1].strip())
-                if unzipped_ref_seq is not None:
+                if ref_seq is not None:
                     if "# misassemblies" in line:
                         sample_stats_dict["MISASSEMBLIES"] = float(line.split("\t")[-1].strip())
                     elif "# N's per 100 kbp" in line:
@@ -592,11 +567,9 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
     # Compute coverage if reference length is known
     # --------------------------------------------------------------
     try:        
-        if os.path.exists(unzipped_ref_seq):
-            if ".gz" in unzipped_ref_seq:
-                unzipped_ref_seq = pigz_decompress(unzipped_ref_seq, cpu_threads)
+        if os.path.exists(ref_seq):
             ref_total_bases = 0
-            for record in SeqIO.parse(unzipped_ref_seq, "fasta"):
+            for record in SeqIO.parse(ref_seq, "fasta"):
                 ref_total_bases += len(record.seq)
     
             if not pd.isna(illu_raw_f_reads) and not pd.isna(illu_raw_r_reads):
@@ -679,28 +652,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
     contig_count = sample_stats_dict.get("ASSEMBLY_CONTIGS", None)
     sample_stats_list = [first_busco_c, second_busco_c, n50, contig_count]
 
-    stats_filepath = os.path.join(sample_dir, labeled_assembly.replace(".fasta", "_stats.txt"))
-
-    if ".gz" not in unzipped_assembly_path:
-        print("Recompressing final assembly...")
-        assembly_path = pigz_compress(unzipped_assembly_path, cpu_threads)
-
-    if ".gz" not in labeled_assembly:
-        print("Recompressing final assembly...")
-        labeled_assembly_gz = pigz_compress(labeled_assembly, cpu_threads)
-
-    if os.path.exists(unzipped_ref_seq) and ".gz" not in unzipped_ref_seq:
-        print("Recompressing reference sequence...")
-        ref_seq = pigz_compress(unzipped_ref_seq, cpu_threads)
-
-    # Rename to the final labeled assembly filename
-    if assembly_path != labeled_assembly_gz:
-        try:
-            print(f"Renaming final assembly to {labeled_assembly_gz}")
-            os.rename(assembly_path, labeled_assembly_gz)
-            assembly_path = labeled_assembly_gz
-        except FileNotFoundError:
-            print("SKIP:\tFile Not Found, likely already exists...")
+    stats_filepath = os.path.join(sample_dir, assembly_path.replace(".fasta", "_stats.txt"))
 
     # Save a plain text stats file
     with open(stats_filepath, "w") as stats_file:
@@ -712,7 +664,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
         stats_file.write("\n")
         stats_file.write(str(results))  # results is a dict
 
-    return labeled_assembly_gz, sample_stats_list, sample_stats_dict
+    return assembly_path, sample_stats_list, sample_stats_dict
 
 
 # --------------------------------------------------------------
@@ -756,26 +708,37 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     kingdom_id = current_series["ORGANISM_KINGDOM"]
     karyote_id = current_series["ORGANISM_KARYOTE"]
     est_size = current_series["EST_SIZE"]
+    species_dir = os.path.join(output_dir, species_id)
 
     species_dir = os.path.join(output_dir, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
-        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq.gz")
+        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
     if pd.notna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
-        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq.gz")
-        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq.gz")    
+        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq")
+        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq")    
     if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq.gz")
+        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
-        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta.gz")
+        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
+        ref_seq_gz = ref_seq + ".gz"
+        if os.path.exists(ref_seq_gz) and not os.path.exists(ref_seq):
+            _ = pigz_decompress(ref_seq_gz, cpu_threads)
+
 
     # Set Illumina deduplicated read paths only if Illumina reads are present
     illu_dedup_f_reads = None
     illu_dedup_r_reads = None
     if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
-        illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq.gz")
-        illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq.gz")
+        illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
+        illu_dedup_f_reads_gz = illu_dedup_f_reads + ".gz"
+        illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq")
+        illu_dedup_r_reads_gz = illu_dedup_r_reads + ".gz"        
+        if os.path.exists(illu_dedup_f_reads_gz) and not os.path.exists(illu_dedup_f_reads):
+            _ = pigz_decompress(illu_dedup_f_reads_gz, cpu_threads)
+        if os.path.exists(illu_dedup_r_reads_gz) and not os.path.exists(illu_dedup_r_reads):
+            _ = pigz_decompress(illu_dedup_r_reads_gz, cpu_threads)
         if not os.path.exists(illu_dedup_f_reads) or not os.path.exists(illu_dedup_r_reads):
             print(f"ERROR:\tIllumina deduplicated reads not found: {illu_dedup_f_reads}, {illu_dedup_r_reads}")
             return None
@@ -785,59 +748,36 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         print(f"Processing assembly for quality control only: {ref_seq}")
         assembly_path = ref_seq
         sample_dir = os.path.dirname(assembly_path)
-        labeled_assembly_gz = os.path.join(sample_dir, f"{sample_id}_EGAP_assembly.fasta.gz")       
-        labeled_assembly = labeled_assembly_gz.replace(".gz","")
+        labeled_assembly = os.path.join(sample_dir, f"{sample_id}_EGAP_assembly.fasta")       
         os.chdir(sample_dir)
     else:
-        curated_assembly = os.path.join(sample_dir, f"{sample_id}_final_curated.fasta")
-        curated_assembly_gz = curated_assembly + ".gz"
+        assembly_path = os.path.join(sample_dir, f"{sample_id}_final_curated.fasta")
+        sample_dir = os.path.dirname(assembly_path)
         labeled_assembly = os.path.join(sample_dir, f"{sample_id}_final_EGAP_assembly.fasta")    
-        labeled_assembly_gz = labeled_assembly + ".gz"
-        if os.path.exists(curated_assembly):
-            curated_assembly_gz = pigz_compress(curated_assembly, cpu_threads)
-        if os.path.exists(curated_assembly_gz) and not os.path.exists(labeled_assembly_gz):
-            shutil.move(curated_assembly_gz, labeled_assembly_gz)
-        os.chdir(os.path.dirname(labeled_assembly_gz))
+        os.chdir(os.path.dirname(labeled_assembly))
+    assembly_path_gz = assembly_path + ".gz"
+    if os.path.exists(assembly_path_gz) and not os.path.exists(assembly_path):
+        assembly_path = pigz_decompress(assembly_path_gz, cpu_threads)
 
     print(f"Parsing final assembly for index {current_index} from {input_csv}:\n{current_row}")
-
-    # Decompress assembly if gzipped
-    if (pd.notna(ref_seq) or pd.notna(ref_seq_gca)) and pd.isna(est_size):
-        # Use reference sequence as assembly for QC
-        unzipped_assembly_path = ref_seq.replace(".gz","")
-        if os.path.exists(ref_seq) and not os.path.exists(unzipped_assembly_path):
-            unzipped_assembly_path = pigz_decompress(ref_seq, cpu_threads)
-    else:
-        if os.path.exists(labeled_assembly_gz) and not os.path.exists(labeled_assembly):
-            unzipped_assembly_path = pigz_decompress(labeled_assembly_gz, cpu_threads)
-        elif os.path.exists(labeled_assembly):
-            unzipped_assembly_path = labeled_assembly
-        else:
-            print(f"ERROR:\tAssembly file not found: {labeled_assembly_gz} or {labeled_assembly}")
-            return None
-
-    # Unzip reference sequence if necessary
-    ref_seq_unzipped = None
-    if pd.notna(ref_seq) and os.path.exists(ref_seq):
-        ref_seq_unzipped = ref_seq.replace(".gz", "") if ".gz" in ref_seq else ref_seq
-        if ".gz" in ref_seq and not os.path.exists(ref_seq_unzipped):
-            print(f"NOTE:\tUnzipping {ref_seq}")
-            ref_seq_unzipped = pigz_decompress(ref_seq, cpu_threads)
-    else:
-        print(f"WARNING:\tReference sequence {ref_seq} not found or not specified. Running QUAST without reference.")
 
     # --------------------------------------------------------------
     # Compleasm/BUSCO QC: Run on two different lineages
     # --------------------------------------------------------------
-    busco_assembly(unzipped_assembly_path, sample_id, sample_stats_dict,
+    busco_assembly(assembly_path, sample_id, sample_stats_dict,
                    "first", first_busco_odb, assembly_type, cpu_threads)
-    busco_assembly(unzipped_assembly_path, sample_id, sample_stats_dict,
+    busco_assembly(assembly_path, sample_id, sample_stats_dict,
                    "second", second_busco_odb, assembly_type, cpu_threads)
+
+    # compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
+    #                   "first", first_busco_odb, assembly_type, cpu_threads)
+    # compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
+    #                 "second", second_busco_odb, assembly_type, cpu_threads)
 
     # --------------------------------------------------------------
     # QUAST QC
     # --------------------------------------------------------------
-    quast_dir = unzipped_assembly_path.replace(".gz", "").replace(".fasta", "_quast")
+    quast_dir = assembly_path.replace(".fasta", "_quast")
     os.makedirs(quast_dir, exist_ok=True)
     quast_report_tsv = os.path.join(quast_dir, "report.tsv")
 
@@ -850,9 +790,9 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
             quast_cmd.append("--eukaryote")
         if kingdom_id == "Funga":
             quast_cmd.append("--fungus")
-        if ref_seq_unzipped and os.path.exists(ref_seq_unzipped):
-            quast_cmd.extend(["-r", ref_seq_unzipped])
-        quast_cmd.extend(["-o", quast_dir, unzipped_assembly_path])
+        if ref_seq and os.path.exists(ref_seq):
+            quast_cmd.extend(["-r", ref_seq])
+        quast_cmd.extend(["-o", quast_dir, assembly_path])
 
         _ = run_subprocess_cmd(quast_cmd, shell_check=False)
 
@@ -870,7 +810,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
                     sample_stats_dict["ASSEMBLY_L50"] = float(line.split("\t")[-1].strip())
                 elif "GC (%)" in line:
                     sample_stats_dict["ASSEMBLY_GC"] = float(line.split("\t")[-1].strip())
-                if ref_seq_unzipped and os.path.exists(ref_seq_unzipped):
+                if ref_seq and os.path.exists(ref_seq):
                     if "# misassemblies" in line:
                         sample_stats_dict["MISASSEMBLIES"] = float(line.split("\t")[-1].strip())
                     elif "# N's per 100 kbp" in line:
@@ -890,9 +830,9 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     # Compute coverage if reference length is known
     # --------------------------------------------------------------
     try:
-        if ref_seq_unzipped and os.path.exists(ref_seq_unzipped):
+        if ref_seq and os.path.exists(ref_seq):
             ref_total_bases = 0
-            for record in SeqIO.parse(ref_seq_unzipped, "fasta"):
+            for record in SeqIO.parse(ref_seq, "fasta"):
                 ref_total_bases += len(record.seq)
     
             if not pd.isna(illumina_f_raw_reads) and not pd.isna(illumina_r_raw_reads):
@@ -942,28 +882,16 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
 
     stats_filepath = os.path.join(sample_dir, labeled_assembly.replace(".fasta", "_stats.txt"))
 
-    assembly_path = unzipped_assembly_path + ".gz"
-    if os.path.exists(unzipped_assembly_path) and not os.path.exists(assembly_path):
-        print("Recompressing final assembly...")
-        assembly_path = pigz_compress(unzipped_assembly_path, cpu_threads)
-
-    labeled_assembly_gz = labeled_assembly + ".gz"
-    if os.path.exists(labeled_assembly) and not os.path.exists(labeled_assembly_gz):
-        print("Recompressing final assembly...")
-        labeled_assembly_gz = pigz_compress(labeled_assembly, cpu_threads)
-
-    if ref_seq_unzipped and os.path.exists(ref_seq_unzipped) and not os.path.exists(ref_seq):
-        print("Recompressing reference sequence...")
-        ref_seq = pigz_compress(ref_seq_unzipped, cpu_threads)
-
+    if not os.path.exists(ref_seq) and pd.isna(est_size):
+        shutil.copy(labeled_assembly, ref_seq)
     
-    if pd.isna(ont_sra) and pd.isna(ont_raw_reads) and pd.isna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads) and pd.isna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        # Rename to the final labeled assembly filename
-        if assembly_path != labeled_assembly_gz:
+    # Rename to the final labeled assembly filename
+    if pd.notna(est_size):
+        if assembly_path != labeled_assembly:
             try:
-                print(f"Renaming final assembly to {labeled_assembly_gz}")
-                os.rename(assembly_path, labeled_assembly_gz)
-                assembly_path = labeled_assembly_gz
+                print(f"Renaming final assembly to {labeled_assembly}")
+                os.rename(assembly_path, labeled_assembly)
+                assembly_path = labeled_assembly
             except FileNotFoundError:
                 print("SKIP:\tFile Not Found, likely already exists...")
 
@@ -978,13 +906,24 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         stats_file.write(str(results))  # results is a dict
 
     # Save sample_stats_dict to a CSV for final reference
-    final_stats_csv = labeled_assembly_gz.replace(".fasta.gz", "_final_stats.csv")
+    final_stats_csv = labeled_assembly.replace(".fasta", "_final_stats.csv")
     pd.DataFrame([sample_stats_dict]).to_csv(final_stats_csv, index=False)
     print(f"PASS: Full stats CSV saved: {final_stats_csv}")    
     
-    print(f"PASS:\tAssembly Stats for {labeled_assembly_gz}:\n{sample_stats_list}")
+    print(f"PASS:\tAssembly Stats for {labeled_assembly}:\n{sample_stats_list}")
 
-    return labeled_assembly_gz, final_stats_csv
+    # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
+    for root, dirs, files in os.walk(output_dir):
+        # Check each file in the current directory
+        for file in files:
+            # Check if file ends with .fasta or .fastq
+            if file.endswith(('.fasta', '.fastq')):
+                # Construct and print full path
+                full_path = os.path.join(root, file)
+                print(f"Compressing: {full_path}")
+                _ = pigz_compress(full_path, cpu_threads)
+
+    return labeled_assembly, final_stats_csv
 
 
 if __name__ == "__main__":
@@ -994,9 +933,18 @@ if __name__ == "__main__":
               "<output_dir> <sample_id> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    labeled_assembly_gz, final_stats_csv = final_assessment(sys.argv[1],       # assembly_type
-                                                            sys.argv[2],       # input_csv
-                                                            sys.argv[3],       # sample_id
-                                                            sys.argv[4],       # output_dir
-                                                            str(sys.argv[5]),  # cpu_threads
-                                                            str(sys.argv[6]))  # ram_gb
+
+    if sys.argv[1] == "final":
+        labeled_assembly, final_stats_csv = final_assessment(sys.argv[1],       # assembly_type
+                                                             sys.argv[2],       # input_csv
+                                                             sys.argv[3],       # sample_id
+                                                             sys.argv[4],       # output_dir
+                                                             str(sys.argv[5]),  # cpu_threads
+                                                             str(sys.argv[6]))  # ram_gb
+    else:
+        labeled_assembly, final_stats_csv = qc_assessment(sys.argv[1],       # assembly_type
+                                                          sys.argv[2],       # input_csv
+                                                          sys.argv[3],       # sample_id
+                                                          sys.argv[4],       # output_dir
+                                                          str(sys.argv[5]),  # cpu_threads
+                                                          str(sys.argv[6]))  # ram_gb
