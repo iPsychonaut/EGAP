@@ -17,7 +17,7 @@ from datetime import datetime
 import pandas as pd
 from bin.utilities import run_subprocess_cmd
 
-version = "3.0.0a"
+version = "3.0.0b"
 
 # --------------------------------------------------------------
 # Orchestrate the Entheome Genome Assembly Pipeline
