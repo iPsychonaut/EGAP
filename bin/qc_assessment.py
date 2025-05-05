@@ -913,7 +913,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     print(f"PASS:\tAssembly Stats for {labeled_assembly}:\n{sample_stats_list}")
 
     # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
-    for root, dirs, files in os.walk(output_dir):
+    for root, dirs, files in os.walk(sample_dir):
         # Check each file in the current directory
         for file in files:
             # Check if file ends with .fasta or .fastq
