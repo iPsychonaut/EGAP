@@ -5,18 +5,21 @@
 </div>
 
 <div align="center">
-  <!-- Badges -->
+  <!-- Conda Version -->
   <a href="https://anaconda.org/bioconda/egap">
-    <img src="https://anaconda.org/bioconda/egap/badges/version.svg" alt="Version Badge">
+    <img src="https://img.shields.io/conda/vn/bioconda/egap.svg" alt="Conda Version">
   </a>
-  <a href="https://anaconda.org/bioconda/egap">
-    <img src="https://anaconda.org/bioconda/egap/badges/latest_release_date.svg" alt="Latest Release Date Badge">
+  <!-- Latest Release Date (from GitHub) -->
+  <a href="https://github.com/iPsychonaut/EGAP/releases/latest">
+    <img src="https://img.shields.io/github/release-date/iPsychonaut/EGAP.svg" alt="Latest Release Date">
   </a>
+  <!-- Platforms (static “noarch”) -->
   <a href="https://anaconda.org/bioconda/egap">
-    <img src="https://anaconda.org/bioconda/egap/badges/platforms.svg" alt="Platforms Badge">
+    <img src="https://img.shields.io/badge/platforms-noarch-brightgreen.svg" alt="Platforms">
   </a>
+  <!-- Total Downloads -->
   <a href="https://anaconda.org/bioconda/egap">
-    <img src="https://anaconda.org/bioconda/egap/badges/downloads.svg" alt="Downloads Badge">
+    <img src="https://img.shields.io/conda/dn/bioconda/egap.svg" alt="Conda Downloads">
   </a>
 </div>
 
