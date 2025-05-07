@@ -159,7 +159,7 @@ conda activate EGAP_env
 In a dedicated environment through the Bioconda channel with the following command:
 
 ```bash
-conda create -y EGAP_env python=3.8 && conda activate EGAP_env && conda install -y -c bioconda egap
+conda create -y -n EGAP_env python=3.8 && conda activate EGAP_env && conda install -y -c bioconda egap
 ```
 
 ## Pipeline Flow
