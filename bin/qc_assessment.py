@@ -44,7 +44,7 @@ def nanoplot_qc_reads(INPUT_READS, READS_ORIGIN, CPU_THREADS, sample_stats_dict)
     if os.path.exists(nanoplot_out_file):
         print(f"SKIP:\tNanoPlot output already exists: {nanoplot_out_file}.")
     else:    
-        raw_nanoplot_cmd = [ "NanoPlot", "--fastq", INPUT_READS, "-t", str(CPU_THREADS),
+        raw_nanoplot_cmd = ["NanoPlot", "--fastq", INPUT_READS, "-t", str(CPU_THREADS),
                             "-o", output_dir, "--plots", "kde", "dot", "--loglength",
                             "--N50", "--title", f"{READS_ORIGIN} Reads: Preliminary Data",
                             "--prefix", READS_ORIGIN, "--verbose"]
@@ -197,16 +197,10 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
     status_counts = status_counts.reindex(columns=desired_order, fill_value=0)
     total_sequences = len(status_counts)
 
-    excluded_sequences = len(
-        status_counts.loc[
-            status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) == 0
-        ]
-    )
+    excluded_sequences = len(status_counts.loc[status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) == 0])
     included_sequences = total_sequences - excluded_sequences
 
-    filtered_status_counts = status_counts.loc[
-        status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) > 0
-    ]
+    filtered_status_counts = status_counts.loc[status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) > 0]
     if filtered_status_counts.empty:
         print("WARNING: No valid BUSCO data available for plotting.")
         plt.figure(figsize=(12, 8))
@@ -223,30 +217,20 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
         return
 
     # Reorder rows by total BUSCO matches
-    filtered_status_counts = filtered_status_counts.loc[
-        filtered_status_counts.sum(axis=1).sort_values(ascending=False).index
-    ]
+    filtered_status_counts = filtered_status_counts.loc[filtered_status_counts.sum(axis=1).sort_values(ascending=False).index]
 
     # Compute counts and plot
     status_totals = busco_df['Status'].value_counts()
-    colors = {
-        'Single': '#619B8AFF',
-        'Duplicated': '#A1C181FF',
-        'Incomplete': '#FE7F2DFF',
-        'Fragmented': '#FCCA46FF'
-    }
-    ax = filtered_status_counts.plot(
-        kind='bar', stacked=True, figsize=(12, 8),
-        color=[colors[col] for col in filtered_status_counts.columns]
-    )
-    legend_labels = [
-        f"{status} ({round((status_totals.get(status, 0)/busco_genes)*100, 2)}%)"
-        for status in filtered_status_counts.columns
-    ]
-    completeness_values = [
-        round((status_totals.get(status, 0)/busco_genes)*100, 2)
-        for status in filtered_status_counts.columns
-    ]
+    colors = {'Single': '#619B8AFF',
+              'Duplicated': '#A1C181FF',
+              'Incomplete': '#FE7F2DFF',
+              'Fragmented': '#FCCA46FF'}
+    ax = filtered_status_counts.plot(kind='bar', stacked=True, figsize=(12, 8),
+                                     color=[colors[col] for col in filtered_status_counts.columns])
+    legend_labels = [f"{status} ({round((status_totals.get(status, 0)/busco_genes)*100, 2)}%)"
+                     for status in filtered_status_counts.columns]
+    completeness_values = [round((status_totals.get(status, 0)/busco_genes)*100, 2)
+                           for status in filtered_status_counts.columns]
     completeness_calc = round(completeness_values[0] + completeness_values[1], 2)
 
     plt.title(f"Distribution of {busco_odb} BUSCO Status per Sequence\n"
@@ -259,14 +243,10 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
     plt.tight_layout()
 
     # Save plots (SVG, PNG)
-    output_busco_svg = os.path.join(
-        os.path.dirname(input_fasta),
-        f"{sample_id}_{assembly_type}_{busco_odb}_busco.svg"
-    )
-    output_busco_png = os.path.join(
-        os.path.dirname(input_fasta),
-        f"{sample_id}_{assembly_type}_{busco_odb}_busco.png"
-    )
+    output_busco_svg = os.path.join(os.path.dirname(input_fasta),
+                                    f"{sample_id}_{assembly_type}_{busco_odb}_busco.svg")
+    output_busco_png = os.path.join(os.path.dirname(input_fasta),
+                                    f"{sample_id}_{assembly_type}_{busco_odb}_busco.png")
     plt.savefig(output_busco_svg, format="svg")
     plt.savefig(output_busco_png, format="png")
     print(f"PASS:\tBUSCO {busco_odb} plot saved: {output_busco_svg} & {output_busco_png}")
@@ -310,14 +290,12 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict, busco_count, bus
     if os.path.exists(busco_summary):
         print(f"SKIP\tBUSCO Summary already exists: {busco_summary}.")
     else:
-        busco_cmd = [
-            "busco", "-m", "genome",
-            "-i", assembly_path, "-f",
-            "-l", busco_odb,
-            "-c", str(cpu_threads),
-            "-o", busco_out_label,
-            "--out_path", sample_dir
-        ]
+        busco_cmd = ["busco", "-m", "genome",
+                     "-i", assembly_path, "-f",
+                     "-l", busco_odb,
+                     "-c", str(cpu_threads),
+                     "-o", busco_out_label,
+                     "--out_path", sample_dir]
         _ = run_subprocess_cmd(busco_cmd, shell_check=False)
 
     # Generate BUSCO plot
@@ -379,13 +357,11 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
     if os.path.exists(compleasm_summary):
         print(f"SKIP\tCompleasm Summary already exists: {compleasm_summary}.")
     else:
-        compleasm_cmd = [
-            "compleasm", "run",
-            "-a", assembly_path,
-            "-o", compleasm_dir,
-            "--lineage", busco_odb,
-            "-t", cpu_threads
-        ]
+        compleasm_cmd = ["compleasm", "run",
+                         "-a", assembly_path,
+                         "-o", compleasm_dir,
+                         "--lineage", busco_odb,
+                         "-t", cpu_threads]
         _ = run_subprocess_cmd(compleasm_cmd, shell_check=False)
 
     # Generate a BUSCO-like plot if not already present
@@ -398,27 +374,17 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
     with open(compleasm_summary, "r") as compleasm_file:
         for line in compleasm_file:
             if "S:" in line:
-                sample_stats_dict[f"{busco_count}_BUSCO_S"] = float(
-                    line.split("S:")[-1].split(", ")[0].replace("\n", "").replace("%", "")
-                )
+                sample_stats_dict[f"{busco_count}_BUSCO_S"] = float(line.split("S:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
             elif "D:" in line:
-                sample_stats_dict[f"{busco_count}_BUSCO_D"] = float(
-                    line.split("D:")[-1].split(", ")[0].replace("\n", "").replace("%", "")
-                )
+                sample_stats_dict[f"{busco_count}_BUSCO_D"] = float(line.split("D:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
             elif "F:" in line:
-                sample_stats_dict[f"{busco_count}_BUSCO_F"] = float(
-                    line.split("F:")[-1].split(", ")[0].replace("\n", "").replace("%", "")
-                )
+                sample_stats_dict[f"{busco_count}_BUSCO_F"] = float(line.split("F:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
             elif "M:" in line:
-                sample_stats_dict[f"{busco_count}_BUSCO_M"] = float(
-                    line.split("M:")[-1].split(", ")[0].replace("\n", "").replace("%", "")
-                )
+                sample_stats_dict[f"{busco_count}_BUSCO_M"] = float(line.split("M:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
 
     # Compute combined completeness: S + D
-    sample_stats_dict[f"{busco_count}_BUSCO_C"] = (
-        sample_stats_dict[f"{busco_count}_BUSCO_S"] +
-        sample_stats_dict[f"{busco_count}_BUSCO_D"]
-    )
+    sample_stats_dict[f"{busco_count}_BUSCO_C"] = (sample_stats_dict[f"{busco_count}_BUSCO_S"] +
+                                                   sample_stats_dict[f"{busco_count}_BUSCO_D"])
 
     return assembly_path
 
