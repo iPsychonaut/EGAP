@@ -12,12 +12,13 @@ Created on Fri May  2 21:18:21 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import argparse, os, time
-from datetime import datetime
+import argparse, sys, time, subprocess
+from pathlib import Path
 import pandas as pd
-from bin.utilities import run_subprocess_cmd
+from datetime import datetime
 
-version = "3.0.0b"
+version = "3.0.0c"
+
 
 # --------------------------------------------------------------
 # Orchestrate the Entheome Genome Assembly Pipeline
@@ -26,44 +27,33 @@ if __name__ == "__main__":
     # Parse command-line arguments for pipeline configuration
     parser = argparse.ArgumentParser(description="Run Entheome Genome Assembly Pipeline (EGAP)")
 
-    # Determine script directory for accessing other pipeline scripts
-    draft_assembly_py_path = os.path.abspath(__file__)
-    script_dir = os.path.dirname(draft_assembly_py_path)
-    current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Define default parameters for input CSV, output directory, CPU threads, and RAM
-    default_input_csv = None
-    default_output_dir = None
-    default_cpu_threads = 1
-    default_ram_gb = 8
-
-    # Add command-line arguments with descriptions and defaults
     parser.add_argument("--input_csv", "-csv",
                         type=str,
-                        default=default_input_csv,
-                        help=f"Path to a CSV containing multiple sample data (default: {default_input_csv})")
+                        required=True,
+                        help="Path to a CSV containing multiple sample data")
     parser.add_argument("--output_dir", "-o",
                         type=str,
-                        default=default_output_dir,
-                        help="Directory for pipeline output files (default: {default_output_dir})")
+                        required=True,
+                        help="Directory for pipeline output files")
     parser.add_argument("--cpu_threads", "-t",
-                        type=str,
-                        default=default_cpu_threads,
-                        help=f"Number of CPU threads to use (default: {default_cpu_threads})")
+                        type=int,
+                        default=1,
+                        help="Number of CPU threads to use (default: 1)")
     parser.add_argument("--ram_gb", "-r",
-                        type=str,
-                        default=default_ram_gb,
-                        help=f"Amount of RAM in GB to allocate (default: {default_ram_gb})")
+                        type=int,
+                        default=8,
+                        help="Amount of RAM in GB to allocate (default: 8)")
 
-    # Parse arguments and assign to variables
     args = parser.parse_args()
-    input_csv = args.input_csv
-    output_dir = args.output_dir  # Corrected from args.input_csv to args.output_dir
+    input_csv   = args.input_csv
+    output_dir  = args.output_dir
     cpu_threads = args.cpu_threads
-    ram_gb = args.ram_gb
+    ram_gb      = args.ram_gb
+    current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 
     # Print Banner & Parameters
-    print("""
+    print(f"""
 \033[91m.---.\033[92m________\\\033[38;5;208m=\033[96m/\033[92m________\033[91m.---.\033[0m 
 \033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|\033[94m--------\033[96m/\033[91m=\033[92m\\\033[94m--------\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|   \033[94m.\033[96m---------.  \033[94m.\033[96m------.    \033[94m.\033[96m------.    \033[94m.\033[96m-------.\033[0m
 \033[91m`---'\033[96m~~~~~~~(\033[38;5;208m===\033[92m)\033[96m~~~~~~~\033[91m`---'  \033[94m/\033[96m|         |\033[94m/\033[96m/        \\ \033[94m/\033[96m/        \\ \033[94m/\033[96m/         \\\033[0m
@@ -89,7 +79,7 @@ if __name__ == "__main__":
  Input-Setup \033[94m-\033[92m>\033[0m Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess
     """)
     time.sleep(1.5)
-    print("""
+    print(f"""
 \033[91m================================================================================\033[0m
 
     \033[92minput-setup settings
@@ -238,7 +228,7 @@ if __name__ == "__main__":
 
 \033[91m================================================================================\033[0m
     """)
-    print("""
+    print(f"""
 \033[91m.---.\033[92m________\\\033[38;5;208m=\033[96m/\033[92m________\033[91m.---.\033[0m 
 \033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|\033[94m--------\033[96m/\033[91m=\033[92m\\\033[94m--------\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|   \033[94m.\033[96m---------.  \033[94m.\033[96m------.    \033[94m.\033[96m------.    \033[94m.\033[96m-------.\033[0m
 \033[91m`---'\033[96m~~~~~~~(\033[38;5;208m===\033[92m)\033[96m~~~~~~~\033[91m`---'  \033[94m/\033[96m|         |\033[94m/\033[96m/        \\ \033[94m/\033[96m/        \\ \033[94m/\033[96m/         \\\033[0m
@@ -264,32 +254,55 @@ if __name__ == "__main__":
 \033[91m================================================================================\033[0m
     """)
 
-    # Load input CSV containing sample metadata
+    # Determine project root and locate the bin/ directory there
+    this_file = Path(__file__).resolve()
+    project_dir = this_file.parent
+    bin_dir = project_dir / "bin"
+    
+    # Load the Sample Table
     input_csv_df = pd.read_csv(input_csv)
 
-    # Iterate through each sample in the CSV
+    processes = ["preprocess_refseq", "preprocess_ont", "preprocess_illumina",
+                 "preprocess_pacbio", "assemble_masurca", "assemble_flye",
+                 "assemble_spades", "assemble_hifiasm", "compare_assemblies",
+                 "polish_assembly", "curate_assembly"]
+
+    # Loop through each process for each sample
     for index, row in input_csv_df.iterrows():
         sample_id = row["SAMPLE_ID"]
-        # Define the sequence of pipeline processes to execute
-        process_list = [
-            "preprocess_refseq", "preprocess_ont", "preprocess_illumina",
-            "preprocess_pacbio", "assemble_masurca", "assemble_flye",
-            "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-            "polish_assembly", "curate_assembly"
-        ]
+        for proc in processes:
+            script = bin_dir / f"{proc}.py"
+            if not script.exists():
+                raise FileNotFoundError(f"Missing script: {script}")
+            current_cmd = [sys.executable,
+                   str(script),
+                   sample_id,
+                   input_csv,
+                   output_dir,
+                   str(cpu_threads),
+                   str(ram_gb)]
+            print(f"\n→ Running {proc}: {' '.join(current_cmd)}\n")
+            current_process = subprocess.Popen(current_cmd)
+            current_return_code = current_process.wait()
+            if current_return_code != 0:
+                raise RuntimeError(f"{proc} failed with return code {current_return_code}")
 
-        # Execute each pipeline process for the current sample
-        for process in process_list:
-            # Construct command to run the process script
-            command = f"python3 {os.path.join(script_dir, 'bin', f'{process}.py')} {sample_id} {input_csv} {output_dir} {cpu_threads} {ram_gb}"
-            print(f"Running {process}: {command}...")
-            return_code = run_subprocess_cmd(command, shell_check=True)
-            if return_code != 0:
-                raise RuntimeError(f"ERROR:\tCommand: {command}\nErrored with return code: {return_code}")
+    # final QC
+    qc_script = bin_dir / "qc_assessment.py"
+    if not qc_script.exists():
+        raise FileNotFoundError(f"Missing QC script: {qc_script}")
+    qc_cmd = [sys.executable,
+              str(qc_script),
+              "final",
+              input_csv,
+              sample_id,
+              output_dir,
+              str(cpu_threads),
+              str(ram_gb)]
+    print(f"\n→ Running qc_assessment: {' '.join(qc_cmd)}\n")
+    qc_process = subprocess.Popen(qc_cmd)
+    qc_return_code = qc_process.wait()
+    if qc_return_code != 0:
+        raise RuntimeError(f"qc_assessment failed with return code {qc_return_code}")
 
-        # Run final quality control assessment
-        final_qc_assessment_cmd = f"python3 {os.path.join(script_dir, 'bin', 'qc_assessment.py')} final {input_csv} {sample_id} {output_dir} {cpu_threads} {ram_gb}"
-        print(f"Running final qc_assessment: {final_qc_assessment_cmd}...")
-        return_code = run_subprocess_cmd(final_qc_assessment_cmd, shell_check=True)
-        if return_code != 0:
-            raise RuntimeError(f"ERROR:\tCommand: {final_qc_assessment_cmd}\nErrored with return code: {return_code}")
+    print("\nPASS:\tAll samples processed successfully.")
