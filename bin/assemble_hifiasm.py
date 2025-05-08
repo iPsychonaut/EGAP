@@ -84,6 +84,14 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if os.path.exists(hifiasm_gfa):
         print(f"SKIP:\tHiFi Assembly already exists: {hifiasm_gfa}")
     else:
+        # Ensure work directory output
+        starting_work_dir = os.getcwd()
+        if "work" not in starting_work_dir:
+            current_work_dir = hifiasm_out_dir
+        else:
+            current_work_dir = starting_work_dir
+        os.chdir(current_work_dir)
+        
         hifiasm_cmd = ["hifiasm",
                        "-o", hifiasm_path,
                        "-t", str(cpu_threads),
