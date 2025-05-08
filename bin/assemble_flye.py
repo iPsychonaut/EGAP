@@ -109,6 +109,14 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         egap_flye_assembly_path, flye_stats_list, _ = qc_assessment("flye", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
         print(f"SKIP:\tFinal Flye Assembly already exists: {egap_flye_assembly_path}.")
     else:
+        # Ensure work directory output
+        starting_work_dir = os.getcwd()
+        if "work" not in starting_work_dir:
+            current_work_dir = flye_out_dir
+        else:
+            current_work_dir = starting_work_dir
+        os.chdir(current_work_dir)
+        
         if pd.notna(ont_raw_reads):
             flye_cmd = ["flye",
                         "--nano-corr", highest_mean_qual_long_reads,
