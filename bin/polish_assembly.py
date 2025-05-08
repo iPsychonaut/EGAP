@@ -274,12 +274,20 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
+    # Ensure work directory output
+    starting_work_dir = os.getcwd()
+    if "work" not in starting_work_dir:
+        current_work_dir = polish_out_dir
+    else:
+        current_work_dir = starting_work_dir
+    os.chdir(current_work_dir)
+
     # -------------------------------------------------------------------------
     # Step 1: Two rounds of Racon polishing if ONT or PacBio reads exist.
     # -------------------------------------------------------------------------
     racon_work_dir = os.path.join(cwd, "racon_polish")
     os.makedirs(racon_work_dir, exist_ok=True)
-    racon_final = os.path.join(polish_out_dir, f"{sample_id}_racon.fasta")
+    racon_final = os.path.join(current_work_dir, f"{sample_id}_racon.fasta")
 
     if pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads):
         print("2x Racon Polishing Long (ONT or PacBio) Reads...")
@@ -312,7 +320,7 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # -------------------------------------------------------------------------
     pilon_work_dir = os.path.join(cwd, "pilon_polish")
     os.makedirs(pilon_work_dir, exist_ok=True)
-    pilon_final = os.path.join(polish_out_dir, f"{sample_id}_pilon.fasta")
+    pilon_final = os.path.join(current_work_dir, f"{sample_id}_pilon.fasta")
 
     if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
         print("Pilon Polishing with Illumina Reads...")
