@@ -10,7 +10,7 @@ Updated on Sat Mar 29 2025
 """
 import os, sys, glob, shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, find_file
+from utilities import run_subprocess_cmd, get_current_row_data
 
 # --------------------------------------------------------------
 # Preprocess reference sequence data
@@ -31,15 +31,13 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     Returns:
         str or None: Path to reference sequence file, or None if no reference is available.
     """  
-    print(f"Preprocessing Illumina reads for {sample_id.split('-')[0]}...")
+    print(f"Preprocessing Reference Sequence assembly for {sample_id.split('-')[0]}...")
     # Parse the CSV and retrieve relevant row data
     input_df = pd.read_csv(input_csv)
     print(f"DEBUG - input_df - {input_df}")
     
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]  # Convert to Series (single row)
-
-    print(f"DEBUG - current_series - {current_series}")
 
     # Identify read paths, reference, and BUSCO lineage info from CSV
     ref_seq_gca = current_series["REF_SEQ_GCA"]
@@ -64,11 +62,15 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     
     if pd.notna(ref_seq_gca) and "." not in ref_seq_gca:
         print(f"ERROR:\tReference Sequence GCA requires version number: {ref_seq_gca} has no '.#' ")
-    existing_gca = find_file(f"{ref_seq_gca}.fasta", species_dir)   
-    renamed_gca = None
-    if pd.notna(existing_gca):
-        print(f"Found existing Reference Sequence: {existing_gca}.")
-    if existing_gca == None:        
+    renamed_gca = os.path.join(refseq_dir, f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
+    if os.path.exists(ref_seq_gca):
+        shutil.move(ref_seq_gca, renamed_gca)
+        print(f"Found existing Reference Sequence: {renamed_gca}.")  
+        return renamed_gca
+    elif os.path.exists(renamed_gca):
+        print(f"Found existing Reference Sequence: {renamed_gca}.")
+        return renamed_gca
+    else:
         ref_seq_gca_dir = os.path.join(refseq_dir, f"ncbi_dataset/data/{ref_seq_gca}/")
         renamed_gca = os.path.join(refseq_dir, f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
         if not pd.isna(ref_seq_gca):
@@ -89,11 +91,6 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 print(f"PASS:\tSuccessfully moved and renamed the GCA to: {renamed_gca}.")
             else:
                 print(f"SKIP:\tREF_SEQ GCA already exists: {renamed_gca}")
-    else:
-        renamed_gca = existing_gca
-    if "None" in renamed_gca:
-        renamed_gca = None
-    print(renamed_gca)
     
     return renamed_gca
 
