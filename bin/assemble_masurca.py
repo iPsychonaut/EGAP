@@ -11,14 +11,14 @@ This script runs MaSuRCA assembly with Illumina and optional long reads.
 """
 import os, sys, shutil, re
 import pandas as pd
-from utilities import run_subprocess_cmd, find_file, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data
 from qc_assessment import qc_assessment
 
 
 # --------------------------------------------------------------
 # Locate MaSuRCA CA folder
 # --------------------------------------------------------------
-def find_ca_folder():
+def find_ca_folder(current_work_dir):
     """Find the MaSuRCA CA folder in the current working directory.
 
     Scans subdirectories for a folder starting with 'CA', defaulting to 'CA' if none is found.
@@ -26,15 +26,13 @@ def find_ca_folder():
     Returns:
         str: Path to the CA folder.
     """
-    input_folder = os.getcwd()
-    subfolders = [f.path for f in os.scandir(input_folder) if f.is_dir()]
-    ca_folder = os.path.join(input_folder, "CA")
+    subfolders = [f.path for f in os.scandir(current_work_dir) if f.is_dir()]
+    ca_folder = os.path.join(current_work_dir, "CA")
     for folder in subfolders:
         if os.path.basename(folder).startswith("CA"):
             ca_folder = folder
             break
     return ca_folder
-
 
 
 # --------------------------------------------------------------
@@ -71,7 +69,7 @@ def parse_bbmerge_output(insert_size_histogram_txt):
 # --------------------------------------------------------------
 # Compute insert size statistics with BBMerge
 # --------------------------------------------------------------
-def bbmap_stats(input_folder, reads_list):
+def bbmap_stats(input_folder, reads_list, cpu_threads):
     """Compute insert size statistics using BBMerge.
 
     Runs BBMerge to generate a histogram or parses an existing one to extract
@@ -86,8 +84,7 @@ def bbmap_stats(input_folder, reads_list):
     """
     bbmap_out_path = f"{input_folder}/bbmap_data.fq"
     insert_size_histogram_txt = f"{input_folder}/insert_size_histogram.txt"
-    print(f"NOTE:\tCurrent bbmap out path: {bbmap_out_path}")
-    default_bbmerge_path = "bbmerge.sh"
+    print(f"DEBUG - bbmap_out_path - {bbmap_out_path}")
     avg_insert = 251
     std_dev = 30
     if os.path.isfile(insert_size_histogram_txt):
@@ -95,7 +92,12 @@ def bbmap_stats(input_folder, reads_list):
         avg_insert, std_dev = parse_bbmerge_output(insert_size_histogram_txt)
     else:
         print("Processing fastq files for bbmap stats...")
-        bbmerge_path = find_file(default_bbmerge_path)
+        # bbmerge_path = find_file("bbmerge.sh",
+        #                          folder = os.environ["CONDA_PREFIX"] + "/bin",
+        #                          cpu_threads = cpu_threads)
+        bbmerge_path = shutil.which("bbmerge.sh") or shutil.which("bbmerge")
+        if not bbmerge_path:
+            raise FileNotFoundError("bbmerge not found in PATH")
         bbmerge_cmd = [bbmerge_path,
                        f"in1={reads_list[1]}",
                        f"in2={reads_list[2]}",
@@ -239,7 +241,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # Calculate insert size and standard deviation based on read type
     if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
         avg_insert, std_dev = bbmap_stats(masurca_out_dir,
-                                         [ont_raw_reads, illumina_f_raw_reads, illumina_r_raw_reads, pacbio_raw_reads])
+                                         [ont_raw_reads, illumina_f_raw_reads, illumina_r_raw_reads, pacbio_raw_reads], cpu_threads)
     elif pd.notna(pacbio_raw_reads):
         avg_insert, std_dev = 15000, 4000
     elif pd.notna(ont_raw_reads):
@@ -264,8 +266,16 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print(f"DEBUG - adjustment_ratio - {adjustment_ratio}")
         jf_size = int(round(jf_size * adjustment_ratio, 0))
     
+    # Ensure work directory output
+    starting_work_dir = os.getcwd()
+    if "work" not in starting_work_dir:
+        current_work_dir = masurca_out_dir
+    else:
+        current_work_dir = starting_work_dir
+    os.chdir(current_work_dir)
+    
     # Define the desired assembly file paths
-    data_output_folder = find_ca_folder()
+    data_output_folder = find_ca_folder(current_work_dir)
     primary_genome_scf = os.path.join(data_output_folder, "primary.genome.scf.fasta")  # (NEW: Fallback for interrupted assemblies)
     terminator_genome_scf = os.path.join(data_output_folder, "9-terminator", "genome.scf.fasta")  # (NEW: Check for successful assembly output)
     egap_masurca_assembly_path = os.path.join(masurca_out_dir, f"{sample_id}_masurca.fasta")
@@ -298,10 +308,10 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print(f"SKIP:\tMaSuRCA Assembly, scaffolded assembly already exists: {egap_masurca_assembly_path}.")
         egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
         return egap_masurca_assembly_path
-    else:
+    else:        
         # Build the configuration file (NEW: Restored original configuration logic)
         config_content = ["DATA\n"]
-
+        
         # Add Illumina paired-end reads if available
         if illu_dedup_f_reads and illu_dedup_r_reads:
             config_content.append(f"PE= pe {int(avg_insert)} {int(std_dev)} "
@@ -337,7 +347,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print(f"DEBUG: Config content:\n{''.join(config_content)}")
 
         # Write the configuration file
-        config_path = os.path.join(os.getcwd(), "masurca_config_file.txt")
+        config_path = os.path.join(current_work_dir, "masurca_config_file.txt")
         with open(config_path, "w") as file:
             for entry in config_content:
                 file.write(entry)
@@ -347,7 +357,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         _ = run_subprocess_cmd(masurca_config_cmd, False)
 
         # Modify the assemble.sh to skip gap closing
-        assemble_sh_path = os.path.join(os.getcwd(), "assemble.sh")
+        assemble_sh_path = os.path.join(current_work_dir, "assemble.sh")
         modified_assemble_sh_path = skip_gap_closing_section(assemble_sh_path)
 
         # Run the modified assembly script
@@ -355,7 +365,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         _ = run_subprocess_cmd(masurca_assemble_cmd, False)
 
         # Refresh assembly file paths post run
-        data_output_folder = find_ca_folder()
+        data_output_folder = find_ca_folder(current_work_dir)
         primary_genome_scf = os.path.join(data_output_folder, "primary.genome.scf.fasta")  # (NEW: Fallback for interrupted assemblies)
         terminator_genome_scf = os.path.join(data_output_folder, "9-terminator", "genome.scf.fasta")  # (NEW: Check for successful assembly output)
 
