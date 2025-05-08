@@ -452,13 +452,21 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
  
     print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
+    # Ensure work directory output
+    starting_work_dir = os.getcwd()
+    if "work" not in starting_work_dir:
+        current_work_dir = curation_out_dir
+    else:
+        current_work_dir = starting_work_dir
+    os.chdir(current_work_dir)
+
     # -------------------------------------------------------------------------
     # Step 1: Purge duplicates (haplotigs) if ONT or PacBio reads are present.
     # -------------------------------------------------------------------------
     print(f"DEBUG - Starting purge duplicates for {sample_id}")
     if pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads):
         print("Purging Haplotigs using Long Reads (ONT or PacBio)...")
-        dup_purged_assembly = long_reads_purge_dups(curation_out_dir,
+        dup_purged_assembly = long_reads_purge_dups(current_work_dir,
                                                     polished_assembly,
                                                     ont_raw_reads,
                                                     illumina_f_raw_reads,
@@ -481,7 +489,7 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - Starting RagTag correction for {sample_id}")
     if pd.notna(ref_seq) and os.path.exists(ref_seq):
         print("Running RagTag with Reference Sequence...")
-        ragtag_ref_assembly = ref_seq_ragtag(dup_purged_assembly, ref_seq, curation_out_dir,
+        ragtag_ref_assembly = ref_seq_ragtag(dup_purged_assembly, ref_seq, current_work_dir,
                                              sample_id, cpu_threads, ram_gb)
         if not os.path.exists(ragtag_ref_assembly):
             print(f"ERROR:\tRagTag correction failed to produce output: {ragtag_ref_assembly}")
@@ -498,12 +506,12 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - Starting gap closing for {sample_id}")
     if pd.notna(ont_raw_reads):
         print("Running TGS-GapCloser with ONT Reads...")
-        curated_assembly = ont_tgs_gapcloser(curation_out_dir, ragtag_ref_assembly,
+        curated_assembly = ont_tgs_gapcloser(current_work_dir, ragtag_ref_assembly,
                                                 highest_mean_qual_long_reads,
                                                 sample_id, cpu_threads)
     elif pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
         print("Running ABySS-Sealer with Illumina Reads...")
-        curated_assembly = illu_abyss_sealer(curation_out_dir, ragtag_ref_assembly,
+        curated_assembly = illu_abyss_sealer(current_work_dir, ragtag_ref_assembly,
                                                 illu_dedup_f_reads, illu_dedup_r_reads,
                                                 cpu_threads)
     elif pd.notna(pacbio_raw_reads):
