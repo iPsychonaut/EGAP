@@ -142,10 +142,10 @@ Open a terminal in the directory where the `entheome.sif.def` is located and run
 sudo singularity build entheome.sif entheome.sif.def 
 ```
 
-Edit the parameters in the nextflow.config and run:
+Edit the parameters in the nextflow.config and run (ensure the entheome.sif is in the same directory that draft_assembly.nf and nextflow.config are in):
 
 ```bash
-nextflow draft_assembly.nf -with-singularity {PWD}/bin/entheome.sif
+nextflow draft_assembly.nf -with-singularity entheome.sif
 ```
 
 OR
