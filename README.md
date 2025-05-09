@@ -97,7 +97,7 @@ The following tools are installed:
 - [Flye](https://github.com/mikolmogorov/Flye)
 - [SPAdes](https://github.com/ablab/spades)
 - [Racon](https://github.com/lbcb-sci/racon)
-- [Burrows-Wheeler Aligner](https://github.com/lh3/bwa)
+- [Burrows-Wheeler Aligner](https://github.com/bwa-mem2/bwa-mem2)
 - [SamTools](https://github.com/samtools/samtools)
 - [BamTools](https://github.com/hartwigmedical/hmftools/tree/master/bam-tools)
 - [Pilon](https://github.com/broadinstitute/pilon)
