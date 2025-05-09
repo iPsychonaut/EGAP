@@ -249,6 +249,7 @@ def get_current_row_data(input_df, sample_id):
     
     return current_row, current_index, sample_stats_dict
 
+
 # --------------------------------------------------------------
 # Parse NanoPlot statistics for long reads
 # --------------------------------------------------------------
@@ -317,39 +318,6 @@ def analyze_nanostats(READS_ORIGIN, nanoplot_out_file, sample_stats_dict):
                 elif "Total bases:" in line:
                     sample_stats_dict["FILT_PACBIO_TOTAL_BASES"] = float(line.split(":")[-1].replace(" ","").replace(",","").replace("\n",""))
     return sample_stats_dict
-
-
-# --------------------------------------------------------------
-# Search filesystem for a file
-# --------------------------------------------------------------
-def find_file(filename, folder=None):
-    """Search the filesystem for a file by name.
-
-    Walks the filesystem from a root directory, skipping certain paths, to find the
-    first occurrence of the file.
-
-    Args:
-        filename (str): Name of the file to search for.
-        folder (str, optional): Starting directory for search. Defaults to OS-specific root.
-
-    Returns:
-        str or None: Absolute path to the file if found, else None.
-    """
-    global ENVIRONMENT_TYPE
-    print(f"Looking for {filename}")
-    root_directory = "/"
-
-    for root, dirs, files in os.walk(root_directory):
-        # Skip paths containing "$RECYCLE.BIN"
-        if "$RECYCLE.BIN" in root:
-            continue
-        if "ncbi" in dirs:
-            continue
-
-        if filename in files:
-            return os.path.join(root, filename)
-
-    return None
 
 
 # --------------------------------------------------------------

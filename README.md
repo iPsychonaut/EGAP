@@ -97,7 +97,7 @@ The following tools are installed:
 - [Flye](https://github.com/mikolmogorov/Flye)
 - [SPAdes](https://github.com/ablab/spades)
 - [Racon](https://github.com/lbcb-sci/racon)
-- [Burrows-Wheeler Aligner](https://github.com/lh3/bwa)
+- [Burrows-Wheeler Aligner](https://github.com/bwa-mem2/bwa-mem2)
 - [SamTools](https://github.com/samtools/samtools)
 - [BamTools](https://github.com/hartwigmedical/hmftools/tree/master/bam-tools)
 - [Pilon](https://github.com/broadinstitute/pilon)
@@ -142,7 +142,7 @@ Open a terminal in the directory where the `entheome.sif.def` is located and run
 sudo singularity build entheome.sif entheome.sif.def 
 ```
 
-Edit the parameters in the nextflow.config and run (ensure both nextflow.config and entheome.sif are in the same directory as draft_assembly.nf):
+Edit the parameters in the nextflow.config and run (ensure the entheome.sif is in the same directory that draft_assembly.nf and nextflow.config are in):
 
 ```bash
 nextflow draft_assembly.nf -with-singularity entheome.sif
@@ -227,7 +227,7 @@ The CSV file should have the following header and columns:
 - If you provide a value for `ILLUMINA_RAW_DIR`, set `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS` to `None`. EGAP will automatically detect and process all paired-end reads within that directory. The same applies for `ONT_RAW_DIR`.
 - Ensure that all file paths are correct and accessible.
 - The CSV file should not contain extra spaces or special characters in the headers.
-- If you just want to perform QC analysis for an already built assembly: provide the path for the assembly or GCA Accession number to download, in the `REF_SEQ` or `REF_SEQ_GCA` field respectively, provide `ORGANISM_KARYOTE`, and the two compleasm databases (`BUSCO_1`, `BUSCO_2`) to use; **DO NOT PROVIDE ESTIMATED SIZE (`EST_SIZE`)**.
+- If you just want to perform QC analysis for an already built assembly: provide the path for the assembly or GCA Accession number to download, in the `REF_SEQ` or `REF_SEQ_GCA` field respectively, provide `ORGANISM_KARYOTE`, and the two BUSCO databases (`BUSCO_1`, `BUSCO_2`) to use; **DO NOT PROVIDE ESTIMATED SIZE (`EST_SIZE`)**.
 
 ### Example CSV File
 

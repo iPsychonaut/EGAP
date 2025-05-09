@@ -99,26 +99,29 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     os.makedirs(flye_out_dir, exist_ok=True)
     egap_flye_assembly_path = os.path.join(flye_out_dir, f"{sample_id}_flye.fasta")
 
-    # Flye Assemble of Long Reads Only (ONT or PacBio)
-    flye_work_dir = os.path.join(os.getcwd(), "flye_assembly")
+    # Ensure work directory output
+    starting_work_dir = os.getcwd()
+    if "work" not in starting_work_dir:
+        current_work_dir = flye_out_dir
+    else:
+        current_work_dir = starting_work_dir
+    os.chdir(current_work_dir)
 
-    print(f"DEBUG - flye_work_dir - {flye_work_dir}")
-
-    flye_path = os.path.join(flye_work_dir, "assembly.fasta")
+    flye_path = os.path.join(current_work_dir, "assembly.fasta")
     if os.path.exists(egap_flye_assembly_path):
         egap_flye_assembly_path, flye_stats_list, _ = qc_assessment("flye", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
         print(f"SKIP:\tFinal Flye Assembly already exists: {egap_flye_assembly_path}.")
-    else:
+    else:        
         if pd.notna(ont_raw_reads):
             flye_cmd = ["flye",
                         "--nano-corr", highest_mean_qual_long_reads,
-                        "--out-dir", flye_work_dir, 
+                        "--out-dir", current_work_dir, 
                         "--genome-size", str(est_size), "--threads", str(cpu_threads),
                         "--iterations", "3", "--keep-haplotypes"]
         elif pd.notna(pacbio_raw_reads):
             flye_cmd = ["flye",
                         "--pacbio-corr", highest_mean_qual_long_reads,
-                        "--out-dir", flye_work_dir, 
+                        "--out-dir", current_work_dir, 
                         "--genome-size", str(est_size), "--threads", str(cpu_threads),
                         "--iterations", "3", "--keep-haplotypes"]
         _ = run_subprocess_cmd(flye_cmd, shell_check = False)

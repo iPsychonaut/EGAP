@@ -116,10 +116,19 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         egap_spades_assembly_path, masurca_stats_list, _ = qc_assessment("spades", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
         return egap_spades_assembly_path
     else:
-        kmer_list = ["21", "33", "55", "77", "99"]        
+        # Ensure work directory output
+        starting_work_dir = os.getcwd()
+        if "work" not in starting_work_dir:
+            current_work_dir = spades_out_dir
+        else:
+            current_work_dir = starting_work_dir
+        os.chdir(current_work_dir)
+        
+        # Establish main variables for assembly8
+        kmer_list = ["21", "33", "55", "77", "99"]
         spades_work_dir = os.path.join(os.getcwd(),"spades_assembly")
         spades_path = os.path.join(spades_work_dir, "scaffolds.fasta")
-        
+                
         print(f"DEBUG - spades_path - {spades_path}")
 
         spades_base = ["spades.py",
