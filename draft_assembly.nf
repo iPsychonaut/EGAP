@@ -216,7 +216,7 @@ log.info("""
 // Preprocess phase
 process preprocess_refseq {
     tag "Preprocess Reference Sequence"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -245,7 +245,7 @@ process preprocess_refseq {
 
 process preprocess_illumina {
     tag "Preprocess Illumina Raw Reads"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -275,7 +275,7 @@ process preprocess_illumina {
 
 process preprocess_ont {
     tag "Preprocess ONT Raw Reads"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -305,7 +305,7 @@ process preprocess_ont {
 
 process preprocess_pacbio {
     tag "Preprocess PacBio Raw Reads"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -336,7 +336,7 @@ process preprocess_pacbio {
 // Assembly phase
 process masurca_assemble {
     tag "MaSuRCA Assembly"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -363,7 +363,7 @@ process masurca_assemble {
 
 process spades_assemble {
     tag "SPAdes Assembly"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -387,7 +387,7 @@ process spades_assemble {
 
 process flye_assemble {
     tag "Flye Assembly"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -411,7 +411,7 @@ process flye_assemble {
 
 process hifiasm_assemble {
     tag "HiFiasm Assembly"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -435,7 +435,7 @@ process hifiasm_assemble {
 
 process compare_assemblies {
     tag "Compare Assemblies"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     
@@ -457,7 +457,7 @@ process compare_assemblies {
 
 process polish_assembly{
     tag "Polish Assembly"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     maxForks 1
     
     input:
@@ -478,7 +478,7 @@ process polish_assembly{
 
 process curate_assembly{
     tag "Curate Assembly"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     maxForks 1
     
     input:
@@ -499,7 +499,7 @@ process curate_assembly{
 
 process final_assembly_qc {
     tag "Final Assembly QC"
-    container "${workflow.projectDir}/bin/entheome.sif"
+    container "${workflow.projectDir}/entheome.sif"
     maxForks 1
     
     input:
