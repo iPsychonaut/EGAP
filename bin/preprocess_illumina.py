@@ -11,7 +11,7 @@ with declumpified FASTQ file paths in ${params.output_dir}/${sample_prefix}/Illu
 
 @author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
 """
-import os, sys
+import os, sys, shutil
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, md5_check
 
@@ -151,7 +151,12 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         return illu_dedup_f_reads, illu_dedup_r_reads
 
     # FastQC
-    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", "fastqc_results", illu_raw_f_reads, illu_raw_r_reads], False)
+    fastqc_results_dir = os.path.join(illumina_dir, "fastqc_results")
+    os.makedirs(fastqc_results_dir, exist_ok=True)
+    if os.path.exists():
+        print("SKIP:\tFastq")
+    else:
+        run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", "fastqc_results", illu_raw_f_reads, illu_raw_r_reads], False)
 
     # Trimmomatic
     trimmo_f_pair = illu_raw_f_reads.replace("_1","_forward_paired") 
@@ -162,6 +167,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if os.path.exists(trimmo_f_pair) and os.path.exists(trimmo_r_pair):
         print(f"SKIP:\tTrimmomatic files exist: {trimmo_f_pair} & {trimmo_r_pair}.")
     else:
+        truseq3_path = shutil.which("TruSeq3-PE.fa") or shutil.which("TruSeq3-PE") # sometimes fails? maybe include in bin?
         run_subprocess_cmd(["trimmomatic", "PE",
                             "-threads", str(cpu_threads),
                             "-phred33",
@@ -171,7 +177,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                             trimmo_f_unpair,            # R1 unpaired output
                             trimmo_r_pair,              # R2 paired output
                             trimmo_r_unpair,            # R2 unpaired output
-                            "ILLUMINACLIP:TruSeq3-PE.fa:2:30:10:11",
+                            f"ILLUMINACLIP:{truseq3_path}:2:30:10:11",
                             "HEADCROP:10",
                             "CROP:145",
                             "SLIDINGWINDOW:50:25",
@@ -198,7 +204,9 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"PASS:\tPreprocessed Raw Illumina Reads for {species_id}: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
     
     # FastQC
-    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", "fastqc_results", illu_dedup_f_reads, illu_dedup_r_reads], False)
+    dedup_fastqc_results_dir = os.path.join(illumina_dir, "dedup_fastqc_results")
+    os.makedirs(dedup_fastqc_results_dir, exist_ok=True)
+    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", dedup_fastqc_results_dir, illu_dedup_f_reads, illu_dedup_r_reads], False)
     
     return illu_dedup_f_reads, illu_dedup_r_reads
 

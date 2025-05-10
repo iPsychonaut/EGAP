@@ -250,21 +250,15 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         avg_insert, std_dev = 251, 30  # Fallback for edge cases
         
     # Set the Jellyfish hash size (adjust if available RAM is lower than 62GB)
-    jf_size = est_size
-    max_ram_tested = 62
-    if int(ram_gb) < max_ram_tested:
-        # Convert jf_size from string (e.g., "5m") to integer
-        if isinstance(jf_size, str):
-            if jf_size.lower().endswith('m'):
-                jf_size = int(float(jf_size.lower().replace('m', '')) * 1_000_000)
-            elif jf_size.lower().endswith('k'):
-                jf_size = int(float(jf_size.lower().replace('k', '')) * 1_000)
-            else:
-                jf_size = int(float(jf_size))  # Handle plain numeric strings
-        adjustment_ratio = int(ram_gb) / max_ram_tested
-        print(f"DEBUG - jf_size - {jf_size}")
-        print(f"DEBUG - adjustment_ratio - {adjustment_ratio}")
-        jf_size = int(round(jf_size * adjustment_ratio, 0))
+    est_size_numb = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", est_size).group(1)
+    est_size_mult = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", est_size).group(2)
+    multipliers = {'m': 10**6, 'g': 10**9}
+    print(est_size_mult)
+    if est_size_mult in multipliers:
+        jf_size = int(float(est_size_numb) * multipliers[est_size_mult])
+    else:
+        print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
+        jf_size = 25000000
     
     # Ensure work directory output
     starting_work_dir = os.getcwd()

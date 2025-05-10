@@ -10,7 +10,7 @@ Handles raw directory concatenation and SRA downloads.
 
 @author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
 """
-import os, shutil, sys, subprocess, glob
+import os, shutil, sys, subprocess, glob, re
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads
 from qc_assessment import nanoplot_qc_reads
@@ -62,7 +62,6 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     ont_dir = os.path.join(species_dir, "ONT")
     os.makedirs(ont_dir, exist_ok=True)
     os.chdir(ont_dir)
-    ont_raw_reads = os.path.join(ont_dir, f"{ont_sra}.fastq")
 
     illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
     illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq")
@@ -89,13 +88,12 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             print(f"SKIP:\tSRA already exists: {ont_raw_reads}")
 
     # Parse estimated genome size
-    if isinstance(est_size, float):
-        estimated_size = est_size
-    else:
-        estimated_size = est_size.lower().strip() if est_size != "None" else "25m"
+    est_size_numb = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", est_size).group(1)
+    est_size_mult = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", est_size).group(2)
     multipliers = {'m': 10**6, 'g': 10**9}
-    if estimated_size in multipliers:
-        est_size_bp = int(float(estimated_size) * multipliers[estimated_size])
+    print(est_size_mult)
+    if est_size_mult in multipliers:
+        est_size_bp = int(float(est_size_numb) * multipliers[est_size_mult])
     else:
         print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
         est_size_bp = 25000000
