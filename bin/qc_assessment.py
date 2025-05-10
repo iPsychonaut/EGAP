@@ -746,7 +746,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
             return None, None
 
     labeled_assembly = None
-    if pd.notna(ref_seq) and pd.notna(ref_seq_gca) and pd.isna(est_size):
+    if pd.isna(est_size):
         print(f"Processing assembly for quality control only: {ref_seq}")
         assembly_path = ref_seq
         sample_dir = os.path.dirname(assembly_path)
