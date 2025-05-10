@@ -233,10 +233,10 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             print(f"DEBUG - {method}_assembly - {temp_assembly_path}")
 
     # Check if only reference is provided and skip
-    if (pd.isna(illumina_f_raw_reads) or pd.isna(illumina_sra)) and \
-       (pd.isna(illumina_r_raw_reads) or pd.isna(illumina_sra)) and \
-       (pd.isna(ont_raw_reads) or pd.isna(ont_sra)) and \
-       (pd.isna(pacbio_raw_reads) or pd.isna(pacbio_sra)):
+    if (pd.isna(illumina_f_raw_reads) and pd.isna(illumina_sra)) and \
+       (pd.isna(illumina_r_raw_reads) and pd.isna(illumina_sra)) and \
+       (pd.isna(ont_raw_reads) and pd.isna(ont_sra)) and \
+       (pd.isna(pacbio_raw_reads) and pd.isna(pacbio_sra)):
         print("SKIP:\tNo valid reads provided, required for assembly comparison.")
         return None
 
