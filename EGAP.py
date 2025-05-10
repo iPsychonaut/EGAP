@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
-version = "3.0.0c"
+version = "3.0.0d"
 
 
 # --------------------------------------------------------------
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     # Load the Sample Table
     input_csv_df = pd.read_csv(input_csv)
 
-    processes = ["preprocess_refseq", "preprocess_ont", "preprocess_illumina",
+    processes = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont", 
                  "preprocess_pacbio", "assemble_masurca", "assemble_flye",
                  "assemble_spades", "assemble_hifiasm", "compare_assemblies",
                  "polish_assembly", "curate_assembly"]
