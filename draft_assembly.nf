@@ -3,7 +3,8 @@ nextflow.enable.dsl=2
 //
 // EGAP Version
 //
-def version = "3.0.0c"
+def version = "3.0.0d"
+
 
 //
 // Define Parameters
@@ -13,6 +14,7 @@ params.input_csv = "/mnt/d/EGAP_Nextflow/EGAP_test.csv"
 params.output_dir = "/mnt/d/TESTING_SPACE/nextflow_test"
 params.cpu_threads = 12
 params.ram_gb = 40
+
 
 //
 // Print Banner & Parameters
