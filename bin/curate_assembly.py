@@ -483,10 +483,6 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print("SKIP:\tNo valid reads provided, required for assembly comparison.")
         return None
     
-    # Create output directory for curation
-    os.makedirs(curation_out_dir, exist_ok=True)
-    os.chdir(curation_out_dir)
-    
     # Set and validate polished assembly path
     polished_assembly = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta")
     if not validate_fasta(polished_assembly):
@@ -523,7 +519,11 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - highest_mean_qual_long_reads - {highest_mean_qual_long_reads}")
 
     # Ensure work directory output
-    current_work_dir = curation_out_dir
+    starting_work_dir = os.getcwd()
+    if "work" not in starting_work_dir:
+        current_work_dir = curation_out_dir
+    else:
+        current_work_dir = starting_work_dir
     os.chdir(current_work_dir)
 
     # -------------------------------------------------------------------------
