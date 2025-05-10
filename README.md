@@ -207,8 +207,8 @@ The CSV file should have the following header and columns:
 - **ONT_RAW_READS**: Path to the combined Raw ONT FASTQ reads (e.g., `/path/to/ONT/sample1.fq.gz`).
 - **ILLUMINA_SRA**: Illumina Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
 - **ILLUMINA_RAW_DIR**: Path to the directory containing all Raw Illumina Reads. Use `None` if specifying individual files.
-- **ILLUMINA_RAW_F_READS**: Path to the Raw Forward Illumina Reads (e.g., `/path/to/Illumina/sample1_R1.fq.gz`).
-- **ILLUMINA_RAW_R_READS**: Path to the Raw Reverse Illumina Reads (e.g., `/path/to/Illumina/sample1_R2.fq.gz`).
+- **ILLUMINA_RAW_F_READS**: Path to the Raw Forward Illumina Reads (e.g., `/path/to/Illumina/sample1_1.fq.gz`). 
+- **ILLUMINA_RAW_R_READS**: Path to the Raw Reverse Illumina Reads (e.g., `/path/to/Illumina/sample1_2.fq.gz`).
 - **PACBIO_SRA**: PacBio Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
 - **PACBIO_RAW_DIR**: Path to the directory containing all Raw PacBio Reads. Use `None` if specifying individual files.
 - **PACBIO_RAW_READS**: Path to the combined Raw PacBio FASTQ reads (e.g., `/path/to/PACBIO/sample1.fq.gz`).
@@ -224,6 +224,8 @@ The CSV file should have the following header and columns:
 
 ### Notes
 
+- If you are providign **ANY** raw reads, ensure they exist in their appropriate folder (`/path/to/sample_dir/Illumina`, `/path/to/sample_dir/ONT`, etc); you may need to generate the sample_dir based on the output_dir, species_id, and then sample_id (`/output_dir/species_id/sample_id`).
+- If you are providing `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS`, please make sure the directory path the files are in **DO NOT CONTAIN** `_1` or `_2`, but the actual **READS FILES DO CONTAIN** `_1` or `_2`.
 - If you provide a value for `ILLUMINA_RAW_DIR`, set `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS` to `None`. EGAP will automatically detect and process all paired-end reads within that directory. The same applies for `ONT_RAW_DIR`.
 - Ensure that all file paths are correct and accessible.
 - The CSV file should not contain extra spaces or special characters in the headers.
