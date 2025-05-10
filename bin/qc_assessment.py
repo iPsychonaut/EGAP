@@ -563,7 +563,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
             quast_cmd.append("--eukaryote")
         if kingdom_id == "Funga":
             quast_cmd.append("--fungus")
-        if ref_seq and os.path.exists(ref_seq):
+        if pd.notna(ref_seq) and os.path.exists(ref_seq):
             quast_cmd.extend(["-r", ref_seq])
         quast_cmd.extend(["-o", quast_dir, assembly_path])
         print(f"DEBUG - Running QUAST: {' '.join(quast_cmd)}")
@@ -586,7 +586,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
                     sample_stats_dict["ASSEMBLY_L50"] = float(line.split("\t")[-1].strip())
                 elif "GC (%)" in line:
                     sample_stats_dict["ASSEMBLY_GC"] = float(line.split("\t")[-1].strip())
-                if ref_seq and os.path.exists(ref_seq):
+                if pd.notna(ref_seq) and os.path.exists(ref_seq):
                     if "# misassemblies" in line:
                         sample_stats_dict["MISASSEMBLIES"] = float(line.split("\t")[-1].strip())
                     elif "# N's per 100 kbp" in line:
@@ -810,7 +810,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
             quast_cmd.append("--eukaryote")
         if kingdom_id == "Funga":
             quast_cmd.append("--fungus")
-        if ref_seq and os.path.exists(ref_seq):
+        if pd.notna(ref_seq) and os.path.exists(ref_seq):
             quast_cmd.extend(["-r", ref_seq])
         quast_cmd.extend(["-o", quast_dir, assembly_path])
         print(f"DEBUG - Running QUAST: {' '.join(quast_cmd)}")
@@ -833,7 +833,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
                     sample_stats_dict["ASSEMBLY_L50"] = float(line.split("\t")[-1].strip())
                 elif "GC (%)" in line:
                     sample_stats_dict["ASSEMBLY_GC"] = float(line.split("\t")[-1].strip())
-                if ref_seq and os.path.exists(ref_seq):
+                if pd.notna(ref_seq) and os.path.exists(ref_seq):
                     if "# misassemblies" in line:
                         sample_stats_dict["MISASSEMBLIES"] = float(line.split("\t")[-1].strip())
                     elif "# N's per 100 kbp" in line:
