@@ -49,19 +49,21 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     ont_sra = current_series["ONT_SRA"]
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
-   
+    species_dir = os.path.join(output_dir, species_id)
+    os.makedirs(species_dir, exist_ok=True)
+    ont_dir = os.path.join(species_dir, "ONT")
+    os.makedirs(ont_dir, exist_ok=True)
+    os.chdir(ont_dir)
+
+    if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
+        ont_raw_reads = os.path.join(ont_dir, f"{ont_sra}.fastq")  
+
     print(f"DEBUG - ont_sra - {ont_sra}")
     print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
     print(f"DEBUG - ont_raw_dir - {ont_raw_dir}")
     if pd.isna(ont_sra) and pd.isna(ont_raw_dir) and pd.isna(ont_raw_reads):
         print("SKIP:\tONT preprocessing; no reads provided")
         return None
-
-    species_dir = os.path.join(output_dir, species_id)
-    os.makedirs(species_dir, exist_ok=True)
-    ont_dir = os.path.join(species_dir, "ONT")
-    os.makedirs(ont_dir, exist_ok=True)
-    os.chdir(ont_dir)
 
     illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
     illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq")
