@@ -56,51 +56,69 @@ def validate_fasta(file_path):
 # Extract BUSCO completeness score
 # --------------------------------------------------------------
 def get_busco_score(assembly, db, cpu_threads, sample_dir):
-    """Run BUSCO and extract the completeness score.
-
-    Executes BUSCO on the assembly with the specified database and retrieves
-    the completeness percentage (Single + Duplicated).
+    """
+    Run (or re-use) BUSCO in the same folder as the assembly, never duplicating
+    under sample_dir.  Returns Single+Duplicated completeness.
 
     Args:
-        assembly (str): Path to the assembly FASTA file.
-        db (str): BUSCO database identifier (e.g., 'fungi_odb10').
-        cpu_threads (int): Number of CPU threads to use.
-        sample_dir (str): Sample-specific directory for output.
+        assembly (str): Path to the assembler .fasta (e.g. .../masurca_assembly/foo.fasta)
+        db (str): BUSCO lineage (e.g. 'gammaproteobacteria')
+        cpu_threads (int): threads
+        sample_dir (str): top‐level sample directory (unused here)
 
     Returns:
-        float or None: Completeness score if successful, else None.
+        float or None: completeness (S+D) percentage, or None on failure.
     """
+    # 1) sanity check
     if not validate_fasta(assembly):
         print(f"ERROR:\tInvalid assembly for BUSCO: {assembly}")
         return None
 
-    assembly_short = os.path.basename(assembly)
-    summary_short = assembly_short.replace(".fasta", f"_{db}_busco")
-    out_dir = os.path.join(sample_dir, f"{assembly_short}_{db}_busco")
+    # 2) assembler folder is where the assembly lives
+    asm_dir = os.path.dirname(assembly)
+
+    # 3) basename without .fasta
+    base = os.path.splitext(os.path.basename(assembly))[0]
+
+    # 4) BUSCO writes into <asm_dir>/<base>_<db>_busco
+    out_dir = os.path.join(asm_dir, f"{base}_{db}_busco")
     os.makedirs(out_dir, exist_ok=True)
-    summary = os.path.join(out_dir, f"short_summary.specific.{db}_odb12.{summary_short}.txt")
+
+    # 5) expected summary path
+    summary = os.path.join(
+        out_dir,
+        f"short_summary.specific.{db}_odb12.{base}_{db}_busco.txt"
+    )
+
+    # 6) skip if it’s already there
     if os.path.exists(summary):
         print(f"SKIP:\tBUSCO summary already exists: {summary}")
     else:
-        busco_cmd = ["busco", "-m", "genome",
-                     "-i", assembly, "-f",
-                     "-l", db,
-                     "-c", str(cpu_threads),
-                     "-o", summary_short,
-                     "--out_path", out_dir]
+        # run BUSCO with --out_path asm_dir so it lands in the same assembler folder
+        busco_cmd = [
+            "busco", "-m", "genome",
+            "-i", assembly, "-f",
+            "-l", db,
+            "-c", str(cpu_threads),
+            "-o", f"{base}_{db}_busco",
+            "--out_path", asm_dir
+        ]
         print(f"DEBUG - Running BUSCO: {' '.join(busco_cmd)}")
-        result = run_subprocess_cmd(busco_cmd, shell_check=False)
-        if result != 0:
-            print(f"WARN:\tBUSCO failed for {assembly} with return code {result}")
+        rc = run_subprocess_cmd(busco_cmd, shell_check=False)
+        if rc != 0:
+            print(f"WARN:\tBUSCO failed for {assembly} (code {rc})")
             return None
 
+    # 7) parse completeness: look for the first "C:XX.X%" line
     try:
-        with open(summary, "r") as f:
-            for line in f:
-                if "C:" in line:  # Format: "C:XX.X%[S:YY.Y%,D:ZZ.Z%]"
-                    return float(line.split("[")[0].split(":")[1].replace("%", ""))
+        with open(summary) as fh:
+            for line in fh:
+                if "C:" in line and "%" in line:
+                    # e.g. "C:98.3%[S:97.1%,D:1.2%]..."
+                    return float(line.split("%")[0].split(":")[1])
     except FileNotFoundError:
         print(f"ERROR:\tBUSCO summary not found: {summary}")
+
     return None
 
 
