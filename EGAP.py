@@ -17,7 +17,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
-version = "3.0.0e"
+version = "3.0.0f"
 
 
 # --------------------------------------------------------------
