@@ -74,6 +74,7 @@ def nanoplot_qc_reads(INPUT_READS, READS_ORIGIN, CPU_THREADS, sample_stats_dict)
     """
     print(f"NanoPlotting reads: {INPUT_READS}...")
     output_dir = os.path.join(os.path.dirname(INPUT_READS), f"{READS_ORIGIN}nanoplot_analysis")
+    print(f"DEBUG - output_dir - {output_dir}")
     os.makedirs(output_dir, exist_ok=True)
     nanoplot_out_file = os.path.join(output_dir, f"{READS_ORIGIN}NanoStats.txt")
     if os.path.exists(nanoplot_out_file):
@@ -316,15 +317,17 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
 # --------------------------------------------------------------
 # Run BUSCO on an assembly
 # --------------------------------------------------------------
-def busco_assembly(assembly_path, sample_id, sample_stats_dict, busco_count, busco_odb, assembly_type, cpu_threads):
-    """Evaluate assembly completeness using BUSCO and update statistics.
+def busco_assembly(assembly_path, sample_id, sample_stats_dict,
+                   busco_count, busco_odb, assembly_type, cpu_threads):
+    """
+    Evaluate assembly completeness using BUSCO and update statistics.
 
     Runs BUSCO in genome mode, parses the summary, and stores metrics in the
     sample statistics dictionary.
 
     Args:
         assembly_path (str): Path to the assembly FASTA file.
-        sample_id (str): Sample identifier for output naming.
+        sample_id (str): Sample identifier for output naming (not used in path).
         sample_stats_dict (dict): Dictionary to store BUSCO metrics.
         busco_count (str): Label for metrics ('first' or 'second').
         busco_odb (str): BUSCO lineage dataset (e.g., 'fungi_odb10').
@@ -334,52 +337,68 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict, busco_count, bus
     Returns:
         str: Original assembly path.
     """
-    sample_dir = os.path.dirname(assembly_path)
+    # Determine the directory containing the assembly
+    assembly_dir = os.path.dirname(assembly_path)
+
+    # Derive a clean base name (no extension) from the FASTA filename
+    base = os.path.splitext(os.path.basename(assembly_path))[0]
+
+    # Build BUSCO output directory alongside the FASTA
     busco_db_version = "odb12"
-    busco_out_label = f"{sample_id}_{assembly_type}_{busco_odb}_busco"
-    busco_dir = os.path.join(sample_dir, busco_out_label)
+    busco_dir = os.path.join(assembly_dir, f"{base}_{busco_odb}_busco")
     os.makedirs(busco_dir, exist_ok=True)
 
-    # Validate assembly
+    # Validate the input FASTA
     if not validate_fasta(assembly_path):
         print(f"ERROR:\tInvalid assembly for BUSCO: {assembly_path}. Skipping BUSCO.")
         return assembly_path
 
-    # Build the expected BUSCO summary file path
+    # Path to the BUSCO summary file that BUSCO will generate
     busco_summary = os.path.join(
         busco_dir,
-        f"short_summary.specific.{busco_odb}_{busco_db_version}.{sample_id}_{assembly_type}_{busco_odb}_busco.txt"
+        f"short_summary.specific.{busco_odb}_{busco_db_version}."
+        f"{base}_{busco_odb}_busco.txt"
     )
 
-    # Run BUSCO only if the summary file doesn't exist
+    # Run BUSCO if the summary does not already exist
     if os.path.exists(busco_summary):
         print(f"SKIP:\tBUSCO Summary already exists: {busco_summary}.")
     else:
-        busco_cmd = ["busco", "-m", "genome",
-                     "-i", assembly_path, "-f",
-                     "-l", busco_odb,
-                     "-c", str(cpu_threads),
-                     "-o", busco_out_label,
-                     "--out_path", sample_dir]
+        busco_cmd = [
+            "busco", "-m", "genome",
+            "-i", assembly_path, "-f",
+            "-l", busco_odb,
+            "-c", str(cpu_threads),
+            "-o", f"{base}_{busco_odb}_busco",
+            "--out_path", assembly_dir
+        ]
         print(f"DEBUG - Running BUSCO: {' '.join(busco_cmd)}")
-        result = run_subprocess_cmd(busco_cmd, shell_check=False)
-        if result != 0:
-            print(f"WARN:\tBUSCO failed with return code {result}. Skipping BUSCO metrics.")
+        rc = run_subprocess_cmd(busco_cmd, shell_check=False)
+        if rc != 0:
+            print(f"WARN:\tBUSCO failed with return code {rc}. Skipping BUSCO metrics.")
             return assembly_path
 
-    # Generate BUSCO plot
-    comp_busco_svg = os.path.join(sample_dir, f"{os.path.basename(assembly_path).replace('.fasta', '')}_{busco_odb}_busco.svg")
-    busco_tsv = os.path.join(busco_dir, f"run_{busco_odb}_{busco_db_version}", "full_table.tsv")
+    # Generate BUSCO plot if needed
+    comp_busco_svg = os.path.join(
+        assembly_dir,
+        f"{base}_{busco_odb}_busco.svg"
+    )
+    busco_tsv = os.path.join(
+        busco_dir,
+        f"run_{busco_odb}_{busco_db_version}",
+        "full_table.tsv"
+    )
     if not os.path.exists(comp_busco_svg):
-        plot_busco(sample_id, "busco", busco_odb, busco_tsv, assembly_path, assembly_type)
+        plot_busco(base, "busco", busco_odb, busco_tsv, assembly_path, assembly_type)
 
-    # Parse BUSCO summary to populate sample_stats_dict
+    # Parse BUSCO summary to update statistics
     try:
         with open(busco_summary, "r") as busco_file:
             for line in busco_file:
                 if "[" in line:
-                    stats_line_split = line.split("%")
-                    for item in stats_line_split:
+                    # Split on '%' and look for C, S, D, F, M
+                    parts = line.split("%")
+                    for item in parts:
                         if "C" in item:
                             sample_stats_dict[f"{busco_count.upper()}_BUSCO_C"] = float(item.split(":")[1])
                         elif "S" in item:
@@ -392,7 +411,6 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict, busco_count, bus
                             sample_stats_dict[f"{busco_count.upper()}_BUSCO_M"] = float(item.split(":")[1])
     except FileNotFoundError:
         print(f"ERROR:\tBUSCO summary not found: {busco_summary}")
-        return assembly_path
 
     return assembly_path
 
@@ -540,7 +558,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
                    "first", first_busco_odb, assembly_type, cpu_threads)
     busco_assembly(assembly_path, sample_id, sample_stats_dict,
                    "second", second_busco_odb, assembly_type, cpu_threads)
-
+    
     # # Compleasm QC CURRENTLY BREAKS DUE TO md5 checksum errors
     # compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
     #                    "first", first_busco_odb, assembly_type, cpu_threads)
