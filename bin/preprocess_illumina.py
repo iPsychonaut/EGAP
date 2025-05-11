@@ -153,10 +153,10 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # FastQC
     fastqc_results_dir = os.path.join(illumina_dir, "fastqc_results")
     os.makedirs(fastqc_results_dir, exist_ok=True)
-    if os.path.exists():
-        print("SKIP:\tFastq")
-    else:
-        run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", "fastqc_results", illu_raw_f_reads, illu_raw_r_reads], False)
+    # if os.path.exists():
+    #     print("SKIP:\tFastq")
+    # else:
+    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", "fastqc_results", illu_raw_f_reads, illu_raw_r_reads], False)
 
     # Trimmomatic
     trimmo_f_pair = illu_raw_f_reads.replace("_1","_forward_paired") 
