@@ -85,7 +85,10 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 except IndexError:
                     ref_seq_cmd = f"datasets download genome accession {ref_seq_gca} --include genome &&  unzip -o ncbi_dataset -d {refseq_dir}"
                     _ = run_subprocess_cmd(ref_seq_cmd, shell_check=True)
-                ref_seq_gca = glob.glob(os.path.join(ref_seq_gca_dir, "*_genomic.fna"))[0]
+                pattern = os.path.join(ref_seq_gca_dir, "*_genomic.fna")
+                ref_seq_gca = next(glob.iglob(pattern), None)                
+                if ref_seq_gca is None:
+                    raise FileNotFoundError(f"No ‘*_genomic.fna’ found in {ref_seq_gca_dir!r}")
                 print(f"PASS:\tSuccessfully downloaded the GCA to: {ref_seq_gca}.")
                 shutil.move(ref_seq_gca, renamed_gca)
                 print(f"PASS:\tSuccessfully moved and renamed the GCA to: {renamed_gca}.")
