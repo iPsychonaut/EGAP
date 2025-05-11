@@ -524,6 +524,7 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         current_work_dir = curation_out_dir
     else:
         current_work_dir = starting_work_dir
+    os.makedirs(current_work_dir, exist_ok=True)
     os.chdir(current_work_dir)
 
     # -------------------------------------------------------------------------
