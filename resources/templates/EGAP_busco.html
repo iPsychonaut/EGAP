@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ assembly_fasta }} BUSCO Report </title>
+  <style>
+    /* Base font and colors */
+    @import url('https://fonts.googleapis.com/css2?family=Avenir&display=swap');
+    body {
+      font-family: 'Avenir', sans-serif;
+      color: #2A2035FF;
+      background-color: #FFFFFFFF;
+      margin: 0;
+    }
+    /* Fixed top banner */
+    .banner-section {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 200px;
+      background-color: #FFFFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      box-sizing: border-box;
+      z-index: 1000;
+      border-bottom: 1px solid #DFDBDDFF;
+    }
+    .banner-left {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .banner-section h1 {
+      margin: 0;
+      font-size: 1.8em;
+      color: #2A2035FF;
+    }
+    .generated-time {
+      font-size: 0.9em;
+      color: #619B8AFFFF;
+      margin-top: 4px;
+    }
+    .banner-section img {
+      height: 200px;
+      width: auto;
+    }
+    /* Main content wrapper with top padding to avoid banner */
+    .content {
+      padding: 220px 20px 20px;
+      box-sizing: border-box;
+    }
+    /* Collapsible sections using <details> */
+    details {
+      margin-bottom: 1em;
+      border: 1px solid #DFDBDDFF;
+      border-radius: 4px;
+      background: #FFFFFFFF;
+    }
+    details, details > div, details > div * {
+      color: #2A2035FF !important;
+    }
+    details > summary {
+      font-weight: bold;
+      cursor: pointer;
+      padding: 0.5em;
+      background-color: #233D4DFF;
+      color: #FFFFFFFF !important;
+      border-radius: 4px;
+      outline: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    details > div { padding: 0.5em 1em; }
+    /* Table styling */
+    table { border-collapse: collapse; width: 100%; margin-top: 0.5em; }
+    th, td { border: 1px solid #DFDBDDFF; padding: 6px 10px; text-align: left; }
+    th { background-color: #619B8AFF; color: #FFFFFFFF !important; }
+    tr:nth-child(even) { background-color: #DFDBDDFF; }
+    tr:nth-child(odd)  { background-color: #FFFFFFFF; }
+    a { color: #FE7F2DFF; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    /* Ensure headers inside details tables are white */
+    details > div table th { color: #FFFFFFFF !important; }
+  
+    /* flex‐layout for summary + chart */
+    .summary-svg-container {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+    }
+    .table-wrapper {
+      flex: 1;
+      overflow-x: auto;
+    }
+    .svg-wrapper {
+      flex: 1;
+      text-align: center;
+    }
+    .svg-wrapper img {
+      max-width: 100%;
+      height: auto;
+      display: inline-block;
+    }
+    
+    /* optional: highlight hovered header */
+    table.sortable th:hover {
+      background-color: #A0A0A0;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <!-- Fixed banner header -->
+  <header class="banner-section">
+    <div class="banner-left">
+      <h1>{{ assembly_name }} <br> {{ busco_db }} BUSCO Report</h1>
+      <div class="generated-time">Generated on: {{ generated_time }}</div>
+    </div>
+    <a href="https://github.com/iPsychonaut/EGAP" target="_blank" rel="noopener noreferrer">
+      <img src="https://github.com/iPsychonaut/EGAP/blob/main/resources/EGAP_banner.png?raw=true" alt="EGAP Banner" />
+    </a>
+  </header>
+
+  <div class="content">
+    {% for data in busco_data %}
+      <details open>
+        <summary>{{ data.busco_db }} BUSCO Summary</summary>
+        <div>
+
+          <!-- Summary & Chart side-by-side -->
+          <details open>
+            <summary>Summary &amp; Chart</summary>
+            <div class="summary-svg-container">
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr><th>Metric</th><th>Value</th></tr>
+                  </thead>
+                  <tbody>
+                    {% for metric, value in data.metrics.items() %}
+                      <tr><td>{{ metric }}</td><td>{{ value }}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              <div class="svg-wrapper">
+                {% if data.svg_path %}
+                  <img src="file:///{{ data.svg_path|replace('\\','/') }}"
+                       alt="{{ data.busco_db }} chart" />
+                {% else %}
+                  <p>No SVG found.</p>
+                {% endif %}
+              </div>
+            </div>
+          </details>
+
+          <!-- Full BUSCO Table (sortable!) -->
+          <details open>
+            <summary>{{ data.busco_db }} Full BUSCO Table</summary>
+            <div>
+              <table class="sortable">
+                <thead>
+                  <tr>
+                    <th>BUSCO ID</th><th>Status</th><th>Sequence</th>
+                    <th>Gene Start</th><th>Gene End</th><th>Strand</th>
+                    <th>Score</th><th>Length</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in data.busco_genes_df.values %}
+                    <tr>
+                      {% for cell in row[0:8] %}
+                        <td>
+                          {% if cell != cell or (cell == '-' and loop.index0 != 5) %}
+                            {# blank #}
+                          {% else %}
+                            {{ cell }}
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('table.sortable').forEach(function(table) {
+        table.querySelectorAll('th').forEach(function(th, index) {
+          th.addEventListener('click', function() {
+            var tbody = table.tBodies[0];
+            Array.from(tbody.querySelectorAll('tr'))
+              .sort(function(a, b) {
+                var aText = a.children[index].innerText.trim();
+                var bText = b.children[index].innerText.trim();
+                var aNum = parseFloat(aText);
+                var bNum = parseFloat(bText);
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                  return aNum - bNum;
+                }
+                return aText.localeCompare(bText, undefined, {numeric: true});
+              })
+              .forEach(function(tr) {
+                tbody.appendChild(tr);
+              });
+          });
+        });
+      });
+    });
+  </script>
+</body>
+</html>
