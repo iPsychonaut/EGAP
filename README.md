@@ -25,7 +25,7 @@
 
 ## Overview
 
-EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline for hybrid genome assembly using Oxford Nanopore (ONT), Illumina, and PacBio data. It evaluates assemblies based on BUSCO Completeness (Single + Duplicated), Assembly Contig Count, and N50, with additional metrics like L50 and GC-content available via WUAST.
+EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics pipeline for hybrid genome assembly using Oxford Nanopore (ONT), Illumina, and PacBio data. It evaluates assemblies based on BUSCO Completeness (Single + Duplicated), Assembly Contig Count, and N50, with additional metrics like L50 and GC-content available via QUAST.
 
 1. **Preprocess & QC Reads**  
    - Merges multiple FASTQ files (`ont_combine_fastq_gz`, `illumina_extract_and_check`).  
