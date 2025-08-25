@@ -1,5 +1,6 @@
 # TO BUILD: sudo singularity build entheome.sif entheome.sif.def
 
+
 # TO USE:
 # export FUNANNOTATE_DB=/path/to/databases
 # singularity shell entheome.sif -B /path/to/databases:/path/to/databases
@@ -199,3 +200,4 @@ From: debian:buster
     - Initialize databases manually if needed: singularity run egep.sif funannotate setup -i all -d \$FUNANNOTATE_DB
     - Activate environments in your pipeline: source /opt/conda/etc/profile.d/conda.sh; conda activate EGEP_env or EGAP_env or funannotate_env
     - Example with GeneMark: singularity shell egep.sif -B /path/to/genemark:/opt/genemark
+
