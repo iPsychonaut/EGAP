@@ -12,13 +12,104 @@ Created on Fri May  2 21:18:21 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import argparse, sys, time, subprocess
+import argparse, sys, time, subprocess, re, os
 from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
-version = "3.1"
+version = "3.2"
 
+# --------------------------------------------------------------
+# Updates the input.csv with any .fq -> .fastq
+# --------------------------------------------------------------
+def preprocess_csv(csv_file_path):
+    """
+    1) Load the CSV at `csv_file_path` into a pandas DataFrame.
+    2) Find any cell whose string ends in .fq or .fq.gz.
+    3) Rename that file on disk to use .fastq (e.g. file.fq.gz → file.fastq.gz).
+    4) Update the DataFrame so that all old “.fq” or “.fq.gz” entries
+       become “.fastq” or “.fastq.gz”.
+    5) Save (overwrite) the original CSV with these new paths.
+    """
+    # (a) Read the CSV
+    df = pd.read_csv(csv_file_path)
+
+    # (b) Prepare a regex that matches “something.fq” or “something.fq.gz”
+    pattern = re.compile(r'^(.*)\.fq(\.gz)?$')
+
+    # (c) Gather all unique values in the DataFrame (so we don’t rename the same file twice)
+    all_vals = pd.unique(df.values.ravel())
+
+    # (d) Build a mapping { old_path_str: new_path_str } for everything that matches
+    mapping = {}
+    for val in all_vals:
+        if isinstance(val, str):
+            m = pattern.match(val)
+            if m:
+                base      = m.group(1)         # “path/to/file” without “.fq”
+                gz_suffix = m.group(2) or ''   # either “.gz” or ''
+                new_path  = f"{base}.fastq{gz_suffix}"
+
+                # Rename on disk (if possible)
+                try:
+                    os.rename(val, new_path)
+                except FileNotFoundError:
+                    print(f"Warning: file not found, skipping rename: {val!r}")
+                except FileExistsError:
+                    print(f"Warning: target already exists, skipping rename: {new_path!r}")
+                # In all cases, update the mapping so the DataFrame can be rewritten
+                mapping[val] = new_path
+
+    # (e) Replace all occurrences of old_path → new_path in the DataFrame
+    df.replace(mapping, inplace=True)
+
+    # (f) Overwrite the original CSV
+    df.to_csv(csv_file_path, index=False, na_rep="None")
+    
+    return df
+
+# --------------------------------------------------------------
+# Finds a file in a given folder
+# --------------------------------------------------------------
+def find_files(search_string, folder=None):
+    """
+    Find all files in the given directory and its subdirectories containing '_dedup' in their names.
+    
+    Args:
+        directory (str): Path to the directory to search
+        
+    Returns:
+        list: List of full file paths containing '_dedup' in their names
+    """
+    files = []
+    
+    # Walk through directory and subdirectories
+    for root, _, files in os.walk(folder):
+        # Check each file in current directory
+        for file in files:
+            if search_string in file:
+                # Add full path to the list
+                files.append(os.path.join(root, file))
+    return files
+
+# --------------------------------------------------------------
+# Locates the one directory under `search_root` that contains ALL of `required_scripts`
+# --------------------------------------------------------------
+def locate_bin_dir(required_scripts, search_root):
+    """
+    Walk `search_root` and its subdirectories. At each directory, check if
+    that directory’s file‐list contains every name in `required_scripts`.
+    If so, return that Path immediately. If no such directory is found, return None.
+    """
+    # We only need to look at folders (not individual files) and see if each
+    # proc_name+".py" is present.
+    for root, subdirs, files in os.walk(search_root):
+        # root is a str; convert to Path for convenience
+        root_path = Path(root)
+        # Check if *all* required script filenames appear in `files`
+        if all(f"{proc}.py" in files for proc in required_scripts):
+            return root_path
+    return None
 
 # --------------------------------------------------------------
 # Orchestrate the Entheome Genome Assembly Pipeline
@@ -253,19 +344,31 @@ if __name__ == "__main__":
                                   
 \033[91m================================================================================\033[0m
     """)
-
-    # Determine project root and locate the bin/ directory there
-    this_file = Path(__file__).resolve()
-    project_dir = this_file.parent
-    bin_dir = project_dir / "bin"
-    
-    # Load the Sample Table
-    input_csv_df = pd.read_csv(input_csv)
-
+   
     processes = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont", 
                  "preprocess_pacbio", "assemble_masurca", "assemble_flye",
                  "assemble_spades", "assemble_hifiasm", "compare_assemblies",
                  "polish_assembly", "curate_assembly"]
+
+    # Determine project root and locate the bin/ directory there
+    this_file   = Path(__file__).resolve()
+    project_dir = this_file.parent
+
+    # Attempt to find a directory under project_dir that contains all "<proc>.py"
+    bin_dir_candidate = locate_bin_dir(processes, project_dir)
+
+    if bin_dir_candidate is not None:
+        bin_dir = bin_dir_candidate
+    else:
+        # Fallback: maybe everything was installed flatly in project_dir/bin
+        if (project_dir / "bin").is_dir():
+            bin_dir = project_dir / "bin"
+        else:
+            raise FileNotFoundError("Could not locate a single folder containing all of: "
+                                    + ", ".join(f"{p}.py" for p in processes))
+
+    # Load the Sample Table and correct any ".fq" -> ".fastq"
+    input_csv_df = preprocess_csv(input_csv)
 
     # Loop through each process for each sample
     for index, row in input_csv_df.iterrows():
@@ -291,18 +394,39 @@ if __name__ == "__main__":
     qc_script = bin_dir / "qc_assessment.py"
     if not qc_script.exists():
         raise FileNotFoundError(f"Missing QC script: {qc_script}")
-    qc_cmd = [sys.executable,
-              str(qc_script),
-              "final",
-              input_csv,
-              sample_id,
-              output_dir,
-              str(cpu_threads),
-              str(ram_gb)]
-    print(f"\n→ Running qc_assessment: {' '.join(qc_cmd)}\n")
-    qc_process = subprocess.Popen(qc_cmd)
-    qc_return_code = qc_process.wait()
-    if qc_return_code != 0:
-        raise RuntimeError(f"qc_assessment failed with return code {qc_return_code}")
+    for index, row in input_csv_df.iterrows():
+        sample_id = row["SAMPLE_ID"]
+        qc_cmd = [sys.executable,
+                  str(qc_script),
+                  "final",
+                  input_csv,
+                  sample_id,
+                  output_dir,
+                  str(cpu_threads),
+                  str(ram_gb)]
+        print(f"\n→ Running qc_assessment: {' '.join(qc_cmd)}\n")
+        qc_process = subprocess.Popen(qc_cmd)
+        qc_return_code = qc_process.wait()
+        if qc_return_code != 0:
+            raise RuntimeError(f"qc_assessment failed with return code {qc_return_code}")
 
+    # Report Generation
+    reporter_script = bin_dir / "html_reporter.py"
+    if not reporter_script.exists():
+        raise FileNotFoundError(f"Missing Reporter script: {reporter_script}")
+    for index, row in input_csv_df.iterrows():
+        sample_id = row["SAMPLE_ID"]
+        reporter_cmd = [sys.executable,
+                        str(reporter_script),
+                        sample_id,
+                        input_csv,
+                        output_dir,
+                        str(cpu_threads),
+                        str(ram_gb)]
+        print(f"\n→ Running html_reporter: {' '.join(reporter_cmd)}\n")
+        reporter_process = subprocess.Popen(reporter_cmd)
+        reporter_return_code = reporter_process.wait()
+        if reporter_return_code != 0:
+            raise RuntimeError(f"html_reporter failed with return code {reporter_return_code}")
+    
     print("\nPASS:\tAll samples processed successfully.")
