@@ -3,7 +3,7 @@ nextflow.enable.dsl=2
 //
 // EGAP Version
 //
-def version = "3.1"
+def version = "3.2"
 
 
 //
@@ -630,3 +630,4 @@ workflow {
         curate_assembly.out.curate_done
     )
 }
+
