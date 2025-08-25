@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 # Change to the home directory
 cd ~ || { echo "Failed to change to home directory."; exit 1; }
 
