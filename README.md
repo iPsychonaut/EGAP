@@ -22,7 +22,7 @@
     <img src="https://img.shields.io/conda/dn/bioconda/egap.svg" alt="Conda Downloads">
   </a>
   <!-- DOI -->
-  <a href="https://zenodo.org/badge/DOI/10.5281/">
+  <a href="https://doi.org/10.5281/zenodo.16938527">
     <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.16938527.svg" alt="DOI">
   </a>
 </div>
