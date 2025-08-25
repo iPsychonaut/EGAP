@@ -2,6 +2,7 @@
 FROM condaforge/mambaforge AS build
 LABEL maintainer="Ian M Bollinger <ian.bollinger@entheome.org> / <ian.michael.bollinger@gmail.com>"
 
+
 # docker build -t entheome_ecosystem .
 # docker run -it -v /mnt/d:/mnt/d entheome_ecosystem bash
 
