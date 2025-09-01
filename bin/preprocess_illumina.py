@@ -71,143 +71,199 @@ def illumina_extract_and_check(folder_name, SAMPLE_ID):
 def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     """Preprocess Illumina reads with FastQC, Trimmomatic, BBDuk, and Clumpify.
 
-    Processes Illumina paired-end reads from SRA or raw files, performs quality control,
-    trimming, filtering, and deduplication, and saves processed reads.
+    Behavior
+    --------
+    - Creates <output_dir>/<SPECIES_ID>/Illumina/ if missing.
+    - If ILLUMINA_SRA is provided (and no raw read paths), ensure {SRA}_1.fastq and {SRA}_2.fastq exist
+      in Illumina/. If missing, run:
+        prefetch --force yes <SRA>
+        fasterq-dump --split-files -e <threads> -O <Illumina/> <SRA>
+      Fallback: fastq-dump --split-files -O <Illumina/> <SRA>
+    - If ILLUMINA_RAW_DIR is provided, combine verified pairs via illumina_extract_and_check(...).
+    - Then run FastQC → Trimmomatic → BBDuk → Clumpify.
+    - Returns (illu_dedup_f_reads, illu_dedup_r_reads) or (None, None) if unavailable/failed.
+    """
+    from pathlib import Path
 
-    Args:
-        sample_id (str): Sample identifier.
-        input_csv (str): Path to metadata CSV file.
-        output_dir (str): Directory for output files.
-        cpu_threads (int): Number of CPU threads to use.
-        ram_gb (int): Available RAM in GB.
-
-    Returns:
-        tuple or (None, None): Paths to deduplicated forward and reverse FASTQ files,
-                               or (None, None) if no reads are available or processing is skipped.
-    """ 
     print(f"Preprocessing Illumina reads for {sample_id.split('-')[0]}...")
+
     # Parse the CSV and retrieve relevant row data
     input_df = pd.read_csv(input_csv)
     print(f"DEBUG - input_df - {input_df}")
-    
+
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]  # Convert to Series (single row)
 
     print(f"DEBUG - current_series - {current_series}")
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths/reference info from CSV
     illu_sra = current_series["ILLUMINA_SRA"]
     illu_raw_f_reads = current_series["ILLUMINA_RAW_F_READS"]
     illu_raw_r_reads = current_series["ILLUMINA_RAW_R_READS"]
     illu_raw_dir = current_series["ILLUMINA_RAW_DIR"]
     species_id = current_series["SPECIES_ID"]
 
-    print(f"DEBUG - illu_sra - {illu_sra}")   
+    print(f"DEBUG - illu_sra - {illu_sra}")
     print(f"DEBUG - illu_raw_f_reads - {illu_raw_f_reads}")
-    print(f"DEBUG - illu_raw_r_reads - {illu_raw_f_reads}")
+    print(f"DEBUG - illu_raw_r_reads - {illu_raw_r_reads}")
     print(f"DEBUG - illu_raw_dir - {illu_raw_dir}")
-    
-    if pd.isna(illu_sra) and pd.isna(illu_raw_f_reads) and pd.isna(illu_raw_r_reads) and pd.isna(illu_raw_dir): 
+
+    # Early skip if nothing Illumina-like is provided
+    if pd.isna(illu_sra) and pd.isna(illu_raw_f_reads) and pd.isna(illu_raw_r_reads) and pd.isna(illu_raw_dir):
         print(f"SKIP:\tSample does not include Illumina Reads: {sample_id}.")
         return None, None
 
-    species_dir = os.path.join(output_dir, species_id)
-    os.makedirs(species_dir, exist_ok=True)
-    illumina_dir = os.path.join(species_dir, "Illumina")
-    os.makedirs(illumina_dir, exist_ok=True)
-    os.chdir(illumina_dir)
+    # Prepare directories
+    species_dir = Path(output_dir).resolve() / str(species_id)
+    illumina_dir = species_dir / "Illumina"
+    illumina_dir.mkdir(parents=True, exist_ok=True)
 
-    if pd.notna(illu_sra) and pd.isna(illu_raw_r_reads) and pd.isna(illu_raw_f_reads):
-        if pd.isna(illu_raw_dir):
-            illu_raw_f_reads = os.path.join(illumina_dir, f"{illu_sra}_1.fastq")
-            illu_raw_r_reads = os.path.join(illumina_dir, f"{illu_sra}_2.fastq")
-            if not os.path.exists(illu_raw_f_reads) and not os.path.exists(illu_raw_r_reads):
-                print(f"Downloading Illumina SRA: {illu_sra}...")
-                os.chdir(illumina_dir)
-                illu_cmd = f"prefetch --force yes {illu_sra} && fasterq-dump -e {cpu_threads} -O {illumina_dir} {illu_sra}"
-                if run_subprocess_cmd(illu_cmd, True) != 0:
-                    print(f"ERROR:\tFailed to download Illumina SRA {illu_sra}")
-                    illu_raw_f_reads = None
-                    illu_raw_r_reads = None
-            else:
-                print(f"PASS:\tIllumina SRA processed: {illu_raw_f_reads}, {illu_raw_r_reads}")
+    # ---- CASE A: SRA accession provided; ensure R1/R2 exist or download ----
+    if pd.notna(illu_sra) and pd.isna(illu_raw_f_reads) and pd.isna(illu_raw_r_reads):
+        sra_id = str(illu_sra).strip()
+        # Expected outputs from fasterq-dump / fastq-dump
+        r1 = illumina_dir / f"{sra_id}_1.fastq"
+        r2 = illumina_dir / f"{sra_id}_2.fastq"
+
+        # If missing, perform download + conversion
+        if not (r1.exists() and r2.exists()):
+            print(f"Downloading Illumina SRA: {sra_id}...")
+            # 1) prefetch into default SRA cache; don't fail the pipeline if prefetch re-downloads
+            dl_cmd = f"prefetch --force yes {sra_id}"
+            _ = run_subprocess_cmd(dl_cmd, True)
+
+            # 2) fasterq-dump (faster, recommended)
+            fq_cmd = (
+                f"fasterq-dump --split-files -e {int(cpu_threads)} "
+                f"-O '{illumina_dir}' {sra_id}"
+            )
+            ret = run_subprocess_cmd(fq_cmd, True)
+
+            # Fallback to fastq-dump if fasterq-dump failed or didn't create files
+            if ret != 0 or not (r1.exists() and r2.exists()):
+                print("WARN:\tfasterq-dump failed or files not found; trying fastq-dump fallback...")
+                fq2_cmd = f"fastq-dump --split-files -O '{illumina_dir}' {sra_id}"
+                ret2 = run_subprocess_cmd(fq2_cmd, True)
+
+                if ret2 != 0 or not (r1.exists() and r2.exists()):
+                    print(f"ERROR:\tFailed to produce FASTQ for {sra_id}.")
+                    return None, None
+
+            print(f"PASS:\tIllumina SRA processed: {r1}, {r2}")
+
+        # Set variables to discovered paths
+        illu_raw_f_reads = str(r1)
+        illu_raw_r_reads = str(r2)
+
+    # ---- CASE B: Raw directory provided; combine/verify there ----
+    elif pd.notna(illu_raw_dir) and (pd.isna(illu_raw_f_reads) or pd.isna(illu_raw_r_reads)):
+        print(f"Process Illumina Raw Directory: {illu_raw_dir}...")
+        combined_list = illumina_extract_and_check(str(illu_raw_dir), sample_id)
+        if combined_list:
+            print("PASS:\tSuccessfully processed Illumina Raw Directory.")
+            illu_raw_f_reads, illu_raw_r_reads = combined_list[0], combined_list[1]
+            # Update the 'SRA' field logically for downstream logging (won't rewrite CSV here)
         else:
-            print(f"Process Illumina Raw Directory: {illu_raw_dir}...")
-            combined_list = illumina_extract_and_check(illu_raw_dir, sample_id)
-            if combined_list:
-                print("PASS:\tSucessfully processed Illumina Raw Directory.")
-                illu_raw_f_reads = combined_list[0]
-                illu_raw_r_reads = combined_list[1]
-                illu_sra = f"{combined_list[0]},{combined_list[1]}"  # Update ILLUMINA_SRA
-            else:
-                print(f"ERROR:\tFailed to process Illumina Raw Directory for {sample_id}")
-                return None, None
-    
-    illu_dedup_f_reads = os.path.join(illumina_dir, f"{species_id}_illu_forward_dedup.fastq")
-    illu_dedup_r_reads = os.path.join(illumina_dir, f"{species_id}_illu_reverse_dedup.fastq")
+            print(f"ERROR:\tFailed to process Illumina Raw Directory for {sample_id}")
+            return None, None
 
+    # If both explicit files provided in CSV, just trust them
+    else:
+        # Normalize strings if they exist
+        if pd.notna(illu_raw_f_reads):
+            illu_raw_f_reads = str(illu_raw_f_reads).strip()
+        if pd.notna(illu_raw_r_reads):
+            illu_raw_r_reads = str(illu_raw_r_reads).strip()
+
+    # Final guard: we must have both R1 and R2 paths now
+    if not illu_raw_f_reads or not illu_raw_r_reads or not os.path.exists(illu_raw_f_reads) or not os.path.exists(illu_raw_r_reads):
+        print("ERROR:\tIllumina paired-end files are missing after preprocessing:")
+        print(f"      R1: {illu_raw_f_reads}")
+        print(f"      R2: {illu_raw_r_reads}")
+        return None, None
+
+    # Output filenames
+    illu_dedup_f_reads = str(illumina_dir / f"{species_id}_illu_forward_dedup.fastq")
+    illu_dedup_r_reads = str(illumina_dir / f"{species_id}_illu_reverse_dedup.fastq")
+
+    # Short-circuit if already done
     if os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads):
         print(f"SKIP:\tIllumina preprocessing already completed: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
         return illu_dedup_f_reads, illu_dedup_r_reads
 
-    # FastQC
-    fastqc_results_dir = os.path.join(illumina_dir, "fastqc_results")
+    # ---------- FastQC on raw ----------
+    fastqc_results_dir = str(illumina_dir / "fastqc_results")
     os.makedirs(fastqc_results_dir, exist_ok=True)
-    # if os.path.exists():
-    #     print("SKIP:\tFastq")
-    # else:
-    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", "fastqc_results", illu_raw_f_reads, illu_raw_r_reads], False)
+    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", fastqc_results_dir, illu_raw_f_reads, illu_raw_r_reads], False)
 
-    # Trimmomatic
-    trimmo_f_pair = illu_raw_f_reads.replace("_1","_forward_paired") 
-    trimmo_r_pair = illu_raw_r_reads.replace("_2","_reverse_paired")
-    trimmo_f_unpair = illu_raw_f_reads.replace("_1","_forward_unpaired")
-    trimmo_r_unpair = illu_raw_r_reads.replace("_2","_reverse_unpaired")
-    
+    # ---------- Trimmomatic ----------
+    # Derive paired/unpaired output names from input
+    def _swap_suffix(pth, old, new):
+        if pth.endswith(old + ".gz"):
+            return pth.replace(old + ".gz", new + ".gz")
+        return pth.replace(old, new)
+
+    trimmo_f_pair    = _swap_suffix(illu_raw_f_reads, "_1.fastq", "_forward_paired.fastq")
+    trimmo_r_pair    = _swap_suffix(illu_raw_r_reads, "_2.fastq", "_reverse_paired.fastq")
+    trimmo_f_unpair  = _swap_suffix(illu_raw_f_reads, "_1.fastq", "_forward_unpaired.fastq")
+    trimmo_r_unpair  = _swap_suffix(illu_raw_r_reads, "_2.fastq", "_reverse_unpaired.fastq")
+
     if os.path.exists(trimmo_f_pair) and os.path.exists(trimmo_r_pair):
         print(f"SKIP:\tTrimmomatic files exist: {trimmo_f_pair} & {trimmo_r_pair}.")
     else:
-        truseq3_path = shutil.which("TruSeq3-PE.fa") or shutil.which("TruSeq3-PE") # sometimes fails? maybe include in bin?
-        run_subprocess_cmd(["trimmomatic", "PE",
-                            "-threads", str(cpu_threads),
-                            "-phred33",
-                            illu_raw_f_reads,           # Input R1
-                            illu_raw_r_reads,           # Input R2
-                            trimmo_f_pair,              # R1 paired output
-                            trimmo_f_unpair,            # R1 unpaired output
-                            trimmo_r_pair,              # R2 paired output
-                            trimmo_r_unpair,            # R2 unpaired output
-                            f"ILLUMINACLIP:{truseq3_path}:2:30:10:11",
-                            "HEADCROP:10",
-                            "CROP:145",
-                            "SLIDINGWINDOW:50:25",
-                            "MINLEN:125"],
-                           False)
-    # BBDuk
-    bbduk_f_map = illu_raw_f_reads.replace("_1","_forward_mapped") 
-    bbduk_r_map = illu_raw_r_reads.replace("_2","_reverse_mapped") 
+        truseq3_path = shutil.which("TruSeq3-PE.fa") or shutil.which("TruSeq3-PE")
+        if not truseq3_path:
+            print("WARN:\tTruSeq3-PE adapters file not found on PATH; Trimmomatic may fail.")
+        run_subprocess_cmd([
+            "trimmomatic", "PE",
+            "-threads", str(cpu_threads),
+            "-phred33",
+            illu_raw_f_reads,           # Input R1
+            illu_raw_r_reads,           # Input R2
+            trimmo_f_pair,              # R1 paired output
+            trimmo_f_unpair,            # R1 unpaired output
+            trimmo_r_pair,              # R2 paired output
+            trimmo_r_unpair,            # R2 unpaired output
+            f"ILLUMINACLIP:{truseq3_path}:2:30:10:11",
+            "HEADCROP:10",
+            "CROP:145",
+            "SLIDINGWINDOW:50:25",
+            "MINLEN:125"
+        ], False)
+
+    # ---------- BBDuk ----------
+    bbduk_f_map = str(Path(trimmo_f_pair).with_name(Path(trimmo_f_pair).name.replace("_forward_paired", "_forward_mapped")))
+    bbduk_r_map = str(Path(trimmo_r_pair).with_name(Path(trimmo_r_pair).name.replace("_reverse_paired", "_reverse_mapped")))
+
     if os.path.exists(bbduk_f_map) and os.path.exists(bbduk_r_map):
         print(f"SKIP:\tbbduk mapped files exist: {bbduk_f_map} & {bbduk_r_map}.")
     else:
-        run_subprocess_cmd(["bbduk.sh", f"in1={trimmo_f_pair}", f"in2={trimmo_r_pair}",
-                            f"out1={bbduk_f_map}", f"out2={bbduk_r_map}",
-                            "ktrim=r", "k=23", "mink=11", "hdist=1",
-                            "tpe", "tbo", "qtrim=rl", "trimq=20"], False)
+        run_subprocess_cmd([
+            "bbduk.sh",
+            f"in1={trimmo_f_pair}", f"in2={trimmo_r_pair}",
+            f"out1={bbduk_f_map}",  f"out2={bbduk_r_map}",
+            "ktrim=r", "k=23", "mink=11", "hdist=1",
+            "tpe", "tbo", "qtrim=rl", "trimq=20"
+        ], False)
 
-    # Clumpify
+    # ---------- Clumpify (dedupe) ----------
     if os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads):
         print(f"SKIP:\tClumpify deduplicated files exist: {illu_dedup_f_reads} & {illu_dedup_r_reads}.")
     else:
-        run_subprocess_cmd(["clumpify.sh", f"in={bbduk_f_map}", f"in2={bbduk_r_map}",
-                        f"out={illu_dedup_f_reads}", f"out2={illu_dedup_r_reads}", "dedupe"], False)
+        run_subprocess_cmd([
+            "clumpify.sh",
+            f"in={bbduk_f_map}", f"in2={bbduk_r_map}",
+            f"out={illu_dedup_f_reads}", f"out2={illu_dedup_r_reads}",
+            "dedupe"
+        ], False)
 
     print(f"PASS:\tPreprocessed Raw Illumina Reads for {species_id}: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
-    
-    # FastQC
-    dedup_fastqc_results_dir = os.path.join(illumina_dir, "dedup_fastqc_results")
+
+    # ---------- FastQC on dedup ----------
+    dedup_fastqc_results_dir = str(illumina_dir / "dedup_fastqc_results")
     os.makedirs(dedup_fastqc_results_dir, exist_ok=True)
     run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", dedup_fastqc_results_dir, illu_dedup_f_reads, illu_dedup_r_reads], False)
-    
+
     return illu_dedup_f_reads, illu_dedup_r_reads
 
 
@@ -241,3 +297,4 @@ if __name__ == "__main__":
     print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' {sys.argv[5]} (converted to {ram_gb}) {type(ram_gb)}")
     
     illu_dedup_f_reads, illu_dedup_r_reads = preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+
