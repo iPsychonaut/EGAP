@@ -18,17 +18,19 @@ from utilities import run_subprocess_cmd, get_current_row_data
 def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     """Preprocess reference sequence data for the assembly pipeline.
 
-    Behavior:
-      - Creates <output_dir>/<SPECIES_ID>/RefSeq/ if missing.
-      - If REF_SEQ (path) exists, copy/move it into RefSeq/ as SPECIES_GCA_RefSeq.fasta (or SPECIES_RefSeq.fasta if no GCA).
-      - If REF_SEQ_GCA is provided but file not found, download via NCBI datasets, unzip, find *_genomic.fna(.gz),
-        gunzip if necessary, and place as SPECIES_GCA_RefSeq.fasta.
-
-    Returns:
-        str or None: Absolute path to the finalized reference FASTA, or None if unavailable.
+    Behavior
+    --------
+    - Creates <output_dir>/<SPECIES_ID>/RefSeq/ if missing.
+    - If REF_SEQ (path) is provided and exists, copy/normalize it into RefSeq/
+      as SPECIES_GCA_RefSeq.fasta (or SPECIES_RefSeq.fasta if no GCA).
+    - If REF_SEQ_GCA is provided but the file is not present, download it with
+      NCBI 'datasets' CLI, unzip, locate '*_genomic.fna' (or .fna.gz), gunzip
+      if needed, and place as SPECIES_GCA_RefSeq.fasta.
+    - Never uses os.chdir; subprocess calls run via "cd '<dir>' && ...".
+    - Returns absolute path to finalized FASTA, or None if unavailable.
     """
-    from pathlib import Path
     import gzip
+    from pathlib import Path
 
     print(f"Preprocessing Reference Sequence assembly for {sample_id.split('-')[0]}...")
 
@@ -39,22 +41,26 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
 
-    # Pull fields
-    ref_seq_gca = (str(current_series["REF_SEQ_GCA"]).strip()
-                   if pd.notna(current_series.get("REF_SEQ_GCA")) else None)
-    ref_seq = (str(current_series["REF_SEQ"]).strip()
-               if pd.notna(current_series.get("REF_SEQ")) else None)
+    # Pull fields (normalize NaNs → None)
+    ref_seq_gca = None
+    tmp = current_series.get("REF_SEQ_GCA")
+    if pd.notna(tmp):
+        ref_seq_gca = str(tmp).strip()
+
+    ref_seq = None
+    tmp = current_series.get("REF_SEQ")
+    if pd.notna(tmp):
+        ref_seq = str(tmp).strip()
+
     species_id = str(current_series["SPECIES_ID"]).strip()
 
-    # Prepare directories (no chdir)
+    # Prepare directories
     species_dir = Path(output_dir).resolve() / species_id
     refseq_dir = species_dir / "RefSeq"
     refseq_dir.mkdir(parents=True, exist_ok=True)
 
-    # If only GCA was supplied, compute the expected REF_SEQ target path
-    # (this is the *final* filename we want to create)
+    # Compute target filename
     if ref_seq_gca and ref_seq_gca.lower() != "nan":
-        # basic sanity: requires version (e.g., ".1")
         if "." not in ref_seq_gca:
             print(f"ERROR:\tReference Sequence GCA requires version number: {ref_seq_gca} has no '.#'")
         target_fasta = refseq_dir / f"{species_id}_{ref_seq_gca}_RefSeq.fasta"
@@ -64,48 +70,52 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
     print(f"DEBUG - ref_seq - {ref_seq}")
 
-    # Nothing to do if neither a GCA nor a REF_SEQ path is provided
+    # If neither provided, nothing to do
     if (not ref_seq_gca or ref_seq_gca.lower() == "nan") and (not ref_seq or ref_seq.lower() == "nan"):
         print(f"SKIP:\tSample does not include Reference Sequence: {sample_id}.")
         return None
 
-    # Case A: REF_SEQ path provided by CSV (user-supplied file)
-    # Normalize and copy/move into expected location/name
+    # Case A: REF_SEQ path provided — normalize into place
     if ref_seq and ref_seq.lower() != "nan":
         src = Path(ref_seq).expanduser().resolve()
-        if not src.exists():
-            print(f"ERROR:\tProvided REF_SEQ does not exist on disk: {src}")
-            # fallthrough to GCA download if available
-        else:
-            # If user provided a file, normalize it into our expected target filename
-            if src.samefile(target_fasta):
-                print(f"PASS:\tReference sequence already in place: {target_fasta}")
-                return str(target_fasta)
-            else:
-                # Copy/rename into place
+        if src.exists():
+            try:
+                # If already in place, short-circuit
+                if target_fasta.exists():
+                    try:
+                        if src.samefile(target_fasta):
+                            print(f"PASS:\tReference sequence already in place: {target_fasta}")
+                            return str(target_fasta)
+                    except Exception:
+                        # samefile may fail across filesystems; compare sizes as a weak check
+                        if src.stat().st_size == target_fasta.stat().st_size:
+                            print(f"PASS:\tReference sequence appears already normalized: {target_fasta}")
+                            return str(target_fasta)
+                # Copy into expected location/name
                 shutil.copy2(str(src), str(target_fasta))
                 print(f"PASS:\tCopied REF_SEQ into expected location: {target_fasta}")
                 return str(target_fasta)
+            except Exception as e:
+                print(f"WARN:\tFailed to normalize provided REF_SEQ '{src}': {e}. Will try GCA if available.")
+        else:
+            print(f"ERROR:\tProvided REF_SEQ does not exist on disk: {src}. Will try GCA if available.")
 
-    # Case B: Need to download via REF_SEQ_GCA (NCBI datasets)
+    # Case B: Need (or fall back) to download via REF_SEQ_GCA
     if ref_seq_gca and ref_seq_gca.lower() != "nan":
         if target_fasta.exists():
             print(f"SKIP:\tREF_SEQ GCA already exists: {target_fasta}")
             return str(target_fasta)
 
-        # Where datasets will unpack files:
-        # datasets creates ./ncbi_dataset.zip and ./ncbi_dataset/...
-        # We keep its outputs inside refseq_dir
         pkg_zip = refseq_dir / "ncbi_dataset.zip"
         pkg_dir = refseq_dir / "ncbi_dataset"
         gca_dir = pkg_dir / "data" / ref_seq_gca
 
-        # Clean any previous partials
-        if pkg_zip.exists():
-            try:
+        # Clean prior partials
+        try:
+            if pkg_zip.exists():
                 pkg_zip.unlink()
-            except Exception:
-                pass
+        except Exception:
+            pass
         if pkg_dir.exists():
             try:
                 shutil.rmtree(pkg_dir)
@@ -113,45 +123,43 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 pass
 
         print(f"Downloading Reference Sequence Assembly for: {ref_seq_gca}")
-        # Use NCBI datasets CLI to fetch genome FASTA
-        # (no chdir; run in refseq_dir via cwd=)
-        dl_cmd = (
-            f"datasets download genome accession {ref_seq_gca} "
-            f"--include genome --filename {pkg_zip.name}"
-        )
-        _ = run_subprocess_cmd(dl_cmd, shell_check=True, cwd=str(refseq_dir))
 
-        # Unzip
+        # 1) Download with datasets (no cwd=; use cd 'dir' && ...)
+        dl_cmd = (
+            f"cd '{refseq_dir}' && "
+            f"datasets download genome accession {ref_seq_gca} --include genome --filename ncbi_dataset.zip"
+        )
+        _ = run_subprocess_cmd(dl_cmd, shell_check=True)
+
         if not pkg_zip.exists():
             raise FileNotFoundError(f"NCBI download failed: {pkg_zip} not found.")
-        unzip_cmd = f"unzip -o {pkg_zip.name} -d {refseq_dir.name}"
-        # Since -d path is relative in unzip, we run from parent of refseq_dir to place under refseq_dir cleanly
-        _ = run_subprocess_cmd(unzip_cmd, shell_check=True, cwd=str(refseq_dir.parent))
 
-        # Locate *_genomic.fna or *_genomic.fna.gz
+        # 2) Unzip in-place under refseq_dir
+        unzip_cmd = f"cd '{refseq_dir}' && unzip -o ncbi_dataset.zip -d ."
+        _ = run_subprocess_cmd(unzip_cmd, shell_check=True)
+
         if not gca_dir.exists():
             raise FileNotFoundError(f"Expected unpack dir not found: {gca_dir}")
 
+        # 3) Locate *_genomic.fna or *_genomic.fna.gz
         fna_candidates = list(gca_dir.glob("*_genomic.fna")) + list(gca_dir.glob("*_genomic.fna.gz"))
         if not fna_candidates:
-            raise FileNotFoundError(f"No ‘*_genomic.fna(.gz)’ found in {gca_dir}")
-
+            raise FileNotFoundError(f"No '*_genomic.fna(.gz)' found in {gca_dir}")
         src_fna = fna_candidates[0]
 
-        # If gzipped, gunzip to a temp path within refseq_dir, then move to final target
+        # 4) Gunzip if needed, then normalize name
         if src_fna.suffix == ".gz":
-            temp_out = refseq_dir / f"{species_id}_{ref_seq_gca}_RefSeq.tmp.fasta"
-            with gzip.open(src_fna, "rb") as fin, open(temp_out, "wb") as fout:
+            tmp_out = refseq_dir / f"{species_id}_{ref_seq_gca}_RefSeq.tmp.fasta"
+            with gzip.open(src_fna, "rb") as fin, open(tmp_out, "wb") as fout:
                 shutil.copyfileobj(fin, fout)
-            # Move into place
-            temp_out.replace(target_fasta)
+            tmp_out.replace(target_fasta)
         else:
             shutil.copy2(str(src_fna), str(target_fasta))
 
         print(f"PASS:\tSuccessfully placed Reference Sequence: {target_fasta}")
         return str(target_fasta)
 
-    # Fallback: nothing obtained
+    # Fallback
     print(f"ERROR:\tNo reference sequence could be resolved for {sample_id}")
     return None
 
@@ -186,4 +194,5 @@ if __name__ == "__main__":
     print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' {sys.argv[5]} (converted to {ram_gb}) {type(ram_gb)}")
     
     renamed_gca = preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+
 
