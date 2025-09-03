@@ -3,18 +3,28 @@ nextflow.enable.dsl=2
 //
 // EGAP Version
 //
-def version = "3.2"
+def version = "3.3"
 
 
 //
 // Define Parameters
 //
-params.no_file = "$projectDir/assets/NO_FILE"
-params.input_csv = "/mnt/d/EGAP_Nextflow/EGAP_test.csv"
-params.output_dir = "/mnt/d/TESTING_SPACE/nextflow_test"
+params.no_file     = "$projectDir/assets/NO_FILE"
+params.input_csv   = "/mnt/d/EGAP_Nextflow/EGAP_test.csv"
+params.output_dir  = "/mnt/d/TESTING_SPACE/nextflow_test"
 params.cpu_threads = 12
-params.ram_gb = 40
+params.ram_gb      = 40
 
+//
+// Resolve to absolute paths once (so all processes get stable paths)
+//
+def INPUT_CSV_ABS   = file(params.input_csv).toAbsolutePath()
+def OUTPUT_DIR_ABS  = file(params.output_dir).toAbsolutePath()
+
+// For containerized runs, bind the CSV's parent and the output dir so Python can read/write there.
+def INPUT_BIND_DIR  = INPUT_CSV_ABS.parent
+def OUTPUT_BIND_DIR = OUTPUT_DIR_ABS
+def NF_CONTAINER_OPTS = "--bind ${INPUT_BIND_DIR}:${INPUT_BIND_DIR} --bind ${OUTPUT_BIND_DIR}:${OUTPUT_BIND_DIR}"
 
 //
 // Print Banner & Parameters
@@ -53,8 +63,8 @@ log.info("""
         \033[94mcontainer                        \033[0m: ${workflow.containerEngine}:${workflow.container}
         \033[94mRAM GB                           \033[0m: ${params.ram_gb}
         \033[94mCPU threads                      \033[0m: ${params.cpu_threads}
-        \033[94minput csv                        \033[0m: ${params.input_csv}
-        \033[94moutput to                        \033[0m: ${params.output_dir}
+        \033[94minput csv                        \033[0m: ${INPUT_CSV_ABS}
+        \033[94moutput to                        \033[0m: ${OUTPUT_DIR_ABS}
 
     \033[96m-----------------------------------------------------------------------\033[0m""")
 sleep(250)
@@ -219,6 +229,7 @@ log.info("""
 process preprocess_refseq {
     tag "Preprocess Reference Sequence"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -231,16 +242,19 @@ process preprocess_refseq {
     
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
         
     echo "DEBUG: sample_id=${sample_id}"
-    echo "DEBUG: input_csv=${params.input_csv}"
-    echo "DEBUG: output_dir=${params.output_dir}"
+    echo "DEBUG: input_csv=${INPUT_CSV_ABS}"
+    echo "DEBUG: output_dir=${OUTPUT_DIR_ABS}"
     echo "DEBUG: cpu_threads=${params.cpu_threads}"
     echo "DEBUG: ram_gb=${params.ram_gb}"
     
-    python3 "${workflow.projectDir}/bin/preprocess_refseq.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+    python3 "${workflow.projectDir}/bin/preprocess_refseq.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -248,6 +262,7 @@ process preprocess_refseq {
 process preprocess_illumina {
     tag "Preprocess Illumina Raw Reads"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -261,16 +276,19 @@ process preprocess_illumina {
     
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
         
     echo "DEBUG: sample_id=${sample_id}"
-    echo "DEBUG: input_csv=${params.input_csv}"
-    echo "DEBUG: output_dir=${params.output_dir}"
+    echo "DEBUG: input_csv=${INPUT_CSV_ABS}"
+    echo "DEBUG: output_dir=${OUTPUT_DIR_ABS}"
     echo "DEBUG: cpu_threads=${params.cpu_threads}"
     echo "DEBUG: ram_gb=${params.ram_gb}"
     
-    python3 "${workflow.projectDir}/bin/preprocess_illumina.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+    python3 "${workflow.projectDir}/bin/preprocess_illumina.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -278,6 +296,7 @@ process preprocess_illumina {
 process preprocess_ont {
     tag "Preprocess ONT Raw Reads"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -291,16 +310,19 @@ process preprocess_ont {
 
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
     
     echo "DEBUG: sample_id=${sample_id}"
-    echo "DEBUG: input_csv=${params.input_csv}"
-    echo "DEBUG: output_dir=${params.output_dir}"
+    echo "DEBUG: input_csv=${INPUT_CSV_ABS}"
+    echo "DEBUG: output_dir=${OUTPUT_DIR_ABS}"
     echo "DEBUG: cpu_threads=${params.cpu_threads}"
     echo "DEBUG: ram_gb=${params.ram_gb}"
     
-    python3 "${workflow.projectDir}/bin/preprocess_ont.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}"  "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+    python3 "${workflow.projectDir}/bin/preprocess_ont.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -308,6 +330,7 @@ process preprocess_ont {
 process preprocess_pacbio {
     tag "Preprocess PacBio Raw Reads"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -321,16 +344,19 @@ process preprocess_pacbio {
 
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
     
     echo "DEBUG: sample_id=${sample_id}"
-    echo "DEBUG: input_csv=${params.input_csv}"
-    echo "DEBUG: output_dir=${params.output_dir}"
+    echo "DEBUG: input_csv=${INPUT_CSV_ABS}"
+    echo "DEBUG: output_dir=${OUTPUT_DIR_ABS}"
     echo "DEBUG: cpu_threads=${params.cpu_threads}"
     echo "DEBUG: ram_gb=${params.ram_gb}"
     
-    python3 "${workflow.projectDir}/bin/preprocess_pacbio.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+    python3 "${workflow.projectDir}/bin/preprocess_pacbio.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -339,6 +365,7 @@ process preprocess_pacbio {
 process masurca_assemble {
     tag "MaSuRCA Assembly"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -355,10 +382,14 @@ process masurca_assemble {
 
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
     export MPLCONFIGDIR=/tmp/matplotlib-cache
-    python3 "${workflow.projectDir}/bin/assemble_masurca.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+
+    python3 "${workflow.projectDir}/bin/assemble_masurca.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -366,6 +397,7 @@ process masurca_assemble {
 process spades_assemble {
     tag "SPAdes Assembly"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -379,10 +411,14 @@ process spades_assemble {
 
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
     export MPLCONFIGDIR=/tmp/matplotlib-cache
-    python3 "${workflow.projectDir}/bin/assemble_spades.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+
+    python3 "${workflow.projectDir}/bin/assemble_spades.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -390,6 +426,7 @@ process spades_assemble {
 process flye_assemble {
     tag "Flye Assembly"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -403,10 +440,14 @@ process flye_assemble {
 
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
     export MPLCONFIGDIR=/tmp/matplotlib-cache
-    python3 "${workflow.projectDir}/bin/assemble_flye.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+
+    python3 "${workflow.projectDir}/bin/assemble_flye.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -414,6 +455,7 @@ process flye_assemble {
 process hifiasm_assemble {
     tag "HiFiasm Assembly"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     maxForks 1
@@ -427,10 +469,14 @@ process hifiasm_assemble {
 
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
     export MPLCONFIGDIR=/tmp/matplotlib-cache
-    python3 "${workflow.projectDir}/bin/assemble_hifiasm.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+
+    python3 "${workflow.projectDir}/bin/assemble_hifiasm.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -438,6 +484,7 @@ process hifiasm_assemble {
 process compare_assemblies {
     tag "Compare Assemblies"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     cpus params.cpu_threads
     memory "${params.ram_gb} GB"
     
@@ -450,9 +497,13 @@ process compare_assemblies {
 
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
-    python3 "${workflow.projectDir}/bin/compare_assemblies.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+
+    python3 "${workflow.projectDir}/bin/compare_assemblies.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -460,6 +511,7 @@ process compare_assemblies {
 process polish_assembly{
     tag "Polish Assembly"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     maxForks 1
     
     input:
@@ -471,9 +523,13 @@ process polish_assembly{
     
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
-    python3 "${workflow.projectDir}/bin/polish_assembly.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+
+    python3 "${workflow.projectDir}/bin/polish_assembly.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -481,6 +537,7 @@ process polish_assembly{
 process curate_assembly{
     tag "Curate Assembly"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     maxForks 1
     
     input:
@@ -492,9 +549,13 @@ process curate_assembly{
     
     script:
     """   
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env
-    python3 "${workflow.projectDir}/bin/curate_assembly.py" "${sample_id}" "${params.input_csv}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
+
+    python3 "${workflow.projectDir}/bin/curate_assembly.py" \
+        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -502,6 +563,7 @@ process curate_assembly{
 process final_assembly_qc {
     tag "Final Assembly QC"
     container "${workflow.projectDir}/entheome.sif"
+    containerOptions "${NF_CONTAINER_OPTS}"
     maxForks 1
     
     input:
@@ -510,14 +572,16 @@ process final_assembly_qc {
 
     script:
     """
+    set -euo pipefail
     source /opt/conda/etc/profile.d/conda.sh 
     conda activate EGAP_env    
-    mkdir -p .temp
-    mkdir -p .temp/fontconfig
+    mkdir -p .temp .temp/fontconfig
     export MPLCONFIGDIR=\$PWD/.temp
     export FC_CACHEDIR=\$PWD/.temp/fontconfig
 
-    python3 "${workflow.projectDir}/bin/qc_assessment.py" final "${params.input_csv}" "${sample_id}" "${params.output_dir}" "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"    
+    python3 "${workflow.projectDir}/bin/qc_assessment.py" \
+        final "${INPUT_CSV_ABS}" "${sample_id}" "${OUTPUT_DIR_ABS}" \
+        "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
 
@@ -529,20 +593,20 @@ workflow {
 // Input-Setup
     // Parse the input CSV into sample channels (i.e. one sample_id per row)
     def all_samples_ch = Channel
-        .fromPath(params.input_csv)
+        .fromPath(INPUT_CSV_ABS)
         .splitCsv(header: true)
         .map { row ->
             [
-                row.ONT_SRA             ?: "None",  // [0]
-                row.ONT_RAW_DIR         ?: "None",  // [1]
-                row.ONT_RAW_READS       ?: "None",  // [2]
-                row.ILLUMINA_SRA        ?: "None",  // [3]
-                row.ILLUMINA_RAW_DIR    ?: "None",  // [4]
-                row.ILLUMINA_RAW_F_READS?: "None",  // [5]
-                row.ILLUMINA_RAW_R_READS?: "None",  // [6]
-                row.PACBIO_SRA          ?: "None",  // [7]
-                row.PACBIO_RAW_DIR      ?: "None",  // [8]
-                row.PACBIO_RAW_READS    ?: "None",  // [9]
+                row.ONT_SRA              ?: "None",  // [0]
+                row.ONT_RAW_DIR          ?: "None",  // [1]
+                row.ONT_RAW_READS        ?: "None",  // [2]
+                row.ILLUMINA_SRA         ?: "None",  // [3]
+                row.ILLUMINA_RAW_DIR     ?: "None",  // [4]
+                row.ILLUMINA_RAW_F_READS ?: "None",  // [5]
+                row.ILLUMINA_RAW_R_READS ?: "None",  // [6]
+                row.PACBIO_SRA           ?: "None",  // [7]
+                row.PACBIO_RAW_DIR       ?: "None",  // [8]
+                row.PACBIO_RAW_READS     ?: "None",  // [9]
                 row.SAMPLE_ID,                      // [10]
                 row.SPECIES_ID,                     // [11]
                 row.ORGANISM_KINGDOM,               // [12]
@@ -630,4 +694,3 @@ workflow {
         curate_assembly.out.curate_done
     )
 }
-
