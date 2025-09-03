@@ -8,7 +8,9 @@ preprocessing, assembly, comparison, polishing, curation, and quality assessment
 for genomic data. Processes multiple samples from a CSV input, utilizing specified
 CPU threads and RAM resources.
 
-Created on Fri May  2 21:18:21 2025
+Created on Wed Aug 16 2023
+
+Updated on Wed Sept 3 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
@@ -17,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
-version = "3.2"
+version = "3.3"
 
 # --------------------------------------------------------------
 # Updates the input.csv with any .fq -> .fastq
