@@ -6,7 +6,9 @@ qc_assessment.py
 This script performs final assembly assessment with BUSCO and QUAST,
 analyzes and classifies the assembly, and finalizes renaming and compression.
 
-Updated on Mon May 12 2025
+Created on Wed Aug 16 2023
+
+Updated on Wed Sept 3 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
@@ -19,6 +21,69 @@ from collections import Counter
 import matplotlib.pyplot as plt
 from utilities import run_subprocess_cmd, pigz_compress, pigz_decompress, get_current_row_data, analyze_nanostats
 
+# === Global BUSCO/Compleasm toggle ===
+# If True, prefer Compleasm over BUSCO for completeness analysis.
+USE_COMPLEASM = True
+
+# If True, automatically fall back to BUSCO when Compleasm fails
+# or produces no metrics (recommended so downstream code always has data).
+FALLBACK_TO_BUSCO_ON_FAIL = True
+
+def _normalize_busco_keycase(sample_stats_dict: dict, busco_count: str) -> None:
+    """
+    Ensure keys are in the UPPERCASE style expected elsewhere, e.g.:
+    FIRST_BUSCO_S, FIRST_BUSCO_D, FIRST_BUSCO_F, FIRST_BUSCO_M, FIRST_BUSCO_C
+    """
+    up = busco_count.upper()
+    lo = busco_count.lower()
+    for tag in ("S", "D", "F", "M", "C"):
+        low_key = f"{lo}_BUSCO_{tag}"
+        up_key  = f"{up}_BUSCO_{tag}"
+        if low_key in sample_stats_dict and up_key not in sample_stats_dict:
+            sample_stats_dict[up_key] = sample_stats_dict[low_key]
+
+
+def run_lineage_eval(assembly_path: str,
+                     sample_id: str,
+                     sample_stats_dict: dict,
+                     busco_count: str,       # "first" or "second"
+                     busco_odb: str,
+                     assembly_type: str,
+                     cpu_threads) -> str:
+    """
+    Single entry point for BUSCO-like evaluation.
+    Respects USE_COMPLEASM and will optionally fall back to BUSCO.
+    """
+    if USE_COMPLEASM:
+        print("INFO:\tUsing Compleasm for BUSCO-like analysis.")
+        try:
+            compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
+                               busco_count, busco_odb, assembly_type, cpu_threads)
+            _normalize_busco_keycase(sample_stats_dict, busco_count)
+
+            # Did we actually get metrics? Accept C or (S and D)
+            up = busco_count.upper()
+            got_any = (
+                f"{up}_BUSCO_C" in sample_stats_dict or
+                (f"{up}_BUSCO_S" in sample_stats_dict and f"{up}_BUSCO_D" in sample_stats_dict)
+            )
+            if not got_any and FALLBACK_TO_BUSCO_ON_FAIL:
+                print("WARN:\tCompleasm produced no metrics; falling back to BUSCO.")
+                busco_assembly(assembly_path, sample_id, sample_stats_dict,
+                               busco_count, busco_odb, assembly_type, cpu_threads)
+
+        except Exception as e:
+            print(f"WARN:\tCompleasm raised an exception: {e}")
+            if FALLBACK_TO_BUSCO_ON_FAIL:
+                print("WARN:\tFalling back to BUSCO.")
+                busco_assembly(assembly_path, sample_id, sample_stats_dict,
+                               busco_count, busco_odb, assembly_type, cpu_threads)
+    else:
+        print("INFO:\tUsing BUSCO for completeness analysis.")
+        busco_assembly(assembly_path, sample_id, sample_stats_dict,
+                       busco_count, busco_odb, assembly_type, cpu_threads)
+
+    return assembly_path
 
 # --------------------------------------------------------------
 # Validate FASTA file
@@ -552,18 +617,12 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
         return None, None, sample_stats_dict
 
     # --------------------------------------------------------------
-    # BUSCO QC: Run on two different lineages
+    # Compleasm/BUSCO QC: Run on two different lineages
     # --------------------------------------------------------------
-    busco_assembly(assembly_path, sample_id, sample_stats_dict,
-                   "first", first_busco_odb, assembly_type, cpu_threads)
-    busco_assembly(assembly_path, sample_id, sample_stats_dict,
-                   "second", second_busco_odb, assembly_type, cpu_threads)
-    
-    # # Compleasm QC CURRENTLY BREAKS DUE TO md5 checksum errors
-    # compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
-    #                    "first", first_busco_odb, assembly_type, cpu_threads)
-    # compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
-    #                    "second", second_busco_odb, assembly_type, cpu_threads)
+    run_lineage_eval(assembly_path, sample_id, sample_stats_dict,
+                     "first", first_busco_odb, assembly_type, cpu_threads)
+    run_lineage_eval(assembly_path, sample_id, sample_stats_dict,
+                     "second", second_busco_odb, assembly_type, cpu_threads)
 
     # --------------------------------------------------------------
     # QUAST QC
@@ -778,48 +837,71 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     os.makedirs(sample_dir, exist_ok=True)
     os.chdir(sample_dir)
     print(f"DEBUG - Set working directory to: {os.getcwd()}")
-
-    # Validate assembly path
-    assembly_path_gz = assembly_path + ".gz"
-    if os.path.exists(assembly_path_gz) and not os.path.exists(assembly_path):
-        assembly_path = pigz_decompress(assembly_path_gz, cpu_threads)
-    if not os.path.exists(assembly_path):
-        print(f"ERROR:\tAssembly path not found: {assembly_path}")
-        return None, None
-    if not validate_fasta(assembly_path):
-        print(f"ERROR:\tInvalid assembly: {assembly_path}. Attempting to use polished assembly.")
-        polished_assembly = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta")
-        if validate_fasta(polished_assembly):
-            print(f"PASS:\tFalling back to polished assembly: {polished_assembly}")
-            assembly_path = polished_assembly
+    
+    # ---- NEW: use the final (homogeneous) filename BEFORE any QC ----
+    def _promote_to_final(src_path: str, dst_path: str, copy_only: bool) -> str:
+        """Ensure QC runs on the final-labeled path (rename or copy)."""
+        if src_path == dst_path and os.path.exists(dst_path):
+            return dst_path
+        if not os.path.exists(src_path) and os.path.exists(src_path + ".gz"):
+            print(f"INFO:\tDecompressing {src_path}.gz ...")
+            _ = pigz_decompress(src_path + ".gz", cpu_threads)
+        if not os.path.exists(src_path):
+            raise FileNotFoundError(f"Assembly path not found: {src_path}")
+        os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+        if copy_only:
+            print(f"INFO:\tCopying assembly -> {dst_path}")
+            shutil.copy2(src_path, dst_path)
         else:
-            print(f"ERROR:\tPolished assembly invalid or missing: {polished_assembly}")
+            try:
+                print(f"INFO:\tRenaming assembly -> {dst_path}")
+                os.replace(src_path, dst_path)
+            except OSError:
+                print("WARN:\tRename failed; copying instead.")
+                shutil.copy2(src_path, dst_path)
+        return dst_path
+    
+    # QC-only mode (no curated final): copy the ref to a stable EGAP name
+    if pd.isna(est_size):
+        if not ref_seq or not os.path.exists(ref_seq):
+            print(f"ERROR:\tReference path not found: {ref_seq}")
             return None, None
-
+        if not os.path.exists(labeled_assembly):
+            assembly_path = _promote_to_final(ref_seq, labeled_assembly, copy_only=True)
+        else:
+            assembly_path = labeled_assembly
+    else:
+        # True final mode: rename curated (or polished) to the final EGAP name
+        if not os.path.exists(assembly_path) and os.path.exists(assembly_path + ".gz"):
+            assembly_path = pigz_decompress(assembly_path + ".gz", cpu_threads)
+        if not os.path.exists(assembly_path):
+            # try polished fallback before giving up
+            polished_assembly = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta")
+            if os.path.exists(polished_assembly) and validate_fasta(polished_assembly):
+                assembly_path = polished_assembly
+            else:
+                print(f"ERROR:\tAssembly path not found: {assembly_path}")
+                return None, None
+        assembly_path = _promote_to_final(assembly_path, labeled_assembly, copy_only=False)
+    
+    # Validate final-named assembly
+    if not validate_fasta(assembly_path):
+        print(f"ERROR:\tInvalid assembly after promotion: {assembly_path}")
+        return None, None
+    
     print(f"Parsing final assembly for index {current_index} from {input_csv}:\n{current_row}")
-
-    # --------------------------------------------------------------
-    # BUSCO QC: Run on two different lineages
-    # --------------------------------------------------------------
-    busco_assembly(assembly_path, sample_id, sample_stats_dict,
-                   "first", first_busco_odb, assembly_type, cpu_threads)
-    busco_assembly(assembly_path, sample_id, sample_stats_dict,
-                   "second", second_busco_odb, assembly_type, cpu_threads)
-
-    # # Compleasm QC CURRENTLY BREAKS DUE TO md5 checksum errors
-    # compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
-    #                    "first", first_busco_odb, assembly_type, cpu_threads)
-    # compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
-    #                    "second", second_busco_odb, assembly_type, cpu_threads)
-
-    # --------------------------------------------------------------
-    # QUAST QC
-    # --------------------------------------------------------------
+    
+    # -------- Compleasm/BUSCO (now runs on the final-labeled path) --------
+    run_lineage_eval(assembly_path, sample_id, sample_stats_dict,
+                     "first", first_busco_odb, assembly_type, cpu_threads)
+    run_lineage_eval(assembly_path, sample_id, sample_stats_dict,
+                     "second", second_busco_odb, assembly_type, cpu_threads)
+    
+    # -------- QUAST (outputs now match the final-labeled basename) --------
     quast_dir = os.path.join(sample_dir, f"{os.path.basename(assembly_path).replace('.fasta', '')}_quast")
     os.makedirs(quast_dir, exist_ok=True)
     quast_report_tsv = os.path.join(quast_dir, "report.tsv")
-
-    # Run QUAST only if no existing report
+    
     if os.path.exists(quast_report_tsv):
         print(f"SKIP:\tQUAST Report already exists: {quast_report_tsv}.")
     else:
@@ -836,7 +918,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         if result != 0:
             print(f"WARN:\tQUAST failed with return code {result}. Skipping QUAST metrics.")
             return None, None, sample_stats_dict
-
+    
     # Parse QUAST report to populate sample_stats_dict
     try:
         with open(quast_report_tsv, "r") as quast_file:
@@ -927,16 +1009,6 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     if not os.path.exists(ref_seq) and pd.isna(est_size):
         shutil.copy(labeled_assembly, ref_seq)
 
-    # Rename to the final labeled assembly filename
-    if pd.notna(est_size):
-        if assembly_path != labeled_assembly:
-            try:
-                print(f"Renaming final assembly to {labeled_assembly}")
-                os.rename(assembly_path, labeled_assembly)
-                assembly_path = labeled_assembly
-            except FileNotFoundError:
-                print("SKIP:\tFile Not Found, likely already exists...")
-
     # Save a plain text stats file
     with open(stats_filepath, "w") as stats_file:
         stats_file.write("Assembly Statistics:\n")
@@ -954,13 +1026,13 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
 
     print(f"PASS:\tAssembly Stats for {labeled_assembly}:\n{sample_stats_list}")
 
-    # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
-    for root, dirs, files in os.walk(sample_dir):
-        for file in files:
-            if file.endswith(('.fasta', '.fastq')):
-                full_path = os.path.join(root, file)
-                print(f"Compressing: {full_path}")
-                _ = pigz_compress(full_path, cpu_threads)
+    # # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
+    # for root, dirs, files in os.walk(sample_dir):
+    #     for file in files:
+    #         if file.endswith(('.fasta', '.fastq')):
+    #             full_path = os.path.join(root, file)
+    #             print(f"Compressing: {full_path}")
+    #             _ = pigz_compress(full_path, cpu_threads)
 
     return labeled_assembly, final_stats_csv
 
@@ -980,9 +1052,9 @@ if __name__ == "__main__":
                                                             str(sys.argv[5]),  # cpu_threads
                                                             str(sys.argv[6]))  # ram_gb
     else:
-        labeled_assembly, final_stats_csv = qc_assessment(sys.argv[1],       # assembly_type
-                                                         sys.argv[2],       # input_csv
-                                                         sys.argv[3],       # sample_id
-                                                         sys.argv[4],       # output_dir
-                                                         str(sys.argv[5]),  # cpu_threads
-                                                         str(sys.argv[6]))  # ram_gb
+        assembly_path, sample_stats_list, sample_stats_dict = qc_assessment(sys.argv[1],       # assembly_type
+                                                                            sys.argv[2],       # input_csv
+                                                                            sys.argv[3],       # sample_id
+                                                                            sys.argv[4],       # output_dir
+                                                                            str(sys.argv[5]),  # cpu_threads
+                                                                            str(sys.argv[6]))  # ram_gb
