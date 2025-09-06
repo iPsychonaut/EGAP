@@ -5,14 +5,18 @@ compare_assemblies.py
 
 This script compares assemblies from MaSuRCA, SPAdes, Flye, and Hifiasm, selecting the best based on BUSCO completeness, contig count, and N50.
 
-Updated on Mon May 12 2025
+Created on Wed Aug 16 2023
+
+Updated on Wed Sept 3 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
 import sys
 import shutil
+import glob
 import pandas as pd
+from pathlib import Path
 from collections import Counter
 from utilities import run_subprocess_cmd, get_current_row_data
 from Bio import SeqIO
@@ -174,6 +178,92 @@ def get_quast_stats(assembly, cpu_threads, sample_dir, assembler):
 # --------------------------------------------------------------
 # Compare and select best assembly
 # --------------------------------------------------------------
+def _first_existing(paths):
+    for p in paths:
+        if p and os.path.exists(p) and os.path.getsize(p) > 100:
+            return p
+    return None
+
+
+def _ensure_dir(p):
+    d = os.path.dirname(p)
+    os.makedirs(d, exist_ok=True)
+    return p
+
+
+def discover_spades(sample_dir, sample_id):
+    base = os.path.join(sample_dir, "spades_assembly")
+    # candidates: your canonical name, scaffolds/contigs in this or nested dir
+    cands = [
+        os.path.join(base, f"{sample_id}_spades.fasta"),
+        os.path.join(base, "scaffolds.fasta"),
+        os.path.join(base, "contigs.fasta"),
+    ]
+    cands += glob.glob(os.path.join(base, "**", "scaffolds.fasta"), recursive=True)
+    cands += glob.glob(os.path.join(base, "**", "contigs.fasta"), recursive=True)
+    src = _first_existing(cands)
+    if not src:
+        return None
+    dst = _ensure_dir(os.path.join(base, f"{sample_id}_spades.fasta"))
+    if os.path.abspath(src) != os.path.abspath(dst):
+        shutil.copy(src, dst)
+    return dst
+
+
+def discover_masurca(sample_dir, sample_id):
+    base = os.path.join(sample_dir, "masurca_assembly")
+    # your canonical, plus CABOG outputs
+    ca_dirs = glob.glob(os.path.join(base, "CA*"))
+    cands = [
+        os.path.join(base, f"{sample_id}_masurca.fasta"),
+        os.path.join(base, "primary.genome.scf.fasta"),
+    ]
+    for ca in ca_dirs:
+        cands.append(os.path.join(ca, "primary.genome.scf.fasta"))
+        cands.append(os.path.join(ca, "9-terminator", "genome.scf.fasta"))
+    src = _first_existing(cands)
+    if not src:
+        return None
+    dst = _ensure_dir(os.path.join(base, f"{sample_id}_masurca.fasta"))
+    if os.path.abspath(src) != os.path.abspath(dst):
+        shutil.copy(src, dst)
+    return dst
+
+
+def discover_flye(sample_dir, sample_id):
+    base = os.path.join(sample_dir, "flye_assembly")
+    cands = [
+        os.path.join(base, f"{sample_id}_flye.fasta"),
+        os.path.join(base, "assembly.fasta"),
+    ]
+    cands += glob.glob(os.path.join(base, "**", "assembly.fasta"), recursive=True)
+    src = _first_existing(cands)
+    if not src:
+        return None
+    dst = _ensure_dir(os.path.join(base, f"{sample_id}_flye.fasta"))
+    if os.path.abspath(src) != os.path.abspath(dst):
+        shutil.copy(src, dst)
+    return dst
+
+
+def discover_hifiasm(sample_dir, sample_id):
+    base = os.path.join(sample_dir, "hifiasm_assembly")
+    cands = [
+        os.path.join(base, f"{sample_id}_hifiasm.fasta"),
+    ]
+    # common hifiasm outputs
+    cands += glob.glob(os.path.join(base, "**", "*.p_ctg.fa"), recursive=True)
+    cands += glob.glob(os.path.join(base, "**", "*.p_ctg.fasta"), recursive=True)
+    cands += glob.glob(os.path.join(base, "**", "*.fa"), recursive=True)
+    src = _first_existing(cands)
+    if not src:
+        return None
+    dst = _ensure_dir(os.path.join(base, f"{sample_id}_hifiasm.fasta"))
+    if os.path.abspath(src) != os.path.abspath(dst):
+        shutil.copy(src, dst)
+    return dst
+
+
 def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     """Compare assemblies and select the best based on BUSCO and Quast metrics.
 
@@ -208,8 +298,12 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     ref_seq = current_series["REF_SEQ"]
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
-    species_dir = os.path.join(output_dir, species_id)
-    sample_dir = os.path.join(species_dir, sample_id)
+    output_dir_abs = str(Path(output_dir).resolve())
+    print(f"DEBUG - output_dir_abs - {output_dir_abs}")
+
+    # build dirs from absolute base
+    species_dir = os.path.join(output_dir_abs, species_id)
+    sample_dir  = os.path.join(species_dir, sample_id)
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
         ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
@@ -239,16 +333,42 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # Ensure working directory is sample_dir
     os.makedirs(sample_dir, exist_ok=True)
     os.chdir(sample_dir)
-    print(f"DEBUG - Set working directory to: {os.getcwd()}")
+    sample_dir = os.getcwd()
+    print(f"DEBUG - Set working directory to: {sample_dir}")
 
     all_methods = ["MaSuRCA", "SPAdes", "Flye", "Hifiasm"]
     assemblies = {}
-    
-    for method in all_methods:
-        temp_assembly_path = os.path.join(sample_dir, f"{method.lower()}_assembly", f"{sample_id}_{method.lower()}.fasta")
-        if os.path.exists(temp_assembly_path):
-            assemblies[method] = temp_assembly_path
-            print(f"DEBUG - {method}_assembly - {temp_assembly_path}")
+
+    # Robust discovery + normalization to canonical filenames
+    spades_asm = discover_spades(sample_dir, sample_id)
+    if spades_asm:
+        assemblies["SPAdes"] = spades_asm
+        print(f"DEBUG - SPAdes assembly - {spades_asm}")
+
+    masurca_asm = discover_masurca(sample_dir, sample_id)
+    if masurca_asm:
+        assemblies["MaSuRCA"] = masurca_asm
+        print(f"DEBUG - MaSuRCA assembly - {masurca_asm}")
+
+    flye_asm = discover_flye(sample_dir, sample_id)
+    if flye_asm:
+        assemblies["Flye"] = flye_asm
+        print(f"DEBUG - Flye assembly - {flye_asm}")
+
+    hifiasm_asm = discover_hifiasm(sample_dir, sample_id)
+    if hifiasm_asm:
+        assemblies["Hifiasm"] = hifiasm_asm
+        print(f"DEBUG - Hifiasm assembly - {hifiasm_asm}")
+
+    print(f"DEBUG - len(assemblies) - {len(assemblies)}")
+    if len(assemblies) == 0:
+        print("ERROR:\tNo valid assemblies to compare")
+        print("HINT:\tI looked for:")
+        print(f"      - {os.path.join(sample_dir, 'spades_assembly')}/(scaffolds.fasta|contigs.fasta|{sample_id}_spades.fasta)")
+        print(f"      - {os.path.join(sample_dir, 'masurca_assembly')}/(CA*/9-terminator/genome.scf.fasta|primary.genome.scf.fasta|{sample_id}_masurca.fasta)")
+        print(f"      - {os.path.join(sample_dir, 'flye_assembly')}/(assembly.fasta|{sample_id}_flye.fasta)")
+        print(f"      - {os.path.join(sample_dir, 'hifiasm_assembly')}/(*.p_ctg.fa|{sample_id}_hifiasm.fasta)")
+        return None
 
     # Check if only reference is provided and skip
     if (pd.isna(illumina_f_raw_reads) and pd.isna(illumina_sra)) and \
