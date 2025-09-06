@@ -3,36 +3,43 @@
 """
 assemble_masurca.py
 
-Updated on Sat Mar 29 2025
-
 This script runs MaSuRCA assembly with Illumina and optional long reads.
+
+Created on Wed Aug 16 2023
+
+Updated on Wed Sept 3 2025
 
 @author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
 """
-import os, sys, shutil, re
+import os, sys, shutil, re, stat
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data
 from qc_assessment import qc_assessment
-
+from pathlib import Path
 
 # --------------------------------------------------------------
 # Locate MaSuRCA CA folder
 # --------------------------------------------------------------
 def find_ca_folder(current_work_dir):
-    """Find the MaSuRCA CA folder in the current working directory.
-
-    Scans subdirectories for a folder starting with 'CA', defaulting to 'CA' if none is found.
-
-    Returns:
-        str: Path to the CA folder.
     """
-    subfolders = [f.path for f in os.scandir(current_work_dir) if f.is_dir()]
-    ca_folder = os.path.join(current_work_dir, "CA")
-    for folder in subfolders:
-        if os.path.basename(folder).startswith("CA"):
-            ca_folder = folder
-            break
-    return ca_folder
+    Return the MaSuRCA CA folder path under current_work_dir.
+    Prefer the most-recent directory starting with 'CA', else '<cwd>/CA'.
+    Ensures current_work_dir exists.
+    """
+    os.makedirs(current_work_dir, exist_ok=True)
+    candidates = []
+    with os.scandir(current_work_dir) as it:
+        for e in it:
+            if e.is_dir() and os.path.basename(e.path).startswith("CA"):
+                try:
+                    mtime = os.path.getmtime(e.path)
+                except OSError:
+                    mtime = 0
+                candidates.append((mtime, e.path))
+    if candidates:
+        candidates.sort(reverse=True)
+        return candidates[0][1]
+    return os.path.join(current_work_dir, "CA")
 
 
 # --------------------------------------------------------------
@@ -92,9 +99,6 @@ def bbmap_stats(input_folder, reads_list, cpu_threads):
         avg_insert, std_dev = parse_bbmerge_output(insert_size_histogram_txt)
     else:
         print("Processing fastq files for bbmap stats...")
-        # bbmerge_path = find_file("bbmerge.sh",
-        #                          folder = os.environ["CONDA_PREFIX"] + "/bin",
-        #                          cpu_threads = cpu_threads)
         bbmerge_path = shutil.which("bbmerge.sh") or shutil.which("bbmerge")
         if not bbmerge_path:
             raise FileNotFoundError("bbmerge not found in PATH")
@@ -146,6 +150,170 @@ def skip_gap_closing_section(assembly_sh_path):
 
 
 # --------------------------------------------------------------
+# NEW: Relax Flye check to allow PATH-based Flye
+# --------------------------------------------------------------
+def ensure_flye_vendor_shim():
+    """
+    Make MaSuRCA happy regardless of where Conda installed Flye by ensuring
+    $CONDA_PREFIX/Flye/bin/flye exists (the path MaSuRCA probes).
+    Creates a symlink to the real flye if possible, else a tiny wrapper script.
+    Safe on Linux and macOS. No effect if already present.
+    """
+    masurca_bin = shutil.which("masurca")
+    flye_bin = shutil.which("flye")
+    if not masurca_bin or not flye_bin:
+        return  # nothing we can do
+
+    # $PREFIX/bin/masurca -> $PREFIX
+    env_prefix = os.path.realpath(os.path.join(os.path.dirname(masurca_bin), ".."))
+    vendor_dir = os.path.join(env_prefix, "Flye", "bin")
+    vendor_exe = os.path.join(vendor_dir, "flye")
+
+    # If already present and executable, we’re done
+    if os.path.exists(vendor_exe) and os.access(vendor_exe, os.X_OK):
+        return
+
+    os.makedirs(vendor_dir, exist_ok=True)
+    try:
+        if os.path.exists(vendor_exe):
+            os.remove(vendor_exe)
+        os.symlink(flye_bin, vendor_exe)
+        made = "symlink"
+    except Exception:
+        # Symlinks may be blocked; fall back to a tiny wrapper
+        with open(vendor_exe, "w") as w:
+            w.write(f'#!/usr/bin/env bash\nexec "{flye_bin}" "$@"\n')
+        os.chmod(vendor_exe, 0o755)
+        made = "wrapper"
+
+    print(f"INFO:\tInstalled Flye vendor {made} for MaSuRCA: {vendor_exe} -> {flye_bin}")
+
+
+def patch_environment_flye(env_sh_path: str) -> str:
+    """
+    Prepend a small block to environment.sh so it prefers a PATH flye if present,
+    provides a python2.7 fallback shim (to python3) if python2.7 is missing,
+    and only fails hard when FLYE_ASSEMBLY=1. Leaves other failure paths intact.
+    """
+    if not os.path.exists(env_sh_path):
+        return env_sh_path
+
+    with open(env_sh_path, "r") as f:
+        original = f.read()
+
+    marker = "# EGAP_FLYE_PATH_PATCH"
+    if marker not in original:
+        # NOTE: environment.sh is sourced from masurca_out_dir, so $(pwd) is that dir.
+        prepend = (
+            f"{marker}\n"
+            # Prefer Flye on PATH if available
+            'if command -v flye >/dev/null 2>&1; then\n'
+            '  export FLYE="$(command -v flye)"\n'
+            'fi\n'
+            # Provide PYTHON2 fallback and a local python2.7 shim if python2.7 is absent
+            'if ! command -v python2.7 >/dev/null 2>&1; then\n'
+            '  if command -v python2 >/dev/null 2>&1; then\n'
+            '    export PYTHON2="$(command -v python2)"\n'
+            '  elif command -v python3 >/dev/null 2>&1; then\n'
+            '    export PYTHON2="$(command -v python3)"\n'
+            '    # Drop a local shim named python2.7 that execs $PYTHON2 and put it first on PATH\n'
+            '    if [ -w "$(pwd)" ]; then\n'
+            '      printf \'#!/usr/bin/env bash\\nexec "%s" "$@"\\n\' "$PYTHON2" > "$(pwd)/python2.7"\n'
+            '      chmod +x "$(pwd)/python2.7"\n'
+            '      export PATH="$(pwd):$PATH"\n'
+            '    fi\n'
+            '  fi\n'
+            'fi\n'
+            '# Only hard-fail for missing Flye when FLYE_ASSEMBLY=1\n'
+            f"{marker}\n"
+        )
+        patched = prepend + original
+    else:
+        patched = original
+
+    # Soften exactly one “flye not found … exit 1” occurrence, if any
+    patched = re.sub(
+        r'(flye not found[^\n]*\n)(\s*exit\s+1)',
+        r'\1if [ "${FLYE_ASSEMBLY:-0}" = "1" ]; then exit 1; fi',
+        patched, count=1, flags=re.IGNORECASE
+    )
+
+    with open(env_sh_path, "w") as f:
+        f.write(patched)
+
+    st = os.stat(env_sh_path)
+    os.chmod(env_sh_path, st.st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return env_sh_path
+
+
+def patch_flye_check(assembly_sh_path: str) -> str:
+    """
+    Make assemble.sh accept Flye from PATH if the bundled Flye is absent,
+    and only hard-fail when FLYE_ASSEMBLY=1.
+
+    This keeps MaSuRCA’s original behavior if its bundled Flye exists,
+    but avoids aborting when Flye is installed elsewhere (e.g., conda env).
+    """
+    with open(assembly_sh_path, "r") as f:
+        txt = f.read()
+
+    # 1) Replace the strict "Flye/bin ... exit 1" block with a PATH fallback.
+    pat_block = re.compile(
+        r'if\s+\[\s*-x\s+"\$MASURCA/../Flye/bin/flye"\s*\]\s*;?\s*then\s*'
+        r'FLYE=.*?\n'
+        r'\s*else\s*\n'
+        r'\s*echo\s+"flye not found[^"\n]*"\s*\n'
+        r'\s*exit\s+1\s*\n'
+        r'\s*fi',
+        re.DOTALL
+    )
+    repl_block = (
+        'if [ -x "$MASURCA/../Flye/bin/flye" ]; then\n'
+        '  FLYE="$MASURCA/../Flye/bin/flye"\n'
+        'elif command -v flye >/dev/null 2>&1; then\n'
+        '  FLYE="$(command -v flye)"\n'
+        'else\n'
+        '  if [ "${FLYE_ASSEMBLY:-0}" = "1" ]; then\n'
+        '    echo "ERROR: flye required (FLYE_ASSEMBLY=1) but not found on PATH"; exit 1\n'
+        '  else\n'
+        '    echo "WARN: flye not found; continuing because FLYE_ASSEMBLY=${FLYE_ASSEMBLY:-0}"\n'
+        '  fi\n'
+        'fi'
+    )
+    new_txt, n = pat_block.subn(repl_block, txt, count=1)
+
+    # 2) If that exact block wasn’t present (version drift), soften any generic "flye not found ... exit 1".
+    if n == 0:
+        pat_exit = re.compile(r'echo\s+"flye not found[^\n]*"\s*\n\s*exit\s+1', re.IGNORECASE)
+        new_txt, _ = pat_exit.subn(
+            'echo "WARN: flye not found; will try PATH and/or continue if FLYE_ASSEMBLY=0"\n'
+            'if [ "${FLYE_ASSEMBLY:-0}" = "1" ]; then exit 1; fi',
+            new_txt, count=1
+        )
+
+    # 3) Ensure FLYE gets resolved from PATH near the top if unset.
+    if "EGAP FLYE PATH PATCH" not in new_txt:
+        shebang_idx = new_txt.find("\n")
+        if shebang_idx != -1:
+            inject = (
+                '\n# --- EGAP FLYE PATH PATCH ---\n'
+                'if [ -z "${FLYE:-}" ]; then\n'
+                '  if [ -x "$MASURCA/../Flye/bin/flye" ]; then\n'
+                '    FLYE="$MASURCA/../Flye/bin/flye"\n'
+                '  elif command -v flye >/dev/null 2>&1; then\n'
+                '    FLYE="$(command -v flye)"\n'
+                '  fi\n'
+                'fi\n'
+                '# --- END EGAP FLYE PATH PATCH ---\n'
+            )
+            new_txt = new_txt[:shebang_idx] + new_txt[shebang_idx:] + inject
+
+    with open(assembly_sh_path, "w") as f:
+        f.write(new_txt)
+    return assembly_sh_path
+
+
+# --------------------------------------------------------------
 # Generate and run MaSuRCA assembly
 # --------------------------------------------------------------
 def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
@@ -163,12 +331,18 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     Returns:
         str or None: Path to the gzipped MaSuRCA assembly FASTA, or None if assembly fails.
-    """    
-    input_df = pd.read_csv(input_csv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    """
+    input_csv_abs = os.path.abspath(input_csv)
+    print(f"DEBUG - input_csv_abs - {input_csv_abs}")
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    output_dir_abs = str(Path(output_dir).resolve())
+    print(f"DEBUG - output_dir_abs - {output_dir_abs}")
+
+    input_df = pd.read_csv(input_csv_abs)
+    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
+    current_series = current_row.iloc[0]
+
+    # CSV fields
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
     illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -180,20 +354,41 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     ref_seq = current_series["REF_SEQ"]
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
-    species_dir = os.path.join(output_dir, species_id)
-    sample_dir = os.path.join(species_dir, sample_id)
 
+    species_dir = Path(output_dir_abs).resolve() / str(species_id)
+    sample_dir = species_dir / str(sample_id)
+    masurca_out_dir = (sample_dir / "masurca_assembly").resolve()
+    masurca_out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Helper: absolute path for str/Path alike
+    def _abs(p):
+        return str(Path(p).resolve()) if p else None
+
+    # Fill in implied paths from SRA when raw paths are empty
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
-        ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
+        ont_raw_reads = _abs(species_dir / "ONT" / f"{ont_sra}.fastq")
     if pd.notna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
-        illumina_f_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_1.fastq")
-        illumina_r_raw_reads = os.path.join(species_dir, "Illumina", f"{illumina_sra}_2.fastq")    
+        illumina_f_raw_reads = _abs(species_dir / "Illumina" / f"{illumina_sra}_1.fastq")
+        illumina_r_raw_reads = _abs(species_dir / "Illumina" / f"{illumina_sra}_2.fastq")
     if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
+        pacbio_raw_reads = _abs(species_dir / "PacBio" / f"{pacbio_sra}.fastq")
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
-        ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
+        ref_seq = _abs(species_dir / "RefSeq" / f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
-    masurca_out_dir = os.path.join(sample_dir, "masurca_assembly")    
+    # Preferred Illumina inputs = your dedup outputs (fall back to raw if missing)
+    dedup_f = _abs(species_dir / "Illumina" / f"{species_id}_illu_forward_dedup.fastq")
+    dedup_r = _abs(species_dir / "Illumina" / f"{species_id}_illu_reverse_dedup.fastq")
+    use_dedup = dedup_f and dedup_r and os.path.exists(dedup_f) and os.path.exists(dedup_r) \
+                and os.path.getsize(dedup_f) > 0 and os.path.getsize(dedup_r) > 0
+
+    # Long-read selection (prefer prefiltered)
+    highest_mean_qual_long_reads = None
+    if pd.notna(ont_raw_reads):
+        candidate = species_dir / "ONT" / f"{species_id}_ONT_highest_mean_qual_long_reads.fastq"
+        highest_mean_qual_long_reads = _abs(candidate if candidate.exists() else ont_raw_reads)
+    elif pd.notna(pacbio_raw_reads):
+        candidate = species_dir / "PacBio" / f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq"
+        highest_mean_qual_long_reads = _abs(candidate if candidate.exists() else pacbio_raw_reads)
 
     print(f"DEBUG - illumina_sra - {illumina_sra}")
     print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
@@ -203,182 +398,143 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - pacbio_sra - {pacbio_sra}")
     print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
     print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
-    print(f"DEBUG - ref_seq - {ref_seq}")   
+    print(f"DEBUG - ref_seq - {ref_seq}")
     print(f"DEBUG - species_id - {species_id}")
     print(f"DEBUG - est_size - {est_size}")
     print(f"DEBUG - masurca_out_dir - {masurca_out_dir}")
-    
-    # Set Illumina deduplicated read paths only if Illumina reads are present
-    illu_dedup_f_reads = None
-    illu_dedup_r_reads = None
-    if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
-        illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
-        illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq")
-
-    print(f"DEBUG - illu_dedup_f_reads - {illu_dedup_f_reads}")
-    print(f"DEBUG - illu_dedup_r_reads - {illu_dedup_r_reads}")
-
-    # Set long-read paths (ONT or PacBio), prefer prefiltered, fallback to raw
-    highest_mean_qual_long_reads = None
-    if pd.notna(ont_raw_reads):
-        print("DEBUG - ONT RAW READS EXIST!")
-        candidate = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")
-        highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else ont_raw_reads
-    elif pd.notna(pacbio_raw_reads):
-        print("DEBUG - PACBIO RAW READS EXIST!")
-        candidate = os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq")
-        highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else pacbio_raw_reads
-
+    print(f"DEBUG - dedup_f - {dedup_f}")
+    print(f"DEBUG - dedup_r - {dedup_r}")
     print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
-    # Check if only reference or no Illumina reads are provided and skip (NEW: Skip PacBio-only runs)
-    if pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
+    # Require Illumina for MaSuRCA
+    have_raw_illumina = (isinstance(illumina_f_raw_reads, str) and os.path.exists(illumina_f_raw_reads)) \
+                        and (isinstance(illumina_r_raw_reads, str) and os.path.exists(illumina_r_raw_reads))
+    if not (use_dedup or have_raw_illumina):
         print("SKIP:\tNo Illumina paired-end reads provided, required for MaSuRCA assembly")
         return None
 
-    os.makedirs(masurca_out_dir, exist_ok=True)
-
-    # Calculate insert size and standard deviation based on read type
-    if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
-        avg_insert, std_dev = bbmap_stats(masurca_out_dir,
-                                         [ont_raw_reads, illumina_f_raw_reads, illumina_r_raw_reads, pacbio_raw_reads], cpu_threads)
-    elif pd.notna(pacbio_raw_reads):
-        avg_insert, std_dev = 15000, 4000
-    elif pd.notna(ont_raw_reads):
-        avg_insert, std_dev = 8000, 3000
+    # Insert size (prefer computing from available Illumina)
+    if use_dedup:
+        avg_insert, std_dev = bbmap_stats(str(masurca_out_dir),
+                                          [ont_raw_reads, dedup_f, dedup_r, pacbio_raw_reads],
+                                          cpu_threads)
+    elif have_raw_illumina:
+        avg_insert, std_dev = bbmap_stats(str(masurca_out_dir),
+                                          [ont_raw_reads, illumina_f_raw_reads, illumina_r_raw_reads, pacbio_raw_reads],
+                                          cpu_threads)
     else:
-        avg_insert, std_dev = 251, 30  # Fallback for edge cases
-        
-    # Set the Jellyfish hash size (adjust if available RAM is lower than 62GB)
-    est_size_numb = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", est_size).group(1)
-    est_size_mult = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", est_size).group(2)
-    multipliers = {'m': 10**6, 'g': 10**9}
-    print(est_size_mult)
-    if est_size_mult in multipliers:
-        jf_size = int(float(est_size_numb) * multipliers[est_size_mult])
+        avg_insert, std_dev = 251, 30
+
+    # Jellyfish hash size
+    m = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", str(est_size))
+    if m:
+        est_size_numb, est_size_mult = m.group(1), m.group(2)
+        multipliers = {'m': 10**6, 'g': 10**9}
+        jf_size = int(float(est_size_numb) * multipliers.get(est_size_mult.lower(), 25_000_000))
     else:
         print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
-        jf_size = 25000000
-    
-    # Ensure work directory output
-    starting_work_dir = os.getcwd()
-    if "work" not in starting_work_dir:
-        current_work_dir = masurca_out_dir
+        jf_size = 25_000_000
+
+    # ---------- Build MaSuRCA config (absolute paths only) ----------
+    config_lines = ["DATA\n"]
+    if use_dedup:
+        print("INFO:\tUsing deduplicated Illumina reads for MaSuRCA PE.")
+        config_lines.append(f"PE= pe {int(avg_insert)} {int(std_dev)} {dedup_f} {dedup_r}\n")
     else:
-        current_work_dir = starting_work_dir
-    os.chdir(current_work_dir)
-    
-    # Define the desired assembly file paths
-    data_output_folder = find_ca_folder(current_work_dir)
-    primary_genome_scf = os.path.join(data_output_folder, "primary.genome.scf.fasta")  # (NEW: Fallback for interrupted assemblies)
-    terminator_genome_scf = os.path.join(data_output_folder, "9-terminator", "genome.scf.fasta")  # (NEW: Check for successful assembly output)
-    egap_masurca_assembly_path = os.path.join(masurca_out_dir, f"{sample_id}_masurca.fasta")
+        print("INFO:\tUsing raw Illumina reads for MaSuRCA PE.")
+        config_lines.append(f"PE= pe {int(avg_insert)} {int(std_dev)} {illumina_f_raw_reads} {illumina_r_raw_reads}\n")
 
-    # Determine if this is a hybrid assembly
-    hybrid_assembly = pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads) and (pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads))
+    if highest_mean_qual_long_reads:
+        if pd.notna(ont_raw_reads):
+            config_lines.append(f"NANOPORE={highest_mean_qual_long_reads}\n")
+        elif pd.notna(pacbio_raw_reads):
+            config_lines.append(f"PACBIO={highest_mean_qual_long_reads}\n")
 
-    # Set assembler-specific flags
-    soap_assembly = 0
-    flye_assembly = 0
-    if hybrid_assembly:
-        use_linking_mates = 0
-        close_gaps = 0
-    else:
-        use_linking_mates = 1
-        close_gaps = 1
+    if pd.notna(ref_seq):
+        config_lines.append(f"REFERENCE={ref_seq}\n")
+    config_lines.append("END\n")
 
-    # Check for existing assembly and save in work directory (NEW: Handle successful and interrupted assemblies)
-    if os.path.exists(terminator_genome_scf):
-        print(f"PASS:\tAssembly found at {terminator_genome_scf}, saving to work directory")
-        shutil.copy(terminator_genome_scf, egap_masurca_assembly_path)
-        egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        return egap_masurca_assembly_path
-    elif os.path.exists(primary_genome_scf):
-        print(f"PASS:\tInterrupted assembly found at {primary_genome_scf}, saving to work directory")
-        shutil.copy(primary_genome_scf, egap_masurca_assembly_path)
-        egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        return egap_masurca_assembly_path
-    elif os.path.exists(egap_masurca_assembly_path):
-        print(f"SKIP:\tMaSuRCA Assembly, scaffolded assembly already exists: {egap_masurca_assembly_path}.")
-        egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
-        return egap_masurca_assembly_path
-    else:        
-        # Build the configuration file (NEW: Restored original configuration logic)
-        config_content = ["DATA\n"]
-        
-        # Add Illumina paired-end reads if available
-        if illu_dedup_f_reads and illu_dedup_r_reads:
-            config_content.append(f"PE= pe {int(avg_insert)} {int(std_dev)} "
-                                  f"{illu_dedup_f_reads} {illu_dedup_r_reads}\n")
+    config_lines += [
+        "PARAMETERS\n",
+        "GRAPH_KMER_SIZE=auto\n",
+        f"USE_LINKING_MATES={0 if (pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads)) else 1}\n",
+        f"CLOSE_GAPS={0 if (pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads)) else 1}\n",
+        "MEGA_READS_ONE_PASS=0\n",
+        "LIMIT_JUMP_COVERAGE=300\n",
+        "CA_PARAMETERS=cgwErrorRate=0.15\n",
+        f"NUM_THREADS={cpu_threads}\n",
+        f"JF_SIZE={jf_size}\n",
+        "SOAP_ASSEMBLY=0\n",
+        "FLYE_ASSEMBLY=0\n",
+        "END\n",
+    ]
 
-        # Add long-read data (NEW: Use only determined long-read file)
-        if highest_mean_qual_long_reads:
-            if pd.notna(ont_raw_reads):
-                config_content.append(f"NANOPORE={highest_mean_qual_long_reads}\n")
-            elif pd.notna(pacbio_raw_reads):
-                config_content.append(f"PACBIO={highest_mean_qual_long_reads}\n")
+    config_path = masurca_out_dir / "masurca_config_file.txt"
+    with open(config_path, "w") as fh:
+        fh.writelines(config_lines)
+    print(f"DEBUG: Wrote config to {config_path}")
 
-        # Add reference if available (NEW: Use unzipped ref_seq path without transformations)
-        if pd.notna(ref_seq):
-            config_content.append(f"REFERENCE={ref_seq}\n")
-        config_content.append("END\n")
-
-        # Add PARAMETERS section
-        config_content.append("PARAMETERS\n")
-        config_content.append("GRAPH_KMER_SIZE=auto\n")
-        config_content.append(f"USE_LINKING_MATES={use_linking_mates}\n")
-        config_content.append(f"CLOSE_GAPS={close_gaps}\n")
-        config_content.append("MEGA_READS_ONE_PASS=0\n")
-        config_content.append("LIMIT_JUMP_COVERAGE=300\n")
-        config_content.append("CA_PARAMETERS=cgwErrorRate=0.15\n")
-        config_content.append(f"NUM_THREADS={cpu_threads}\n")
-        config_content.append(f"JF_SIZE={jf_size}\n")
-        config_content.append(f"SOAP_ASSEMBLY={soap_assembly}\n")
-        config_content.append(f"FLYE_ASSEMBLY={flye_assembly}\n")
-        config_content.append("END\n")
-
-        # Debug: Log configuration file contents
-        print(f"DEBUG: Config content:\n{''.join(config_content)}")
-
-        # Write the configuration file
-        config_path = os.path.join(current_work_dir, "masurca_config_file.txt")
-        with open(config_path, "w") as file:
-            for entry in config_content:
-                file.write(entry)
-
-        # Run the MaSuRCA configuration command
-        masurca_config_cmd = ["masurca", "masurca_config_file.txt"]
-        _ = run_subprocess_cmd(masurca_config_cmd, False)
-
-        # Modify the assemble.sh to skip gap closing
-        assemble_sh_path = os.path.join(current_work_dir, "assemble.sh")
-        modified_assemble_sh_path = skip_gap_closing_section(assemble_sh_path)
-
-        # Run the modified assembly script
-        masurca_assemble_cmd = ["bash", modified_assemble_sh_path]
-        _ = run_subprocess_cmd(masurca_assemble_cmd, False)
-
-        # Refresh assembly file paths post run
-        data_output_folder = find_ca_folder(current_work_dir)
-        primary_genome_scf = os.path.join(data_output_folder, "primary.genome.scf.fasta")  # (NEW: Fallback for interrupted assemblies)
-        terminator_genome_scf = os.path.join(data_output_folder, "9-terminator", "genome.scf.fasta")  # (NEW: Check for successful assembly output)
-
-        # Handle assembly output (NEW: Check for successful or interrupted assembly)
-        if os.path.exists(terminator_genome_scf):
-            print(f"NOTE:\tSaving successful assembly to {egap_masurca_assembly_path}")
-            shutil.copy(terminator_genome_scf, egap_masurca_assembly_path)
-        elif os.path.exists(primary_genome_scf):
-            print(f"NOTE:\tSaving interrupted assembly to {egap_masurca_assembly_path}")
-            shutil.copy(primary_genome_scf, egap_masurca_assembly_path)
-        else:
-            print(f"ERROR:\tNo assembly file found at {terminator_genome_scf} or {primary_genome_scf}")
+    # Always run MaSuRCA from its output dir (run_subprocess_cmd has no cwd)
+    prev_cwd = os.getcwd()
+    os.chdir(str(masurca_out_dir))
+    try:
+        rc = run_subprocess_cmd(["masurca", "masurca_config_file.txt"], False)
+        if rc != 0:
+            print("ERROR:\tmasurca failed to generate assemble.sh")
             return None
 
-    print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path}")
-    egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment("masurca", input_csv, sample_id, output_dir, cpu_threads, ram_gb)
+        assemble_sh_path = masurca_out_dir / "assemble.sh"
+        if not assemble_sh_path.exists():
+            print("ERROR:\tassemble.sh not found after masurca step")
+            return None
+        
+        # Ensure MaSuRCA sees Flye regardless of install location
+        ensure_flye_vendor_shim()
+        
+        # Patch environment.sh to prefer PATH Flye and avoid fatal exit when FLYE_ASSEMBLY=0
+        env_sh_path = masurca_out_dir / "environment.sh"
+        patch_environment_flye(str(env_sh_path))
+        
+        # Patch assemble.sh to skip gap-closing (your existing helper)
+        modified_assemble = skip_gap_closing_section(str(assemble_sh_path))
+        
+        # (Optional) print a one-liner sanity check
+        real_flye = shutil.which("flye")
+        print(f"DEBUG - flye on PATH - {real_flye}")
+        
+        # Run
+        rc = run_subprocess_cmd(["bash", os.path.basename(modified_assemble)], False)
+        
+        # Try to salvage even if assemble.sh returned non-zero (MaSuRCA sometimes fails late
+        # while the CA output is already produced, e.g. after synteny step).
+        ca_dir = Path(find_ca_folder(str(masurca_out_dir))).resolve()
+        primary_genome_scf = ca_dir / "primary.genome.scf.fasta"
+        terminator_genome_scf = ca_dir / "9-terminator" / "genome.scf.fasta"
+        
+        if rc != 0:
+            if terminator_genome_scf.exists() or primary_genome_scf.exists():
+                print("WARN:\tassemble.sh exited non-zero, but CA output exists; continuing.")
+            else:
+                print("ERROR:\tAssembly run failed.")
+                return None
 
-    # Return paths in work directory (NEW: Rely on publishDir for final output)
-    return egap_masurca_assembly_path
+        egap_masurca_assembly_path = masurca_out_dir / f"{sample_id}_masurca.fasta"
+        if terminator_genome_scf.exists():
+            shutil.copy(str(terminator_genome_scf), str(egap_masurca_assembly_path))
+        elif primary_genome_scf.exists():
+            shutil.copy(str(primary_genome_scf), str(egap_masurca_assembly_path))
+        else:
+            print("ERROR:\tNo assembly file found in CA output.")
+            return None
+
+        print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path}")
+        os.chdir(prev_cwd)
+        egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment(
+            "masurca", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+        )
+        return str(egap_masurca_assembly_path)
+    finally:
+        os.chdir(prev_cwd)
 
 
 if __name__ == "__main__":
