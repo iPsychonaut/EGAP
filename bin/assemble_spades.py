@@ -28,10 +28,11 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     Args are identical to your original docstring.
     """
-    # NEW: keep CSV absolute so later code never loses it
-    input_csv_abs = os.path.abspath(input_csv)
+    # Keep absolute paths so later code never loses them
+    input_csv_abs  = os.path.abspath(input_csv)
+    output_dir_abs = os.path.abspath(output_dir)
 
-    input_df = pd.read_csv(input_csv)
+    input_df = pd.read_csv(input_csv_abs)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
 
@@ -47,7 +48,8 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
 
-    species_dir = os.path.join(output_dir, species_id)
+    species_dir = os.path.join(output_dir_abs, species_id)
+
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
         ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
     if pd.notna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
@@ -80,18 +82,33 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - illu_dedup_f_reads - {illu_dedup_f_reads}")
     print(f"DEBUG - illu_dedup_r_reads - {illu_dedup_r_reads}")
 
-    # Set long-read paths (ONT or PacBio), prefer prefiltered, fallback to raw
+    # Prepare output locations early so we can fast-skip (and still QC) even if reads are missing
+    sample_dir = os.path.join(species_dir, sample_id)
+    spades_out_dir = os.path.join(sample_dir, "spades_assembly")
+    os.makedirs(spades_out_dir, exist_ok=True)
+    egap_spades_assembly_path = os.path.join(spades_out_dir, f"{sample_id}_spades.fasta")
+
+    # ---------- FAST SKIP if final output exists (re-run QC) ----------
+    if os.path.exists(egap_spades_assembly_path) and os.path.getsize(egap_spades_assembly_path) > 0:
+        print(f"SKIP:\tSPAdes assembly already present: {egap_spades_assembly_path}")
+        egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
+            "spades", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+        )
+        return egap_spades_assembly_path
+
+    # Set long-read paths (ONT only for SPAdes), prefer prefiltered, fallback to raw
     highest_mean_qual_long_reads = None
     if pd.notna(ont_raw_reads):
         print("DEBUG - ONT RAW READS EXIST!")
         candidate = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")
         highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else ont_raw_reads
     elif pd.notna(pacbio_raw_reads):
-        print("SKIP:\tSPAdes cannot be used to assembly PacBio reads...")
+        print("SKIP:\tSPAdes cannot be used to assemble PacBio reads...")
         return None
 
     print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
+    # If no usable reads at all, bail
     if pd.isna(ont_raw_reads) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads) and pd.isna(pacbio_raw_reads):
         print("SKIP:\tNo reads available for processing")
         return None
@@ -112,7 +129,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     illumina_f_raw_reads = _abs_safe(illumina_f_raw_reads)
     illumina_r_raw_reads = _abs_safe(illumina_r_raw_reads)
 
-    # NEW: only use dedup FASTQs if they truly exist and are non-empty; otherwise fall back to raw
+    # Only use dedup FASTQs if they truly exist and are non-empty; otherwise fall back to raw
     use_dedup = all([
         illu_dedup_f_reads, illu_dedup_r_reads,
         os.path.exists(illu_dedup_f_reads) if illu_dedup_f_reads else False,
@@ -125,17 +142,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         illu_dedup_f_reads = illumina_f_raw_reads
         illu_dedup_r_reads = illumina_r_raw_reads
 
-    sample_dir = os.path.join(species_dir, sample_id)
-    spades_out_dir = _abs_safe(os.path.join(sample_dir, "spades_assembly"))  # final, single level
-    os.makedirs(spades_out_dir, exist_ok=True)
-    egap_spades_assembly_path = os.path.join(spades_out_dir, f"{sample_id}_spades.fasta")
-
     print(f"DEBUG - spades_out_dir - {spades_out_dir}")
-
-    if os.path.exists(egap_spades_assembly_path):
-        print(f"SKIP:\tSPAdes Assembly, scaffolded assembly already exists: {egap_spades_assembly_path}.")
-        egap_spades_assembly_path, spades_stats_list, _ = qc_assessment("spades", input_csv_abs, sample_id, output_dir, cpu_threads, ram_gb)
-        return egap_spades_assembly_path
 
     # Establish command (no chdir; output is spades_out_dir)
     kmer_list = ["21", "33", "55", "77", "99"]
@@ -166,18 +173,24 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         return None
 
     shutil.move(spades_path, egap_spades_assembly_path)
-    egap_spades_assembly_path, spades_stats_list, _ = qc_assessment("spades", input_csv_abs, sample_id, output_dir, cpu_threads, ram_gb)
+
+    # QC using absolute paths
+    egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
+        "spades", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+    )
     return egap_spades_assembly_path
 
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
         print("Usage: python3 assemble_spades.py <sample_id> <input_csv> "
-            "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+              "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
-        
-    egap_spades_assembly_path = assemble_spades(sys.argv[1],       # sample_id
-                                                sys.argv[2],       # input_csv
-                                                sys.argv[3],       # output_dir
-                                                str(sys.argv[4]),  # cpu_threads
-                                                str(sys.argv[5]))  # ram_gb
+
+    egap_spades_assembly_path = assemble_spades(
+        sys.argv[1],       # sample_id
+        sys.argv[2],       # input_csv
+        sys.argv[3],       # output_dir
+        str(sys.argv[4]),  # cpu_threads
+        str(sys.argv[5])   # ram_gb
+    )
