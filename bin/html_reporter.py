@@ -48,6 +48,97 @@ RAW_URLS = {
     "EGAP_busco.html"  : "https://raw.githubusercontent.com/iPsychonaut/EGAP/main/resources/templates/EGAP_busco.html",
 }
 
+def _parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
+    """
+    Parse a Compleasm/BUSCO 'full_table.tsv' and normalize columns to a common schema:
+      Required:  Busco id | Status | Sequence | Gene Start | Gene End | Strand | Score | Length
+      Optional:  Identity | Fraction | Frameshift events | Best gene | Codons
+    Returns an ordered DataFrame with required columns first, then any of the optional ones if present.
+    """
+    if not os.path.exists(tsv_path):
+        return pd.DataFrame()
+
+    # Read as strings; keep_default_na=False to avoid NaN text replacement issues downstream
+    df = pd.read_csv(tsv_path, sep="\t", comment="#", dtype=str, keep_default_na=False)
+
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    # Build case/space-insensitive map: lower -> original
+    lower_cols = {c.lower().strip(): c for c in df.columns}
+
+    # Canonical names and their common aliases (lowercased)
+    alias_map = {
+        "busco id":          ["busco id", "busco_id", "busco"],
+        "status":            ["status"],
+        "sequence":          ["sequence", "seq", "contig", "scaffold"],
+        "gene start":        ["gene start", "start", "gene_start"],
+        "gene end":          ["gene end", "end", "gene_end"],
+        "strand":            ["strand"],
+        "score":             ["score", "bitscore", "bit score"],
+        "length":            ["length", "len"],
+
+        # Compleasm extras
+        "identity":          ["identity", "ident"],
+        "fraction":          ["fraction", "frac", "coverage", "cov"],
+        "frameshift events": ["frameshift events", "frameshifts", "frameshift_events"],
+        "best gene":         ["best gene", "best_gene", "best hit", "best_hit"],
+        "codons":            ["codons"]
+    }
+
+    # Build rename map from whatever we find -> canonical
+    rename = {}
+    for canonical, aliases in alias_map.items():
+        for a in aliases:
+            if a in lower_cols:
+                rename[lower_cols[a]] = canonical.title()  # e.g., "busco id" -> "Busco Id"
+                break
+
+    # Apply rename
+    df = df.rename(columns=rename).copy()
+
+    # Canonical required columns (exact wanted casing)
+    required = ["Busco id","Status","Sequence","Gene Start","Gene End","Strand","Score","Length"]
+    for col in required:
+        if col not in df.columns:
+            df[col] = "-"
+
+    # Optional extras (only include if present after rename)
+    optional = ["Identity","Fraction","Frameshift Events","Best Gene","Codons"]
+    ordered_cols = required + [c for c in optional if c in df.columns]
+
+    # Coerce numeric-ish fields that should remain strings but trimmed
+    for c in ordered_cols:
+        if c in df.columns:
+            df[c] = df[c].astype(str).str.strip()
+
+    return df[ordered_cols]
+
+def _load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.DataFrame:
+    """
+    Locate and parse BUSCO/Compleasm 'full_table' with robust column normalization.
+
+    Search order (first found wins):
+      1) run_{db}_odb12/full_table.tsv                   (BUSCO)
+      2) {db}_odb12/full_table_busco_format.tsv          (Compleasm BUSCO-format)
+      3) {db}_odb12/full_table.tsv                       (Compleasm native)
+    """
+    candidates = [
+        os.path.join(busco_dir, f"run_{busco_db}_odb12", "full_table.tsv"),
+        os.path.join(busco_dir, f"{busco_db}_odb12", "full_table_busco_format.tsv"),
+        os.path.join(busco_dir, f"{busco_db}_odb12", "full_table.tsv"),
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            try:
+                # Always use the normalized Compleasm/BUSCO parser (handles both)
+                return _parse_compleasm_full_table(p)
+            except Exception as e:
+                print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {p}: {e}")
+                return pd.DataFrame()
+    return pd.DataFrame()
+
+
 def _abs(p):
     return os.path.abspath(p) if isinstance(p, str) else p
 
