@@ -7,7 +7,9 @@ This module processes genomic assembly data by applying polishing steps using Ra
 for long reads (ONT or PacBio) and Pilon for Illumina reads. It handles input validation,
 subprocess execution, and file management for assembly refinement.
 
-Updated on Sun May 11 2025
+Created on Wed Aug 16 2023
+
+Updated on Wed Sept 3 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
@@ -15,6 +17,7 @@ import os
 import sys
 import shutil
 import pandas as pd
+from pathlib import Path  # <<< NEW
 from utilities import run_subprocess_cmd, get_current_row_data
 
 
@@ -257,7 +260,12 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
 
-    species_dir = os.path.join(output_dir, species_id)
+    # --- NEW: normalize base paths to absolute ---
+    output_dir_abs = str(Path(output_dir).resolve())
+    print(f"DEBUG - output_dir_abs      - {output_dir_abs}")
+
+    species_dir = os.path.join(output_dir_abs, species_id)
+    sample_dir = os.path.join(species_dir, sample_id)
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
         ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
@@ -289,12 +297,12 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print("SKIP:\tNo valid reads provided, required for assembly comparison.")
         return None
 
-    # Create output directory for polishing
-    species_dir = os.path.join(output_dir, species_id)
-    sample_dir = os.path.join(species_dir, sample_id)
+    # Create output directory for polishing (absolute)
+    os.makedirs(sample_dir, exist_ok=True)
     polish_out_dir = os.path.join(sample_dir, "polished_assembly")
     os.makedirs(polish_out_dir, exist_ok=True)
 
+    # Absolute best assembly path
     best_assembly = os.path.join(sample_dir, f"{species_id}_best_assembly.fasta")
     print(f"DEBUG - best_assembly - {best_assembly}")
     if not os.path.exists(best_assembly):
@@ -324,18 +332,14 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     print(f"DEBUG - highest_mean_qual_long_reads - {highest_mean_qual_long_reads}")
 
-    # Ensure work directory output
-    starting_work_dir = os.getcwd()
-    if "work" not in starting_work_dir:
-        current_work_dir = polish_out_dir
-    else:
-        current_work_dir = starting_work_dir
-    os.chdir(current_work_dir)
+    # Ensure we work inside the absolute polish_out_dir (avoid double-nesting)
+    os.chdir(polish_out_dir)
+    print(f"DEBUG - CWD (polish_out_dir) - {os.getcwd()}")
 
     # -------------------------------------------------------------------------
     # Step 1: Two rounds of Racon polishing if ONT or PacBio reads exist
     # -------------------------------------------------------------------------
-    racon_work_dir = os.path.join(current_work_dir, "racon_polish")
+    racon_work_dir = os.path.join(polish_out_dir, "racon_polish")
     os.makedirs(racon_work_dir, exist_ok=True)
     racon_final = os.path.join(polish_out_dir, f"{sample_id}_racon.fasta")
 
