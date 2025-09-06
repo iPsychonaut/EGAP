@@ -355,6 +355,12 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     sample_dir = os.path.join(species_dir, sample_id)
     curation_out_dir = os.path.join(sample_dir, "curated_assembly")
 
+    # ---------- FAST SKIP if final curated output exists ----------
+    final_curated_assembly = os.path.join(sample_dir, f"{sample_id}_final_curated.fasta")
+    if os.path.exists(final_curated_assembly) and os.path.getsize(final_curated_assembly) > 0:
+        print(f"SKIP:\tFinal curated assembly already present: {final_curated_assembly}")
+        return final_curated_assembly
+
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
         ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
     if pd.notna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
