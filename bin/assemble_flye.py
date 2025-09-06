@@ -109,19 +109,20 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     os.makedirs(flye_out_dir, exist_ok=True)
     egap_flye_assembly_path = os.path.join(flye_out_dir, f"{sample_id}_flye.fasta")
 
+    # ---------- FAST SKIP if final output exists (re-run QC) ----------
+    if os.path.exists(egap_flye_assembly_path) and os.path.getsize(egap_flye_assembly_path) > 0:
+        print(f"SKIP:\tFinal Flye assembly already present: {egap_flye_assembly_path}")
+        egap_flye_assembly_path, flye_stats_list, _ = qc_assessment(
+            "flye", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+        )
+        return egap_flye_assembly_path
+
     # Choose working directory safely
     starting_work_dir = os.getcwd()
     current_work_dir = flye_out_dir if "work" not in starting_work_dir else starting_work_dir
     os.chdir(current_work_dir)
 
     flye_path = os.path.join(current_work_dir, "assembly.fasta")
-
-    # If final exists, QC and return
-    if os.path.exists(egap_flye_assembly_path):
-        egap_flye_assembly_path, flye_stats_list, _ = qc_assessment("flye", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb)
-        print(f"SKIP:\tFinal Flye Assembly already exists: {egap_flye_assembly_path}.")
-        os.chdir(starting_work_dir)
-        return egap_flye_assembly_path
 
     # Build Flye command (same logic as original)
     if isinstance(ont_raw_reads, str) and os.path.exists(ont_raw_reads):
@@ -146,7 +147,9 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         shutil.move(flye_path, egap_flye_assembly_path)
 
     # QC using absolute paths
-    egap_flye_assembly_path, flye_stats_list, _ = qc_assessment("flye", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb)
+    egap_flye_assembly_path, flye_stats_list, _ = qc_assessment(
+        "flye", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+    )
 
     os.chdir(starting_work_dir)
     return egap_flye_assembly_path
