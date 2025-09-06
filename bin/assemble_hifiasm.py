@@ -11,7 +11,6 @@ Run hifiasm on PacBio HiFi reads (FASTQ/FASTA, gz ok). CWD-safe and resilient:
 - GFA->FASTA via gfatools (fallback to AWK if needed).
 
 Created on Wed Aug 16 2023
-
 Updated on Wed Sept 3 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
@@ -90,6 +89,14 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     prefix_base = os.path.join(hifiasm_out_dir, sample_id)
     egap_hifiasm_assembly_path = os.path.join(hifiasm_out_dir, f"{sample_id}_hifiasm.fasta")
 
+    # ---------- FAST SKIP if final output exists (re-run QC) ----------
+    if os.path.exists(egap_hifiasm_assembly_path) and os.path.getsize(egap_hifiasm_assembly_path) > 0:
+        print(f"SKIP:\tHiFi assembly already present: {egap_hifiasm_assembly_path}")
+        egap_hifiasm_assembly_path, hifiasm_stats_list, _ = qc_assessment(
+            "hifiasm", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+        )
+        return egap_hifiasm_assembly_path
+
     # Common hifiasm GFA names across versions
     gfa_candidates = [
         f"{prefix_base}.bp.p_ctg.gfa",
@@ -103,9 +110,10 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         # Work in the output dir (safer for hifiasm temp files)
         os.chdir(hifiasm_out_dir)
 
-        # If a GFA already exists, skip running hifiasm
-        if any(os.path.exists(g) for g in gfa_candidates):
-            print("SKIP:\tHiFi Assembly already exists.")
+        # If a GFA already exists, skip running hifiasm (we'll still do conversion + QC below)
+        already_has_gfa = any(os.path.exists(g) for g in gfa_candidates)
+        if already_has_gfa:
+            print("SKIP:\tHiFi GFA already present; skipping hifiasm run.")
         else:
             # hifiasm command
             hifiasm_cmd = [
@@ -126,24 +134,25 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             for g in gfa_candidates: print(f"DEBUG: missing -> {g}")
             return None
 
-        # Convert GFA -> FASTA
-        if shutil.which("gfatools"):
-            gfa_cmd = f'gfatools gfa2fa "{gfa_path}" > "{egap_hifiasm_assembly_path}"'
-            print(f"CMD:\t{gfa_cmd}")
-            rc = run_subprocess_cmd(gfa_cmd, shell_check=True)
-            if rc != 0:
-                print("WARN:\tgfatools failed; attempting AWK fallback")
+        # Convert GFA -> FASTA (only if final FASTA not already present—handled by fast-skip earlier)
         if not os.path.exists(egap_hifiasm_assembly_path):
-            # AWK fallback: write segments (S) as FASTA
-            awk_cmd = (
-                f"awk 'BEGIN{{OFS=\"\\t\"}} /^S\\t/ "
-                f"{{print \">\"$2\"\\n\"$3}}' '{gfa_path}' > '{egap_hifiasm_assembly_path}'"
-            )
-            print(f"CMD:\t{awk_cmd}")
-            rc = run_subprocess_cmd(awk_cmd, shell_check=True)
-            if rc != 0 or (not os.path.exists(egap_hifiasm_assembly_path)):
-                print("ERROR:\tFailed to convert GFA to FASTA.")
-                return None
+            if shutil.which("gfatools"):
+                gfa_cmd = f'gfatools gfa2fa "{gfa_path}" > "{egap_hifiasm_assembly_path}"'
+                print(f"CMD:\t{gfa_cmd}")
+                rc = run_subprocess_cmd(gfa_cmd, shell_check=True)
+                if rc != 0:
+                    print("WARN:\tgfatools failed; attempting AWK fallback")
+            if not os.path.exists(egap_hifiasm_assembly_path):
+                # AWK fallback: write segments (S) as FASTA
+                awk_cmd = (
+                    f"awk 'BEGIN{{OFS=\"\\t\"}} /^S\\t/ "
+                    f"{{print \">\"$2\"\\n\"$3}}' '{gfa_path}' > '{egap_hifiasm_assembly_path}'"
+                )
+                print(f"CMD:\t{awk_cmd}")
+                rc = run_subprocess_cmd(awk_cmd, shell_check=True)
+                if rc != 0 or (not os.path.exists(egap_hifiasm_assembly_path)):
+                    print("ERROR:\tFailed to convert GFA to FASTA.")
+                    return None
 
         # QC (absolute paths so CWD is irrelevant)
         egap_hifiasm_assembly_path, hifiasm_stats_list, _ = qc_assessment(
