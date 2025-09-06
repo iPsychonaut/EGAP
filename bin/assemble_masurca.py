@@ -206,17 +206,14 @@ def patch_environment_flye(env_sh_path: str) -> str:
         # NOTE: environment.sh is sourced from masurca_out_dir, so $(pwd) is that dir.
         prepend = (
             f"{marker}\n"
-            # Prefer Flye on PATH if available
             'if command -v flye >/dev/null 2>&1; then\n'
             '  export FLYE="$(command -v flye)"\n'
             'fi\n'
-            # Provide PYTHON2 fallback and a local python2.7 shim if python2.7 is absent
             'if ! command -v python2.7 >/dev/null 2>&1; then\n'
             '  if command -v python2 >/dev/null 2>&1; then\n'
             '    export PYTHON2="$(command -v python2)"\n'
             '  elif command -v python3 >/dev/null 2>&1; then\n'
             '    export PYTHON2="$(command -v python3)"\n'
-            '    # Drop a local shim named python2.7 that execs $PYTHON2 and put it first on PATH\n'
             '    if [ -w "$(pwd)" ]; then\n'
             '      printf \'#!/usr/bin/env bash\\nexec "%s" "$@"\\n\' "$PYTHON2" > "$(pwd)/python2.7"\n'
             '      chmod +x "$(pwd)/python2.7"\n'
@@ -231,7 +228,6 @@ def patch_environment_flye(env_sh_path: str) -> str:
     else:
         patched = original
 
-    # Soften exactly one “flye not found … exit 1” occurrence, if any
     patched = re.sub(
         r'(flye not found[^\n]*\n)(\s*exit\s+1)',
         r'\1if [ "${FLYE_ASSEMBLY:-0}" = "1" ]; then exit 1; fi',
@@ -250,14 +246,10 @@ def patch_flye_check(assembly_sh_path: str) -> str:
     """
     Make assemble.sh accept Flye from PATH if the bundled Flye is absent,
     and only hard-fail when FLYE_ASSEMBLY=1.
-
-    This keeps MaSuRCA’s original behavior if its bundled Flye exists,
-    but avoids aborting when Flye is installed elsewhere (e.g., conda env).
     """
     with open(assembly_sh_path, "r") as f:
         txt = f.read()
 
-    # 1) Replace the strict "Flye/bin ... exit 1" block with a PATH fallback.
     pat_block = re.compile(
         r'if\s+\[\s*-x\s+"\$MASURCA/../Flye/bin/flye"\s*\]\s*;?\s*then\s*'
         r'FLYE=.*?\n'
@@ -282,7 +274,6 @@ def patch_flye_check(assembly_sh_path: str) -> str:
     )
     new_txt, n = pat_block.subn(repl_block, txt, count=1)
 
-    # 2) If that exact block wasn’t present (version drift), soften any generic "flye not found ... exit 1".
     if n == 0:
         pat_exit = re.compile(r'echo\s+"flye not found[^\n]*"\s*\n\s*exit\s+1', re.IGNORECASE)
         new_txt, _ = pat_exit.subn(
@@ -291,7 +282,6 @@ def patch_flye_check(assembly_sh_path: str) -> str:
             new_txt, count=1
         )
 
-    # 3) Ensure FLYE gets resolved from PATH near the top if unset.
     if "EGAP FLYE PATH PATCH" not in new_txt:
         shebang_idx = new_txt.find("\n")
         if shebang_idx != -1:
@@ -330,7 +320,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         ram_gb (int): Available RAM in GB.
 
     Returns:
-        str or None: Path to the gzipped MaSuRCA assembly FASTA, or None if assembly fails.
+        str or None: Path to the MaSuRCA assembly FASTA, or None if assembly fails.
     """
     input_csv_abs = os.path.abspath(input_csv)
     print(f"DEBUG - input_csv_abs - {input_csv_abs}")
@@ -359,6 +349,16 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     sample_dir = species_dir / str(sample_id)
     masurca_out_dir = (sample_dir / "masurca_assembly").resolve()
     masurca_out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ---------- FAST SKIP if final output exists (re-run QC) ----------
+    expected_final = masurca_out_dir / f"{sample_id}_masurca.fasta"
+    if expected_final.exists() and expected_final.stat().st_size > 0:
+        print(f"SKIP:\tFinal MaSuRCA assembly already present: {expected_final}")
+        # Re-run QC on the existing assembly/output structure
+        egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment(
+            "masurca", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+        )
+        return str(egap_masurca_assembly_path)
 
     # Helper: absolute path for str/Path alike
     def _abs(p):
@@ -505,8 +505,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         # Run
         rc = run_subprocess_cmd(["bash", os.path.basename(modified_assemble)], False)
         
-        # Try to salvage even if assemble.sh returned non-zero (MaSuRCA sometimes fails late
-        # while the CA output is already produced, e.g. after synteny step).
+        # Try to salvage even if assemble.sh returned non-zero
         ca_dir = Path(find_ca_folder(str(masurca_out_dir))).resolve()
         primary_genome_scf = ca_dir / "primary.genome.scf.fasta"
         terminator_genome_scf = ca_dir / "9-terminator" / "genome.scf.fasta"
