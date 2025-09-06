@@ -7,6 +7,10 @@ Generates metadata for genome assemblies and Sequence Read Archive (SRA) submiss
 Processes sample data from a CSV to create TSV files with assembly metadata and SRA metadata,
 and retrieves iNaturalist observation data with reverse geocoding for location details.
 
+Created on Wed Aug 16 2023
+
+Updated on Wed Sept 3 2025
+
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 
@@ -100,7 +104,7 @@ def get_inat_obs(search_id):
 # --------------------------------------------------------------
 # Generate assembly metadata TSV
 # --------------------------------------------------------------
-def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir):
+def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, cpu_threads):
     """Generate a TSV file with metadata for a genome assembly.
 
     Creates a TSV file containing assembly metadata (e.g., date, method, coverage)
@@ -150,7 +154,7 @@ def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir):
         all_reads.append(os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq"))
     if pd.notna(pacbio_sra) or pd.notna(pacbio_raw_reads):
         all_reads.append(os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq"))    
-    genome_coverage = str(calculate_genome_coverage(all_reads, assembly_path)) + "x" 
+    genome_coverage = str(calculate_genome_coverage(all_reads, assembly_path, cpu_threads)) + "x" 
 
     print(f"DEBUG - genome_coverage - {genome_coverage}")
     
@@ -369,7 +373,7 @@ def process_metadata(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print("PASS:\tSuccessfully generated NCBI SRA Metadata TSV: {sra_output_path}.")
     
     # Generate assembly metadata TSV
-    assembly_metadata_path = gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir)
+    assembly_metadata_path = gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, cpu_threads)
 
     print("PASS:\tSuccessfully generated NCBI Assembly Metadata TSV: {assembly_metadata_path}.")
         
