@@ -5,12 +5,89 @@ utilities.py
 
 Module containing regularly used commands in various other EGAP scripts.
 
-Created on Tue Apr  8 22:13:08 2025
+Created on Wed Aug 16 2023
+
+Updated on Wed Sept 3 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, subprocess, datetime, platform, shutil, math, hashlib
+import os, subprocess, datetime, platform, shutil, math, hashlib, tempfile
 import pandas as pd
+from Bio import SeqIO
+from pathlib import Path
+from typing import List
+
+
+# --------------------------------------------------------------
+# Catches and unzips compressed files for FASTQ
+# --------------------------------------------------------------
+def _sum_fastq_bases_with_pigz_safe(fq_path: Path, cpu_threads: int) -> int:
+    """
+    Safely sum read lengths from a FASTQ that may be .gz by:
+    - copying the .gz to a temp dir,
+    - pigz_decompress() on the *copy*,
+    - parsing the decompressed temp file,
+    - removing the temp dir.
+    """
+    total = 0
+    if str(fq_path).endswith(".gz"):
+        with tempfile.TemporaryDirectory(prefix="egap_pigz_") as tdir:
+            tmp_gz = Path(tdir) / fq_path.name
+            shutil.copy2(str(fq_path), str(tmp_gz))                 # safe copy
+            tmp_fastq = pigz_decompress(str(tmp_gz), cpu_threads)   # your function returns str path
+            with open(tmp_fastq, "rt") as handle:
+                for rec in SeqIO.parse(handle, "fastq"):
+                    total += len(rec.seq)
+            # temp dir cleanup happens automatically
+    else:
+        with open(fq_path, "rt") as handle:
+            for rec in SeqIO.parse(handle, "fastq"):
+                total += len(rec.seq)
+    return total
+
+
+# --------------------------------------------------------------
+# Catches and unzips compressed files for FASTA
+# --------------------------------------------------------------
+def _sum_fasta_bases_with_pigz_safe(fa_path: Path, cpu_threads: int) -> int:
+    """
+    Same safety pattern for FASTA/FA files that may be .gz.
+    """
+    total = 0
+    if str(fa_path).endswith(".gz"):
+        with tempfile.TemporaryDirectory(prefix="egap_pigz_") as tdir:
+            tmp_gz = Path(tdir) / fa_path.name
+            shutil.copy2(str(fa_path), str(tmp_gz))
+            tmp_fa = pigz_decompress(str(tmp_gz), cpu_threads)      # returns str
+            with open(tmp_fa, "rt") as handle:
+                for rec in SeqIO.parse(handle, "fasta"):
+                    total += len(rec.seq)
+    else:
+        with open(fa_path, "rt") as handle:
+            for rec in SeqIO.parse(handle, "fasta"):
+                total += len(rec.seq)
+    return total
+
+
+# --------------------------------------------------------------
+# Calculates Coverage for a given Genome
+# --------------------------------------------------------------
+def calculate_genome_coverage(read_fastqs: List[str], assembly_fasta: str, cpu_threads: int) -> float:
+    """
+    Compute genome coverage = (total bases in all reads) / (total bases in the assembly).
+    Uses your pigz_{compress,decompress} functions safely (no mutation of inputs).
+    Supports .fastq/.fq(.gz) for reads and .fa/.fasta(.gz) for assembly.
+    """
+    total_bases = 0
+    for fq in read_fastqs:
+        fq_path = Path(fq)
+        total_bases += _sum_fastq_bases_with_pigz_safe(fq_path, cpu_threads)
+
+    assembly_bases = _sum_fasta_bases_with_pigz_safe(Path(assembly_fasta), cpu_threads)
+    if assembly_bases == 0:
+        raise ValueError(f"No contigs found in {assembly_fasta}")
+
+    return total_bases / assembly_bases
 
 
 # --------------------------------------------------------------
