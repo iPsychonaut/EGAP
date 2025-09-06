@@ -3,11 +3,13 @@
 """
 preprocess_illumina.py
 
-Updated on Sat Mar 29 2025
-
 This script preprocesses Illumina reads with FastQC, Trimmomatic, BBDuk, and Clumpify.
 Reads input from a CSV file, processes all Illumina datasets, and updates the CSV
 with declumpified FASTQ file paths in ${params.output_dir}/${sample_prefix}/Illumina/.
+
+Created on Wed Aug 16 2023
+
+Updated on Wed Sept 3 2025
 
 @author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
 """
@@ -121,28 +123,48 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # ---- CASE A: SRA accession provided; ensure R1/R2 exist or download ----
     if pd.notna(illu_sra) and pd.isna(illu_raw_f_reads) and pd.isna(illu_raw_r_reads):
         sra_id = str(illu_sra).strip()
-        # Expected outputs from fasterq-dump / fastq-dump
         r1 = illumina_dir / f"{sra_id}_1.fastq"
         r2 = illumina_dir / f"{sra_id}_2.fastq"
 
-        # If missing, perform download + conversion
         if not (r1.exists() and r2.exists()):
             print(f"Downloading Illumina SRA: {sra_id}...")
-            # 1) prefetch into default SRA cache; don't fail the pipeline if prefetch re-downloads
-            dl_cmd = f"prefetch --force yes {sra_id}"
-            _ = run_subprocess_cmd(dl_cmd, True)
 
-            # 2) fasterq-dump (faster, recommended)
+            # 1) prefetch directly into the Illumina directory (avoid cwd clutter)
+            #    This writes SRR*/SRR*.sra under <Illumina/>.
+            prefetch_cmd = [
+                "prefetch",
+                "--force", "yes",
+                "--output-directory", str(illumina_dir),
+                sra_id,
+            ]
+            _ = run_subprocess_cmd(prefetch_cmd, False)
+
+            # 2) fasterq-dump with explicit output dir AND temp dir in <Illumina/>.
+            #    Many environments honor TMPDIR for large temps; we set it only for this call.
+            #    We also set VDB_CONFIG to avoid surprises from user/global configs.
+            env_prefix = (
+                f"TMPDIR='{illumina_dir}' "
+                f"VDB_CONFIG='{illumina_dir}' "
+            )
             fq_cmd = (
-                f"fasterq-dump --split-files -e {int(cpu_threads)} "
-                f"-O '{illumina_dir}' {sra_id}"
+                env_prefix +
+                "fasterq-dump "
+                f"--split-files -e {int(cpu_threads)} "
+                f"-O '{illumina_dir}' "
+                f"'{illumina_dir}/{sra_id}'"
             )
             ret = run_subprocess_cmd(fq_cmd, True)
 
-            # Fallback to fastq-dump if fasterq-dump failed or didn't create files
+            # Fallback to fastq-dump if fasterq-dump failed or outputs missing
             if ret != 0 or not (r1.exists() and r2.exists()):
                 print("WARN:\tfasterq-dump failed or files not found; trying fastq-dump fallback...")
-                fq2_cmd = f"fastq-dump --split-files -O '{illumina_dir}' {sra_id}"
+                fq2_cmd = (
+                    env_prefix +
+                    "fastq-dump "
+                    "--split-files "
+                    f"-O '{illumina_dir}' "
+                    f"'{illumina_dir}/{sra_id}'"
+                )
                 ret2 = run_subprocess_cmd(fq2_cmd, True)
 
                 if ret2 != 0 or not (r1.exists() and r2.exists()):
@@ -151,7 +173,6 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
             print(f"PASS:\tIllumina SRA processed: {r1}, {r2}")
 
-        # Set variables to discovered paths
         illu_raw_f_reads = str(r1)
         illu_raw_r_reads = str(r2)
 
@@ -203,20 +224,25 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             return pth.replace(old + ".gz", new + ".gz")
         return pth.replace(old, new)
 
+    def _nonempty(p):
+        try:
+            return os.path.isfile(p) and os.path.getsize(p) > 0
+        except OSError:
+            return False
+
     trimmo_f_pair    = _swap_suffix(illu_raw_f_reads, "_1.fastq", "_forward_paired.fastq")
     trimmo_r_pair    = _swap_suffix(illu_raw_r_reads, "_2.fastq", "_reverse_paired.fastq")
     trimmo_f_unpair  = _swap_suffix(illu_raw_f_reads, "_1.fastq", "_forward_unpaired.fastq")
     trimmo_r_unpair  = _swap_suffix(illu_raw_r_reads, "_2.fastq", "_reverse_unpaired.fastq")
 
-    if os.path.exists(trimmo_f_pair) and os.path.exists(trimmo_r_pair):
-        print(f"SKIP:\tTrimmomatic files exist: {trimmo_f_pair} & {trimmo_r_pair}.")
-    else:
+
+    def _run_trimmomatic(t_threads, use_heap=False):
         truseq3_path = shutil.which("TruSeq3-PE.fa") or shutil.which("TruSeq3-PE")
         if not truseq3_path:
             print("WARN:\tTruSeq3-PE adapters file not found on PATH; Trimmomatic may fail.")
-        run_subprocess_cmd([
+        base_cmd = [
             "trimmomatic", "PE",
-            "-threads", str(cpu_threads),
+            "-threads", str(t_threads),
             "-phred33",
             illu_raw_f_reads,           # Input R1
             illu_raw_r_reads,           # Input R2
@@ -229,7 +255,42 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             "CROP:145",
             "SLIDINGWINDOW:50:25",
             "MINLEN:125"
-        ], False)
+        ]
+        if use_heap:
+            # The conda 'trimmomatic' wrapper honors TRIMMOMATIC_OPTS for JVM flags.
+            cmd = "TRIMMOMATIC_OPTS='-Xmx8g' " + " ".join(base_cmd)
+            return run_subprocess_cmd(cmd, True)
+        else:
+            return run_subprocess_cmd(base_cmd, False)
+
+    if os.path.exists(trimmo_f_pair) and os.path.exists(trimmo_r_pair) and _nonempty(trimmo_f_pair) and _nonempty(trimmo_r_pair):
+        print(f"SKIP:\tTrimmomatic files exist: {trimmo_f_pair} & {trimmo_r_pair}.")
+    else:
+        # 1st attempt: as-is
+        rc = _run_trimmomatic(cpu_threads, use_heap=False)
+
+        # Check success: return code + non-empty outputs
+        if rc != 0 or not (_nonempty(trimmo_f_pair) and _nonempty(trimmo_r_pair)):
+            print("WARN:\tTrimmomatic failed or produced empty outputs; retrying with fewer threads and larger Java heap...")
+            # Clean any empty outputs to avoid confusion
+            for p in [trimmo_f_pair, trimmo_r_pair, trimmo_f_unpair, trimmo_r_unpair]:
+                try:
+                    if os.path.isfile(p) and os.path.getsize(p) == 0:
+                        os.remove(p)
+                except OSError:
+                    pass
+
+            # 2nd attempt: safer settings
+            safer_threads = max(1, min(4, int(cpu_threads)))
+            rc2 = _run_trimmomatic(safer_threads, use_heap=True)
+
+            if rc2 != 0 or not (_nonempty(trimmo_f_pair) and _nonempty(trimmo_r_pair)):
+                raise RuntimeError(
+                    "Trimmomatic failed to generate non-empty paired outputs after retry.\n"
+                    f"  R1 paired: {trimmo_f_pair} (exists={os.path.exists(trimmo_f_pair)}, size={os.path.getsize(trimmo_f_pair) if os.path.exists(trimmo_f_pair) else 'NA'})\n"
+                    f"  R2 paired: {trimmo_r_pair} (exists={os.path.exists(trimmo_r_pair)}, size={os.path.getsize(trimmo_r_pair) if os.path.exists(trimmo_r_pair) else 'NA'})\n"
+                    "Check Java memory/threads or adapter path."
+                )
 
     # ---------- BBDuk ----------
     bbduk_f_map = str(Path(trimmo_f_pair).with_name(Path(trimmo_f_pair).name.replace("_forward_paired", "_forward_mapped")))
@@ -297,4 +358,3 @@ if __name__ == "__main__":
     print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' {sys.argv[5]} (converted to {ram_gb}) {type(ram_gb)}")
     
     illu_dedup_f_reads, illu_dedup_r_reads = preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
-
