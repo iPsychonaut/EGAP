@@ -25,23 +25,7 @@ from utilities import run_subprocess_cmd, get_current_row_data
 # Polish assembly with Racon using long reads
 # --------------------------------------------------------------
 def racon_polish_assembly(input_assembly, long_reads, racon_out_dir, sample_id, cpu_threads, iteration_count):
-    """Polish a genomic assembly with Racon using long reads.
-
-    Aligns long reads (ONT or PacBio) to the assembly using minimap2 and polishes
-    with Racon for the specified iteration.
-
-    Args:
-        input_assembly (str): Path to the input assembly FASTA.
-        long_reads (str): Path to the long reads FASTQ.
-        racon_out_dir (str): Directory for polishing output.
-        sample_id (str): Sample identifier.
-        cpu_threads (str): Number of CPU threads to use.
-        iteration_count (int): Current polishing iteration (e.g., 1 or 2).
-
-    Returns:
-        str: Path to the Racon-polished assembly FASTA or input assembly if Racon fails.
-    """
-    # Validate inputs
+    """Polish a genomic assembly with Racon using long reads."""
     if not os.path.exists(input_assembly):
         print(f"ERROR:\tInput assembly not found: {input_assembly}")
         return input_assembly
@@ -49,7 +33,6 @@ def racon_polish_assembly(input_assembly, long_reads, racon_out_dir, sample_id, 
         print(f"ERROR:\tLong reads not found: {long_reads}")
         return input_assembly
 
-    # Align reads to the assembly using minimap2, generating a PAF file
     racon_paf = os.path.join(racon_out_dir, f"racon_round{iteration_count}.paf")
     if os.path.exists(racon_paf):
         print(f"SKIP:\tRacon PAF {iteration_count} already exists: {racon_paf}.")
@@ -61,7 +44,6 @@ def racon_polish_assembly(input_assembly, long_reads, racon_out_dir, sample_id, 
             print(f"WARN:\tminimap2 failed for iteration {iteration_count}. Skipping Racon.")
             return input_assembly
 
-    # Perform polishing with Racon using the PAF alignment
     racon_assembly = os.path.join(racon_out_dir, f"{sample_id}_racon_polish_{iteration_count}.fasta")
     if os.path.exists(racon_assembly):
         print(f"SKIP:\tRacon Assembly {iteration_count} already exists: {racon_assembly}.")
@@ -80,22 +62,7 @@ def racon_polish_assembly(input_assembly, long_reads, racon_out_dir, sample_id, 
 # Prepare alignment for Pilon polishing
 # --------------------------------------------------------------
 def pilon_prep(input_assembly, illu_f_dedup, illu_r_dedup, assembly_out_dir, cpu_threads):
-    """Prepare BAM file for Pilon polishing using Illumina reads.
-
-    Aligns deduplicated Illumina reads to the assembly using bwa-mem2, converts to BAM,
-    sorts, and indexes for Pilon.
-
-    Args:
-        input_assembly (str): Path to the assembly FASTA.
-        illu_f_dedup (str): Path to deduplicated forward Illumina FASTQ.
-        illu_r_dedup (str): Path to deduplicated reverse Illumina FASTQ.
-        assembly_out_dir (str): Directory for output files.
-        cpu_threads (str): Number of CPU threads to use.
-
-    Returns:
-        str: Path to the sorted, indexed BAM file or None if preparation fails.
-    """
-    # Validate inputs
+    """Prepare BAM file for Pilon polishing using Illumina reads."""
     if not os.path.exists(input_assembly):
         print(f"ERROR:\tInput assembly not found: {input_assembly}")
         return None
@@ -103,14 +70,12 @@ def pilon_prep(input_assembly, illu_f_dedup, illu_r_dedup, assembly_out_dir, cpu
         print(f"ERROR:\tIllumina reads not found: {illu_f_dedup}, {illu_r_dedup}")
         return None
 
-    # Construct output file names for SAM, unsorted BAM, and final sorted BAM
     pilon_bam = os.path.join(assembly_out_dir, os.path.basename(input_assembly).replace(".fasta", ".bam"))
     output_sam = pilon_bam.replace(".bam", ".sam")
     sorted_bam = pilon_bam.replace(".bam", "_sorted.bam")
 
     os.makedirs(assembly_out_dir, exist_ok=True)
 
-    # Build a BWA index and map Illumina reads to the assembly (SAM)
     if not os.path.exists(output_sam):
         bwa_index_cmd = ["bwa-mem2", "index", input_assembly]
         print(f"DEBUG - Running BWA index: {' '.join(bwa_index_cmd)}")
@@ -130,7 +95,6 @@ def pilon_prep(input_assembly, illu_f_dedup, illu_r_dedup, assembly_out_dir, cpu
         print(f"WARN:\tGenerated SAM file is suspiciously small: {output_sam}")
         return None
 
-    # Convert SAM to an unsorted BAM file
     if not os.path.exists(sorted_bam):
         samview_cmd = f"samtools view -@ {cpu_threads} -S -b {output_sam} > {sorted_bam}"
         print(f"DEBUG - Running samtools view: {samview_cmd}")
@@ -139,7 +103,6 @@ def pilon_prep(input_assembly, illu_f_dedup, illu_r_dedup, assembly_out_dir, cpu
             print(f"WARN:\tsamtools view failed. Skipping Pilon prep.")
             return None
 
-    # Sort and index the BAM file
     if not os.path.exists(pilon_bam):
         bamsort_cmd = ["bamtools", "sort", "-in", sorted_bam, "-out", pilon_bam]
         print(f"DEBUG - Running bamtools sort: {' '.join(bamsort_cmd)}")
@@ -166,24 +129,7 @@ def pilon_prep(input_assembly, illu_f_dedup, illu_r_dedup, assembly_out_dir, cpu
 # Polish assembly with Pilon using Illumina reads
 # --------------------------------------------------------------
 def pilon_polish(best_assembly, second_racon_assembly, pilon_bam, assembly_out_dir, sample_id, cpu_threads, ram_gb):
-    """Polish an assembly with Pilon using aligned Illumina reads.
-
-    Runs Pilon to refine the assembly based on Illumina read alignments, producing
-    a polished FASTA file.
-
-    Args:
-        best_assembly (str): Path to the initial assembly FASTA.
-        second_racon_assembly (str): Path to the Racon-polished assembly.
-        pilon_bam (str): Path to the sorted, indexed BAM file.
-        assembly_out_dir (str): Directory for output files.
-        sample_id (str): Sample identifier.
-        cpu_threads (str): Number of CPU threads to use.
-        ram_gb (str): RAM in GB for Pilon's Java process.
-
-    Returns:
-        str: Path to the Pilon-polished assembly FASTA or Racon assembly if Pilon fails.
-    """
-    # Validate inputs
+    """Polish an assembly with Pilon using aligned Illumina reads."""
     if not os.path.exists(second_racon_assembly):
         print(f"ERROR:\tRacon assembly not found: {second_racon_assembly}")
         return second_racon_assembly
@@ -191,7 +137,6 @@ def pilon_polish(best_assembly, second_racon_assembly, pilon_bam, assembly_out_d
         print(f"ERROR:\tPilon BAM not found: {pilon_bam}")
         return second_racon_assembly
 
-    # Prepare output filenames for Pilon run
     pilon_out_prefix = f"{sample_id}_pilon_assembly"
     pilon_out_dir = assembly_out_dir
     os.makedirs(pilon_out_dir, exist_ok=True)
@@ -200,7 +145,6 @@ def pilon_polish(best_assembly, second_racon_assembly, pilon_bam, assembly_out_d
     if os.path.exists(pilon_assembly):
         print(f"SKIP:\tPilon Polished Assembly already exists: {pilon_assembly}.")
     else:
-        # Construct Pilon command and run
         pilon_cmd = [
             "pilon", f"-Xmx{ram_gb}g",
             "--genome", second_racon_assembly,
@@ -229,25 +173,11 @@ def pilon_polish(best_assembly, second_racon_assembly, pilon_bam, assembly_out_d
 # Perform full assembly polishing
 # --------------------------------------------------------------
 def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
-    """Polish an assembly by running Racon (two rounds with long reads)
-    and then Pilon (with Illumina reads).
-
-    Args:
-        sample_id (str): Identifier for the sample.
-        input_csv (str): Path to the CSV file with sample metadata.
-        output_dir (str): Base directory for all outputs.
-        cpu_threads (int): Number of CPU threads to use.
-        ram_gb (int): Amount of RAM (in GB) to allocate for Pilon.
-
-    Returns:
-        str: Path to the final polished assembly or None if polishing fails.
-    """
-    # Read the CSV file and filter to the row corresponding to the sample of interest
+    """Polish an assembly by running Racon (two rounds with long reads) and Pilon."""
     input_df = pd.read_csv(input_csv)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
     illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -260,12 +190,18 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
 
-    # --- NEW: normalize base paths to absolute ---
+    # Normalize base paths to absolute
     output_dir_abs = str(Path(output_dir).resolve())
     print(f"DEBUG - output_dir_abs      - {output_dir_abs}")
 
     species_dir = os.path.join(output_dir_abs, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
+
+    # ---------- FAST SKIP if final polished output exists ----------
+    final_polished_assembly = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta")
+    if os.path.exists(final_polished_assembly) and os.path.getsize(final_polished_assembly) > 0:
+        print(f"SKIP:\tFinal polished assembly already present: {final_polished_assembly}")
+        return final_polished_assembly
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
         ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
@@ -289,7 +225,7 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - species_id          - {species_id}")
     print(f"DEBUG - est_size            - {est_size}")
 
-    # Check if only reference is provided and skip
+    # Skip if no reads at all
     if (pd.isna(illumina_f_raw_reads) and pd.isna(illumina_sra)) and \
        (pd.isna(illumina_r_raw_reads) and pd.isna(illumina_sra)) and \
        (pd.isna(ont_raw_reads) and pd.isna(ont_sra)) and \
@@ -302,14 +238,14 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     polish_out_dir = os.path.join(sample_dir, "polished_assembly")
     os.makedirs(polish_out_dir, exist_ok=True)
 
-    # Absolute best assembly path
+    # Best assembly must exist
     best_assembly = os.path.join(sample_dir, f"{species_id}_best_assembly.fasta")
     print(f"DEBUG - best_assembly - {best_assembly}")
     if not os.path.exists(best_assembly):
         print(f"ERROR:\tBest assembly not found: {best_assembly}")
         return None
 
-    # Set Illumina deduplicated read paths only if Illumina reads are present
+    # Illumina dedup paths only if present
     illu_dedup_f_reads = None
     illu_dedup_r_reads = None
     if pd.notna(illumina_sra) or (pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads)):
@@ -319,7 +255,7 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - illu_dedup_f_reads - {illu_dedup_f_reads}")
     print(f"DEBUG - illu_dedup_r_reads - {illu_dedup_r_reads}")
 
-    # Set long-read paths (ONT or PacBio), prefer prefiltered, fallback to raw
+    # Long-read paths (prefer prefiltered)
     highest_mean_qual_long_reads = None
     if pd.notna(ont_raw_reads):
         print("DEBUG - ONT RAW READS EXIST!")
@@ -332,13 +268,11 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     print(f"DEBUG - highest_mean_qual_long_reads - {highest_mean_qual_long_reads}")
 
-    # Ensure we work inside the absolute polish_out_dir (avoid double-nesting)
+    # Work inside the absolute polish_out_dir
     os.chdir(polish_out_dir)
     print(f"DEBUG - CWD (polish_out_dir) - {os.getcwd()}")
 
-    # -------------------------------------------------------------------------
-    # Step 1: Two rounds of Racon polishing if ONT or PacBio reads exist
-    # -------------------------------------------------------------------------
+    # ---- Step 1: Two rounds of Racon polishing ----
     racon_work_dir = os.path.join(polish_out_dir, "racon_polish")
     os.makedirs(racon_work_dir, exist_ok=True)
     racon_final = os.path.join(polish_out_dir, f"{sample_id}_racon.fasta")
@@ -361,7 +295,6 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print("SKIP:\t2x-Racon Polish; No Long Reads Provided.")
         racon_assembly = best_assembly
 
-    # Safe-copy Racon
     if not os.path.exists(racon_assembly):
         print(f"ERROR:\tRacon output not found: {racon_assembly}. Falling back to best assembly.")
         racon_assembly = best_assembly
@@ -374,9 +307,7 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             print(f"ERROR:\tFailed to copy Racon assembly to {racon_final}")
             return None
 
-    # -------------------------------------------------------------------------
-    # Step 2: Pilon polishing if Illumina paired-end reads exist
-    # -------------------------------------------------------------------------
+    # ---- Step 2: Pilon polishing (if Illumina) ----
     pilon_work_dir = os.path.join(polish_out_dir, "pilon_polish")
     os.makedirs(pilon_work_dir, exist_ok=True)
     pilon_final = os.path.join(polish_out_dir, f"{sample_id}_pilon.fasta")
@@ -410,7 +341,6 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print(f"WARN:\tPolished assembly is suspiciously small: {polished_assembly}. Falling back to Racon assembly.")
         polished_assembly = racon_final
 
-    # Copy to pilon_final
     if os.path.exists(pilon_final):
         print(f"SKIP:\tPilon final already exists: {pilon_final}")
     else:
@@ -422,14 +352,10 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     print(f"DEBUG - pilon_final - {pilon_final}")
 
-    # Prepare final polished assembly path
-    final_polished_assembly = os.path.join(
-        sample_dir,
-        f"{sample_id}_final_polish_assembly.fasta")
-
+    # Prepare final polished assembly path (in the main assembly directory)
+    final_polished_assembly = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta")
     print(f"DEBUG - final_polished_assembly - {final_polished_assembly}")
 
-    # Copy to final_polished_assembly
     if os.path.exists(final_polished_assembly):
         print(f"SKIP:\tFinal polished assembly already exists: {final_polished_assembly}")
     else:
@@ -456,15 +382,15 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
 
 if __name__ == "__main__":
-    # Provide a usage message if the correct number of arguments is not supplied
     if len(sys.argv) != 6:
         print("Usage: python3 polish_assembly.py <sample_id> <input_csv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    # Run the polish_assembly function with CLI arguments
-    final_polished_assembly = polish_assembly(sys.argv[1],       # sample_id
-                                             sys.argv[2],       # input_csv
-                                             sys.argv[3],       # output_dir
-                                             str(sys.argv[4]),  # cpu_threads
-                                             str(sys.argv[5]))  # ram_gb
+    final_polished_assembly = polish_assembly(
+        sys.argv[1],       # sample_id
+        sys.argv[2],       # input_csv
+        sys.argv[3],       # output_dir
+        str(sys.argv[4]),  # cpu_threads
+        str(sys.argv[5])   # ram_gb
+    )
