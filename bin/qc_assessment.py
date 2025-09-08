@@ -8,13 +8,14 @@ analyzes and classifies the assembly, and finalizes renaming and compression.
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on Mon Sept 8 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
 import sys
 import shutil
+import re
 import pandas as pd
 from Bio import SeqIO
 from collections import Counter
@@ -28,6 +29,13 @@ USE_COMPLEASM = True
 # If True, automatically fall back to BUSCO when Compleasm fails
 # or produces no metrics (recommended so downstream code always has data).
 FALLBACK_TO_BUSCO_ON_FAIL = True
+
+def _lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
+    """
+    Return a lineage directory name guaranteed to end with _odbNN, without doubling
+    the suffix if it's already present.
+    """
+    return busco_odb if re.search(r"_odb\d+$", str(busco_odb)) else f"{busco_odb}_{db_version}"
 
 def _normalize_busco_keycase(sample_stats_dict: dict, busco_count: str) -> None:
     """
@@ -263,119 +271,152 @@ def classify_assembly(sample_stats):
 # --------------------------------------------------------------
 # Generate BUSCO status plots
 # --------------------------------------------------------------
-def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, assembly_type):
-    """Create stacked bar plots of BUSCO statuses from TSV results.
+def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, assembly_type,
+               output_tag=None, out_dir=None):
+    import os, re
+    import pandas as pd
+    import matplotlib.pyplot as plt
 
-    Generates SVG and PNG plots showing BUSCO statuses (Single, Duplicated,
-    Incomplete, Fragmented) per sequence.
-
-    Args:
-        sample_id (str): Sample identifier for output naming.
-        busco_type (str): Type of BUSCO run ('busco' or 'compleasm').
-        busco_odb (str): BUSCO lineage identifier (e.g., 'fungi_odb10').
-        input_busco_tsv (str): Path to the BUSCO TSV file.
-        input_fasta (str): Path to the input FASTA file for naming.
-        assembly_type (str): Descriptor for the assembly type.
-    """
     print(f"Generating BUSCO plot for {input_busco_tsv}...")
 
-    # Check if TSV exists
     if not os.path.exists(input_busco_tsv):
         print(f"ERROR:\tBUSCO TSV not found: {input_busco_tsv}. Skipping plot generation.")
         return
 
-    # Load BUSCO TSV with appropriate headers
+    # Where to write, and what to name the plot
+    if out_dir is None:
+        out_dir = os.path.dirname(input_fasta)
+    if output_tag is None:
+        suffix = "compleasm" if busco_type == "compleasm" else "busco"
+        output_tag = f"{sample_id}_{assembly_type}_{busco_odb}_{suffix}"
+
+    def _save_no_data():
+        plt.figure(figsize=(12, 8))
+        plt.text(0.5, 0.5, "No valid BUSCO data to plot", fontsize=14, ha='center', va='center')
+        plt.xticks([]); plt.yticks([])
+        plt.title("BUSCO Status Plot - No Data Available")
+        out_svg = os.path.join(out_dir, f"{output_tag}.svg")
+        out_png = os.path.join(out_dir, f"{output_tag}.png")
+        plt.savefig(out_svg, format="svg")
+        plt.savefig(out_png, format="png")
+        plt.close()
+        return out_svg, out_png
+
+    # --- Load/normalize to DataFrame with ['Sequence', 'Status'] ---
     try:
         if busco_type == "busco":
-            busco_df = pd.read_csv(input_busco_tsv, sep="\t", skiprows=2, dtype=str)
-        elif busco_type == "compleasm":
-            busco_df = pd.read_csv(input_busco_tsv, sep="\t", header=0, dtype=str)
+            df = pd.read_csv(input_busco_tsv, sep="\t", skiprows=2, dtype=str)
+            if "Sequence" not in df.columns and "Contig" in df.columns:
+                df = df.rename(columns={"Contig": "Sequence"})
+            if not {"Sequence","Status"}.issubset(df.columns):
+                print("ERROR:\tBUSCO TSV missing 'Sequence'/'Status'.")
+                return
+        else:
+            # Try BUSCO-like table first (what you pass now)
+            try:
+                df_try = pd.read_csv(input_busco_tsv, sep="\t", dtype=str)
+            except Exception:
+                df_try = pd.DataFrame()
+
+            if {"Sequence","Status"}.issubset(df_try.columns) or {"Contig","Status"}.issubset(df_try.columns):
+                if "Sequence" not in df_try.columns and "Contig" in df_try.columns:
+                    df_try = df_try.rename(columns={"Contig":"Sequence"})
+                df = df_try
+            else:
+                # Fallback: parse summary-style text with S/D/F/I counts
+                with open(input_busco_tsv, "r", encoding="utf-8", errors="ignore") as fh:
+                    text = fh.read()
+
+                blocks = re.split(r"(?m)^##\s*lineage:\s*", text)
+                blocks = [b.strip() for b in blocks if b.strip()]
+                chosen = None
+                if blocks:
+                    for blk in blocks:
+                        first_line, *_ = blk.splitlines() or [""]
+                        if busco_odb and first_line and busco_odb.lower() in first_line.lower():
+                            chosen = blk; break
+                    if chosen is None: chosen = blocks[0]
+                else:
+                    chosen = text
+
+                def _get_count(label, blob):
+                    m = re.search(rf"(?m)^{label}\s*:\s*[\d\.]+%\s*,\s*(\d+)", blob)
+                    if m: return int(m.group(1))
+                    m2 = re.search(rf"(?m)^{label}\s*:\s*(\d+)", blob)
+                    return int(m2.group(1)) if m2 else 0
+
+                s_cnt = _get_count("S", chosen)
+                d_cnt = _get_count("D", chosen)
+                f_cnt = _get_count("F", chosen)
+                i_cnt = _get_count("I", chosen)
+                total = s_cnt + d_cnt + f_cnt + i_cnt
+                if total == 0:
+                    print("WARNING: Compleasm summary has zero S/D/F/I.")
+                    _save_no_data(); return
+
+                asm_name = os.path.splitext(os.path.basename(input_fasta or "assembly"))[0] or "assembly"
+                rows = (
+                    [{"Sequence": asm_name, "Status": "Single"}]     * s_cnt +
+                    [{"Sequence": asm_name, "Status": "Duplicated"}] * d_cnt +
+                    [{"Sequence": asm_name, "Status": "Fragmented"}] * f_cnt +
+                    [{"Sequence": asm_name, "Status": "Incomplete"}] * i_cnt
+                )
+                df = pd.DataFrame.from_records(rows, dtype=str)
     except Exception as e:
-        print(f"ERROR:\tFailed to read BUSCO TSV {input_busco_tsv}: {str(e)}")
+        print(f"ERROR:\tFailed to read/normalize TSV {input_busco_tsv}: {e}")
         return
 
-    # Handle empty data
-    if busco_df.empty:
-        print("WARNING: BUSCO input file is empty. Generating placeholder plot.")
-        plt.figure(figsize=(12, 8))
-        plt.text(0.5, 0.5, "No valid BUSCO data to plot", fontsize=14,
-                 ha='center', va='center')
-        plt.xticks([])
-        plt.yticks([])
-        plt.title("BUSCO Status Plot - No Data Available")
-        output_busco_svg = os.path.join(os.path.dirname(input_fasta),
-                                        f"{sample_id}_{assembly_type}_{busco_odb}_busco.svg")
-        output_busco_png = os.path.join(os.path.dirname(input_fasta),
-                                        f"{sample_id}_{assembly_type}_{busco_odb}_busco.png")
-        plt.savefig(output_busco_svg, format="svg")
-        plt.savefig(output_busco_png, format="png")
-        plt.close()
+    if df.empty:
+        print("WARNING: BUSCO input is empty.")
+        _save_no_data(); return
+
+    # --- Plot ---
+    busco_genes = len(df)
+    df['Status'] = df['Status'].replace({"Complete": "Single"})
+
+    try:
+        status_counts = df.pivot_table(index='Sequence', columns='Status', aggfunc='size', fill_value=0)
+    except KeyError:
+        print("ERROR:\tExpected 'Sequence' and 'Status'.")
         return
 
-    # Prepare data for stacked bar plot
-    busco_genes = len(busco_df)
-    busco_df['Status'] = busco_df['Status'].replace("Complete", "Single")
-    status_counts = busco_df.pivot_table(index='Sequence', columns='Status',
-                                        aggfunc='size', fill_value=0)
-    desired_order = ['Single', 'Duplicated', 'Incomplete', 'Fragmented']
+    desired_order = ['Single','Duplicated','Incomplete','Fragmented']
     status_counts = status_counts.reindex(columns=desired_order, fill_value=0)
-    total_sequences = len(status_counts)
+    non_dup_sum = status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1)
+    filtered = status_counts.loc[non_dup_sum > 0]
+    if filtered.empty:
+        print("WARNING: No valid BUSCO rows to plot.")
+        _save_no_data(); return
 
-    excluded_sequences = len(status_counts.loc[status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) == 0])
-    included_sequences = total_sequences - excluded_sequences
+    filtered = filtered.loc[filtered.sum(axis=1).sort_values(ascending=False).index]
 
-    filtered_status_counts = status_counts.loc[status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1) > 0]
-    if filtered_status_counts.empty:
-        print("WARNING: No valid BUSCO data available for plotting.")
-        plt.figure(figsize=(12, 8))
-        plt.text(0.5, 0.5, "No valid BUSCO data to plot", fontsize=14,
-                 ha='center', va='center')
-        plt.xticks([])
-        plt.yticks([])
-        plt.title("BUSCO Status Plot - No Data Available")
-        output_busco_svg = os.path.join(os.path.dirname(input_fasta),
-                                        f"{sample_id}_{assembly_type}_{busco_odb}_busco.svg")
-        output_busco_png = os.path.join(os.path.dirname(input_fasta),
-                                        f"{sample_id}_{assembly_type}_{busco_odb}_busco.png")
-        plt.savefig(output_busco_svg, format="svg")
-        plt.savefig(output_busco_png, format="png")
-        plt.close()
-        return
+    status_totals = df['Status'].value_counts()
+    colors = {'Single':'#619B8AFF','Duplicated':'#A1C181FF','Incomplete':'#FE7F2DFF','Fragmented':'#FCCA46FF'}
+    ax = filtered.plot(kind='bar', stacked=True, figsize=(12,8),
+                       color=[colors[c] for c in filtered.columns])
 
-    # Reorder rows by total BUSCO matches
-    filtered_status_counts = filtered_status_counts.loc[filtered_status_counts.sum(axis=1).sort_values(ascending=False).index]
+    legend_labels = []
+    for status in filtered.columns:
+        pct = round((status_totals.get(status, 0) / busco_genes) * 100, 2) if busco_genes else 0.0
+        legend_labels.append(f"{status} ({pct}%)")
 
-    # Compute counts and plot
-    status_totals = busco_df['Status'].value_counts()
-    colors = {'Single': '#619B8AFF',
-              'Duplicated': '#A1C181FF',
-              'Incomplete': '#FE7F2DFF',
-              'Fragmented': '#FCCA46FF'}
-    ax = filtered_status_counts.plot(kind='bar', stacked=True, figsize=(12, 8),
-                                     color=[colors[col] for col in filtered_status_counts.columns])
-    legend_labels = [f"{status} ({round((status_totals.get(status, 0)/busco_genes)*100, 2)}%)"
-                     for status in filtered_status_counts.columns]
-    completeness_values = [round((status_totals.get(status, 0)/busco_genes)*100, 2)
-                           for status in filtered_status_counts.columns]
-    completeness_calc = round(completeness_values[0] + completeness_values[1], 2)
+    completeness_calc = round(
+        (status_totals.get('Single', 0) + status_totals.get('Duplicated', 0)) / busco_genes * 100, 2
+    ) if busco_genes else 0.0
 
-    plt.title(f"Distribution of {busco_odb} BUSCO Status per Sequence\n"
-              f"Completeness: {completeness_calc}%")
-    plt.xlabel(f"Sequences (Contig/Scaffold/Chromosome)\n"
-               f"Included={included_sequences}, Excluded={excluded_sequences}")
+    plt.title(f"Distribution of {busco_odb} BUSCO Status per Sequence\nCompleteness: {completeness_calc}%")
+    included = int((non_dup_sum > 0).sum()); excluded = int((non_dup_sum == 0).sum())
+    plt.xlabel(f"Sequences (Contig/Scaffold/Chromosome)\nIncluded={included}, Excluded={excluded}")
     plt.ylabel(f"Number of BUSCO Matches (out of {busco_genes})")
     plt.xticks(rotation=45, ha='right')
     ax.legend(legend_labels, title="BUSCO Status", loc='upper right')
     plt.tight_layout()
 
-    # Save plots (SVG, PNG)
-    output_busco_svg = os.path.join(os.path.dirname(input_fasta),
-                                    f"{sample_id}_{assembly_type}_{busco_odb}_busco.svg")
-    output_busco_png = os.path.join(os.path.dirname(input_fasta),
-                                    f"{sample_id}_{assembly_type}_{busco_odb}_busco.png")
-    plt.savefig(output_busco_svg, format="svg")
-    plt.savefig(output_busco_png, format="png")
-    print(f"PASS:\tBUSCO {busco_odb} plot saved: {output_busco_svg} & {output_busco_png}")
+    out_svg = os.path.join(out_dir, f"{output_tag}.svg")
+    out_png = os.path.join(out_dir, f"{output_tag}.png")
+    plt.savefig(out_svg, format="svg")
+    plt.savefig(out_png, format="png")
+    print(f"PASS:\tBUSCO plot saved: {out_svg} & {out_png}")
     plt.close()
 
 
@@ -404,27 +445,35 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
     """
     # Determine the directory containing the assembly
     assembly_dir = os.path.dirname(assembly_path)
-
+    
     # Derive a clean base name (no extension) from the FASTA filename
     base = os.path.splitext(os.path.basename(assembly_path))[0]
-
-    # Build BUSCO output directory alongside the FASTA
+    
+    # Build BUSCO output directory alongside the FASTA  (NOTE: _b suffix)
     busco_db_version = "odb12"
-    busco_dir = os.path.join(assembly_dir, f"{base}_{busco_odb}_busco")
+    busco_tag = f"{base}_{busco_odb}_busco"
+    busco_dir = os.path.join(assembly_dir, busco_tag)
     os.makedirs(busco_dir, exist_ok=True)
-
+    
     # Validate the input FASTA
     if not validate_fasta(assembly_path):
         print(f"ERROR:\tInvalid assembly for BUSCO: {assembly_path}. Skipping BUSCO.")
         return assembly_path
-
-    # Path to the BUSCO summary file that BUSCO will generate
+    
+    # Normalize lineage dir name to avoid double _odb12
+    lineage = _lineage_dirname(busco_odb)
+    
     busco_summary = os.path.join(
         busco_dir,
-        f"short_summary.specific.{busco_odb}_{busco_db_version}."
-        f"{base}_{busco_odb}_busco.txt"
+        f"short_summary.specific.{lineage}.{busco_tag}.txt"
     )
-
+    
+    busco_tsv = os.path.join(
+        busco_dir,
+        f"run_{lineage}",
+        "full_table.tsv"
+    )
+ 
     # Run BUSCO if the summary does not already exist
     if os.path.exists(busco_summary):
         print(f"SKIP:\tBUSCO Summary already exists: {busco_summary}.")
@@ -434,7 +483,7 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
             "-i", assembly_path, "-f",
             "-l", busco_odb,
             "-c", str(cpu_threads),
-            "-o", f"{base}_{busco_odb}_busco",
+            "-o", busco_tag,                # NOTE: matches _b tag
             "--out_path", assembly_dir
         ]
         print(f"DEBUG - Running BUSCO: {' '.join(busco_cmd)}")
@@ -442,19 +491,13 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
         if rc != 0:
             print(f"WARN:\tBUSCO failed with return code {rc}. Skipping BUSCO metrics.")
             return assembly_path
-
-    # Generate BUSCO plot if needed
-    comp_busco_svg = os.path.join(
-        assembly_dir,
-        f"{base}_{busco_odb}_busco.svg"
-    )
-    busco_tsv = os.path.join(
-        busco_dir,
-        f"run_{busco_odb}_{busco_db_version}",
-        "full_table.tsv"
-    )
+    
+    # Generate BUSCO plot if needed (NOTE: writes .svg/.png with _b)
+    comp_busco_svg = os.path.join(assembly_dir, f"{busco_tag}.svg")
+    
     if not os.path.exists(comp_busco_svg):
-        plot_busco(base, "busco", busco_odb, busco_tsv, assembly_path, assembly_type)
+        plot_busco(base, "busco", busco_odb, busco_tsv, assembly_path, assembly_type,
+                   output_tag=busco_tag, out_dir=assembly_dir)
 
     # Parse BUSCO summary to update statistics
     try:
@@ -502,18 +545,22 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
         str: Original assembly path.
     """
     sample_dir = os.path.dirname(assembly_path)
-    compleasm_dir = os.path.join(sample_dir, f"{os.path.basename(assembly_path).replace('.fasta', '')}_{busco_odb}_busco")
+    asm_base = os.path.basename(assembly_path).replace('.fasta', '')
+    
+    # NOTE: _c suffix for Compleasm
+    compleasm_tag = f"{asm_base}_{busco_odb}_compleasm"
+    compleasm_dir = os.path.join(sample_dir, compleasm_tag)
     print(f"DEBUG - busco_odb - {busco_odb}")
     print(f"DEBUG - compleasm_dir - {compleasm_dir}")
-
+    
     if not os.path.exists(compleasm_dir):
         os.makedirs(compleasm_dir)
-
+    
     # Validate assembly
     if not validate_fasta(assembly_path):
         print(f"ERROR:\tInvalid assembly for Compleasm: {assembly_path}. Skipping Compleasm.")
         return assembly_path
-
+    
     # Check if a Compleasm summary already exists
     compleasm_summary = os.path.join(compleasm_dir, "summary.txt")
     if os.path.exists(compleasm_summary):
@@ -521,7 +568,7 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
     else:
         compleasm_cmd = ["compleasm", "run",
                          "-a", assembly_path,
-                         "-o", compleasm_dir,
+                         "-o", compleasm_dir,           # NOTE: writes into _c dir
                          "--lineage", busco_odb,
                          "-t", str(cpu_threads)]
         print(f"DEBUG - Running Compleasm: {' '.join(compleasm_cmd)}")
@@ -529,12 +576,14 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
         if result != 0:
             print(f"WARN:\tCompleasm failed with return code {result}. Skipping Compleasm metrics.")
             return assembly_path
-
-    # Generate a BUSCO-like plot if not already present
-    comp_busco_svg = os.path.join(sample_dir, f"{os.path.basename(assembly_path).replace('.fasta', '')}_{busco_odb}_busco.svg")
-    compleasm_tsv = os.path.join(compleasm_dir, f"{busco_odb}_odb12", "full_table_busco_format.tsv")
+    
+    # Generate a BUSCO-like plot if not already present (NOTE: _c)
+    comp_busco_svg = os.path.join(sample_dir, f"{compleasm_tag}.svg")
+    lineage = _lineage_dirname(busco_odb)
+    compleasm_tsv = os.path.join(compleasm_dir, lineage, "full_table_busco_format.tsv")
     if not os.path.exists(comp_busco_svg):
-        plot_busco(sample_id, "compleasm", busco_odb, compleasm_tsv, assembly_path, assembly_type)
+        plot_busco(sample_id, "compleasm", busco_odb, compleasm_tsv, assembly_path, assembly_type,
+                   output_tag=compleasm_tag, out_dir=sample_dir)
 
     # Parse Compleasm's summary.txt to extract coverage metrics
     try:
@@ -769,6 +818,11 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     Returns:
         tuple: (path to compressed assembly, path to final stats CSV).
     """
+    print(f"DEBUG: assembly_type - {assembly_type}")
+    print(f"DEBUG: input_csv - {input_csv}")
+    print(f"DEBUG: sample_id - {sample_id}")
+    print(f"DEBUG: output_dir - {output_dir}")
+
     # Read the CSV file and filter to the row corresponding to the sample of interest
     input_df = pd.read_csv(input_csv)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
@@ -872,17 +926,34 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
             assembly_path = labeled_assembly
     else:
         # True final mode: rename curated (or polished) to the final EGAP name
-        if not os.path.exists(assembly_path) and os.path.exists(assembly_path + ".gz"):
-            assembly_path = pigz_decompress(assembly_path + ".gz", cpu_threads)
-        if not os.path.exists(assembly_path):
-            # try polished fallback before giving up
+        # Prefer curated; if missing, NEW: look for already-final EGAP assembly; then polished.
+        cand = assembly_path  # start with curated
+
+        # Try curated (plain or .gz)
+        if not os.path.exists(cand):
+            if os.path.exists(cand + ".gz"):
+                cand = pigz_decompress(cand + ".gz", cpu_threads)
+
+        # If curated still missing, NEW: try already-final EGAP assembly (plain or .gz)
+        if not os.path.exists(cand):
+            if os.path.exists(labeled_assembly):
+                cand = labeled_assembly
+            elif os.path.exists(labeled_assembly + ".gz"):
+                cand = pigz_decompress(labeled_assembly + ".gz", cpu_threads)
+
+        # If still missing, try polished fallback before giving up
+        if not os.path.exists(cand):
             polished_assembly = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta")
             if os.path.exists(polished_assembly) and validate_fasta(polished_assembly):
-                assembly_path = polished_assembly
+                cand = polished_assembly
             else:
-                print(f"ERROR:\tAssembly path not found: {assembly_path}")
+                print(f"ERROR:\tAssembly path not found: {assembly_path} "
+                      f"(also tried {labeled_assembly} and polished).")
                 return None, None
-        assembly_path = _promote_to_final(assembly_path, labeled_assembly, copy_only=False)
+
+        # Promote (rename/copy) the chosen candidate to the final EGAP name
+        assembly_path = _promote_to_final(cand, labeled_assembly, copy_only=False)
+
     
     # Validate final-named assembly
     if not validate_fasta(assembly_path):
