@@ -9,11 +9,13 @@ metadata quirks.
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on Mon Sept 8 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os, glob, sys
+import re
+from io import StringIO
 from pathlib import Path
 from datetime import datetime
 import urllib.request
@@ -48,9 +50,18 @@ RAW_URLS = {
     "EGAP_busco.html"  : "https://raw.githubusercontent.com/iPsychonaut/EGAP/main/resources/templates/EGAP_busco.html",
 }
 
+def _lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
+    """
+    Return a lineage directory name guaranteed to end with _odbNN,
+    without doubling the suffix if it's already present.
+    """
+    s = str(busco_odb).strip()
+    return s if re.search(r"_odb\d+$", s) else f"{s}_{db_version}"
+
+
 def _parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
     """
-    Parse a Compleasm/BUSCO 'full_table.tsv' and normalize columns to a common schema:
+    Parse a Compleasm/BUSCO 'full_table*.tsv' and normalize columns to a common schema:
       Required:  Busco id | Status | Sequence | Gene Start | Gene End | Strand | Score | Length
       Optional:  Identity | Fraction | Frameshift events | Best gene | Codons
     Returns an ordered DataFrame with required columns first, then any of the optional ones if present.
@@ -58,14 +69,34 @@ def _parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
     if not os.path.exists(tsv_path):
         return pd.DataFrame()
 
-    # Read as strings; keep_default_na=False to avoid NaN text replacement issues downstream
-    df = pd.read_csv(tsv_path, sep="\t", comment="#", dtype=str, keep_default_na=False)
+    # Robustly handle commented header lines (e.g., "# Busco id\tStatus\t...")
+    header_fields = None
+    data_lines = []
+    with open(tsv_path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            s = line.rstrip("\n")
+            if s.startswith("#"):
+                # pick the first commented header that contains 'busco id'
+                if header_fields is None and "busco id" in s.lower():
+                    header_fields = [c.strip() for c in s.lstrip("#").strip().split("\t")]
+                # skip all commented lines (including non-header comments)
+                continue
+            if s.strip():
+                data_lines.append(s)
+
+    if header_fields is not None:
+        buf = StringIO("\n".join(["\t".join(header_fields)] + data_lines))
+        df = pd.read_csv(buf, sep="\t", dtype=str, keep_default_na=False)
+    else:
+        # Fallback: no commented header found; read normally and strip any leading '#'
+        df = pd.read_csv(tsv_path, sep="\t", dtype=str, keep_default_na=False)
+        df.columns = [str(c).lstrip("#").strip() for c in df.columns]
 
     if df is None or df.empty:
         return pd.DataFrame()
 
-    # Build case/space-insensitive map: lower -> original
-    lower_cols = {c.lower().strip(): c for c in df.columns}
+    # Build case/space-insensitive map: lower -> original (strip leading '#' just in case)
+    lower_cols = {c.lower().strip().lstrip("#"): c for c in df.columns}
 
     # Canonical names and their common aliases (lowercased)
     alias_map = {
@@ -77,7 +108,6 @@ def _parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
         "strand":            ["strand"],
         "score":             ["score", "bitscore", "bit score"],
         "length":            ["length", "len"],
-
         # Compleasm extras
         "identity":          ["identity", "ident"],
         "fraction":          ["fraction", "frac", "coverage", "cov"],
@@ -86,12 +116,27 @@ def _parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
         "codons":            ["codons"]
     }
 
-    # Build rename map from whatever we find -> canonical
+    # Build rename map from whatever we find -> canonical (fixed-case)
+    proper_case = {
+        "busco id": "Busco id",
+        "status": "Status",
+        "sequence": "Sequence",
+        "gene start": "Gene Start",
+        "gene end": "Gene End",
+        "strand": "Strand",
+        "score": "Score",
+        "length": "Length",
+        "identity": "Identity",
+        "fraction": "Fraction",
+        "frameshift events": "Frameshift Events",
+        "best gene": "Best Gene",
+        "codons": "Codons",
+    }
     rename = {}
     for canonical, aliases in alias_map.items():
         for a in aliases:
             if a in lower_cols:
-                rename[lower_cols[a]] = canonical.title()  # e.g., "busco id" -> "Busco Id"
+                rename[lower_cols[a]] = proper_case.get(canonical, canonical.title())
                 break
 
     # Apply rename
@@ -119,19 +164,23 @@ def _load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.Da
     Locate and parse BUSCO/Compleasm 'full_table' with robust column normalization.
 
     Search order (first found wins):
-      1) run_{db}_odb12/full_table.tsv                   (BUSCO)
-      2) {db}_odb12/full_table_busco_format.tsv          (Compleasm BUSCO-format)
-      3) {db}_odb12/full_table.tsv                       (Compleasm native)
+      1) run_{lineage}/full_table.tsv                   (BUSCO)
+      2) {lineage}/full_table_busco_format.tsv          (Compleasm BUSCO-format)
+      3) {lineage}/full_table.tsv                       (Compleasm native)
     """
+    if not busco_dir or not busco_db:
+        return pd.DataFrame()
+
+    lineage = _lineage_dirname(busco_db)
+
     candidates = [
-        os.path.join(busco_dir, f"run_{busco_db}_odb12", "full_table.tsv"),
-        os.path.join(busco_dir, f"{busco_db}_odb12", "full_table_busco_format.tsv"),
-        os.path.join(busco_dir, f"{busco_db}_odb12", "full_table.tsv"),
+        os.path.join(busco_dir, f"run_{lineage}", "full_table.tsv"),
+        os.path.join(busco_dir, lineage, "full_table_busco_format.tsv"),
+        os.path.join(busco_dir, lineage, "full_table.tsv"),
     ]
     for p in candidates:
         if os.path.exists(p):
             try:
-                # Always use the normalized Compleasm/BUSCO parser (handles both)
                 return _parse_compleasm_full_table(p)
             except Exception as e:
                 print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {p}: {e}")
@@ -311,46 +360,140 @@ def _parse_busco_summary_line(line: str) -> dict:
 
 def _parse_compleasm_summary(path: str) -> dict:
     """
-    Parse Compleasm summary.txt where S:/D:/F:/M: are on separate lines.
-    Returns percent values as strings; computes Complete = S + D (rounded 2dp).
+    Parse Compleasm summary.txt where S:/D:/F:/M: appear on separate lines.
+    - Reads percentages for S/D/F/M (keeps your original format: no '%' in strings)
+    - Tries to read counts if present (e.g., 'S:99.7%, 346' or 'S: 346 (99.7%)')
+    - Computes Complete = S + D (rounded 2dp)
+    - Computes Total = S_cnt + D_cnt + F_cnt + M_cnt, or uses 'n:' if present
     """
     if not os.path.exists(path):
         return {}
-    S = D = F = M = None
+
+    import re
+
+    perc = {"S": None, "D": None, "F": None, "M": None}
+    cnt  = {"S": None, "D": None, "F": None, "M": None}
+    total_n = None
+
     with open(path, "r") as fh:
         for line in fh:
-            if "S:" in line: S = line.split("S:")[-1].split(",")[0].replace("%","").strip()
-            if "D:" in line: D = line.split("D:")[-1].split(",")[0].replace("%","").strip()
-            if "F:" in line: F = line.split("F:")[-1].split(",")[0].replace("%","").strip()
-            if "M:" in line: M = line.split("M:")[-1].split(",")[0].replace("%","").strip()
-    if S is None or D is None:
+            # capture 'n:' if present (some tools include the lineage size)
+            if total_n is None:
+                m_n = re.search(r"\bn\s*[:=]\s*(\d+)\b", line)
+                if m_n:
+                    try:
+                        total_n = int(m_n.group(1))
+                    except Exception:
+                        total_n = None
+
+            for key in ("S", "D", "F", "M"):
+                if f"{key}:" not in line:
+                    continue
+
+                # Pattern A: "S:99.71%, 346"
+                m = re.search(rf"{key}\s*:\s*([\d\.]+)\s*%\s*,\s*(\d+)", line)
+                if m:
+                    perc[key] = m.group(1).strip()
+                    try:
+                        cnt[key] = int(m.group(2))
+                    except Exception:
+                        cnt[key] = None
+                    continue
+
+                # Pattern B: "S: 346 (99.71%)"
+                m = re.search(rf"{key}\s*:\s*(\d+)\s*\(([\d\.]+)\s*%\)", line)
+                if m:
+                    try:
+                        cnt[key] = int(m.group(1))
+                    except Exception:
+                        cnt[key] = None
+                    perc[key] = m.group(2).strip()
+                    continue
+
+                # Pattern C: "S: 99.71%"
+                m = re.search(rf"{key}\s*:\s*([\d\.]+)\s*%", line)
+                if m:
+                    perc[key] = m.group(1).strip()
+                    continue
+
+                # Pattern D: "S: 346"
+                m = re.search(rf"{key}\s*:\s*(\d+)\b", line)
+                if m:
+                    try:
+                        cnt[key] = int(m.group(1))
+                    except Exception:
+                        cnt[key] = None
+                    continue
+
+    # Require at least S and D percentages to compute "Complete"
+    if perc["S"] is None or perc["D"] is None:
         return {}
+
     try:
-        C = str(round(float(S) + float(D), 2))
+        complete = str(round(float(perc["S"]) + float(perc["D"]), 2))
     except Exception:
-        C = ""
+        complete = ""
+
+    # Prefer explicit 'n:' if found; else sum available counts
+    if total_n is None:
+        counts = [c for c in (cnt["S"], cnt["D"], cnt["F"], cnt["M"]) if isinstance(c, int)]
+        total_n = sum(counts) if counts else None
+
     return {
-        "Complete":   C,
-        "Single":     S or "",
-        "Duplicated": D or "",
-        "Fragmented": F or "",
-        "Missing":    M or "",
-        "Total":      ""
+        "Complete":   complete,
+        "Single":     perc["S"] or "",
+        "Duplicated": perc["D"] or "",
+        "Fragmented": perc["F"] or "",
+        "Missing":    perc["M"] or "",
+        "Total":      (str(total_n) if isinstance(total_n, int) else "")
     }
+
+
 
 def _find_busco_genes_table(busco_dir: str, busco_db: str) -> str:
     """
     Return the first existing BUSCO/Compleasm 'full_table' path.
     Supports both BUSCO and Compleasm layouts.
     """
+    lineage = _lineage_dirname(busco_db)
     candidates = [
-        os.path.join(busco_dir, f"run_{busco_db}_odb12", "full_table.tsv"),
-        os.path.join(busco_dir, f"{busco_db}_odb12", "full_table_busco_format.tsv"),
-        os.path.join(busco_dir, f"{busco_db}_odb12", "full_table.tsv"),
+        os.path.join(busco_dir, f"run_{lineage}", "full_table.tsv"),
+        os.path.join(busco_dir, lineage, "full_table_busco_format.tsv"),
+        os.path.join(busco_dir, lineage, "full_table.tsv"),
     ]
     for p in candidates:
         if os.path.exists(p):
             return p
+    return ""
+
+
+def _find_busco_svg(busco_dir: str, busco_db: str) -> str:
+    """
+    Try common SVG names emitted by your pipeline:
+      - <base>_{lineage}_busco.svg
+      - <base>_{lineage}_compleasm.svg
+      - <busco_dir_basename>.svg
+      - anything *{lineage}*busco.svg or *{lineage}*compleasm.svg in the parent dir
+    """
+    try:
+        if not busco_dir or not os.path.isdir(busco_dir):
+            return ""
+        lineage = _lineage_dirname(busco_db)
+        parent = os.path.dirname(busco_dir)
+        tag = os.path.basename(busco_dir)          # e.g., sample_final_{lineage}_busco
+
+        candidates = [
+            os.path.join(parent, f"{tag}.svg"),
+        ]
+        # add globs
+        candidates += glob.glob(os.path.join(parent, f"*{lineage}*busco.svg"))
+        candidates += glob.glob(os.path.join(parent, f"*{lineage}*compleasm.svg"))
+
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+    except Exception:
+        pass
     return ""
 
 # ------------------------------ Main ------------------------------
@@ -432,7 +575,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                       "Total length (>= 10000 bp)","Total length (>= 25000 bp)","Total length (>= 50000 bp)",
                       "Number of contigs","Largest contig","Total length","GC (%)","N50","N90",
                       "auN","L50","L90","Number of N's per 100 kbp"]
-    busco_metrics = ["Single","Duplicated","Fragmented","Missing"]
+    busco_metrics = ["Complete", "Single", "Duplicated", "Fragmented", "Missing", "Total"]
 
     # ------------------------------ iNaturalist (optional) ------------------------------
     if _HAS_INAT and pd.notna(inat_id):
@@ -551,6 +694,8 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 continue
         
             for busco_dir in busco_dirs:
+                svg_path = _find_busco_svg(busco_dir, busco_db)
+                
                 # Prefer BUSCO short_summary, else Compleasm summary.txt
                 metrics = {}
                 summary_files = glob.glob(os.path.join(busco_dir, "short_summary*.txt"))
@@ -570,16 +715,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 metrics_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
         
                 # Genes table (optional; supports BUSCO or Compleasm layouts)
-                genes_file = _find_busco_genes_table(busco_dir, busco_db)
-                busco_genes_df = pd.DataFrame()
-                if genes_file:
-                    try:
-                        busco_genes_df = pd.read_csv(genes_file, sep="\t", comment="#")
-                        for col in ["Busco id","Status","Sequence","Gene Start","Gene End","Strand","Score","Length"]:
-                            if col not in busco_genes_df.columns:
-                                busco_genes_df[col] = "-"
-                    except Exception as e:
-                        print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {genes_file}: {e}")
+                busco_genes_df = _load_busco_or_compleasm_genes_table(busco_dir, busco_db)
         
                 outpath = os.path.join(busco_dir, f"{sample_id}_{busco_db}_EGAP_busco.html")
                 sample_stats_dict[f"{asm_type}_{busco_type}_BUSCO_DF"]        = metrics_df
@@ -675,10 +811,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         busco_genes_df = pd.DataFrame()
         if genes_file:
             try:
-                busco_genes_df = pd.read_csv(genes_file, sep="\t", comment="#")
-                for col in ["Busco id","Status","Sequence","Gene Start","Gene End","Strand","Score","Length"]:
-                    if col not in busco_genes_df.columns:
-                        busco_genes_df[col] = "-"
+                busco_genes_df = _parse_compleasm_full_table(genes_file)
             except Exception as e:
                 print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {genes_file}: {e}")
     
@@ -803,16 +936,23 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             outpath = sample_stats_dict[key]
             parts = key.split("_")
             asm_type, busco_type = parts[0], parts[1]  # e.g., MASURCA_FIRST
-            df = sample_stats_dict.get(f"{asm_type}_{busco_type}_BUSCO_DF", pd.DataFrame())
+            metrics_df = sample_stats_dict.get(f"{asm_type}_{busco_type}_BUSCO_DF", pd.DataFrame())
+            genes_df = sample_stats_dict.get(f"{asm_type}_{busco_type}_BUSCO_GENES_DF", pd.DataFrame())
+
+            # Extract lineage (= busco_db) from filename: <sample_id>_<busco_db>_EGAP_busco.html
+            fname = os.path.basename(outpath)
+            busco_db_from_name = fname.replace(f"{sample_id}_", "").replace("_EGAP_busco.html", "")
+            svg_path = _find_busco_svg(os.path.dirname(outpath), busco_db_from_name)
+
             html = busco_tmpl.render(
                 assembly_name=os.path.basename(outpath).replace("_EGAP_busco.html", ""),
                 generated_time=now,
                 busco_data=[{
                     "assembly_fasta": "",
-                    "busco_db": busco_type.capitalize(),
-                    "svg_path": "",
-                    "metrics": dict(zip(df["Metric"], df["Value"])) if not df.empty else {},
-                    "busco_genes_df": pd.DataFrame()
+                    "busco_db": str(busco_db_from_name),
+                    "svg_path": svg_path,
+                    "metrics": dict(zip(metrics_df["Metric"], metrics_df["Value"])) if not metrics_df.empty else {},
+                    "busco_genes_df": genes_df
                 }]
             )
             os.makedirs(os.path.dirname(outpath), exist_ok=True)
@@ -821,19 +961,26 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # For FINAL BUSCO
     for busco_type in ("FIRST", "SECOND"):
-        df = sample_stats_dict.get(f"FINAL_{busco_type}_BUSCO_DF", pd.DataFrame())
+        metrics_df = sample_stats_dict.get(f"FINAL_{busco_type}_BUSCO_DF", pd.DataFrame())
+        genes_df = sample_stats_dict.get(f"FINAL_{busco_type}_BUSCO_GENES_DF", pd.DataFrame())
         outpath = sample_stats_dict.get(f"FINAL_{busco_type}_BUSCO_HTML", "")
         if not outpath:
             continue
+
+        # Extract lineage (= busco_db) from filename: <sample_id>_<busco_db>_EGAP_busco.html
+        fname = os.path.basename(outpath)
+        busco_db_from_name = fname.replace(f"{sample_id}_", "").replace("_EGAP_busco.html", "")
+        svg_path = _find_busco_svg(os.path.dirname(outpath), busco_db_from_name)
+
         html = busco_tmpl.render(
             assembly_name=os.path.basename(outpath).replace("_EGAP_busco.html", ""),
             generated_time=now,
             busco_data=[{
                 "assembly_fasta": "",
-                "busco_db": busco_type.capitalize(),
-                "svg_path": "",
-                "metrics": dict(zip(df["Metric"], df["Value"])) if not df.empty else {},
-                "busco_genes_df": pd.DataFrame()
+                "busco_db": str(busco_db_from_name),
+                "svg_path": svg_path,
+                "metrics": dict(zip(metrics_df["Metric"], metrics_df["Value"])) if not metrics_df.empty else {},
+                "busco_genes_df": genes_df
             }]
         )
         os.makedirs(os.path.dirname(outpath), exist_ok=True)
