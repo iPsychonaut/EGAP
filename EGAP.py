@@ -19,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
-version = "3.3"
+version = "3.3.6"
 
 # --------------------------------------------------------------
 # Updates the input.csv with any .fq -> .fastq
@@ -118,7 +118,7 @@ def locate_bin_dir(required_scripts, search_root):
 # --------------------------------------------------------------
 if __name__ == "__main__":
     # Parse command-line arguments for pipeline configuration
-    parser = argparse.ArgumentParser(description="Run Entheome Genome Assembly Pipeline (EGAP)")
+    parser = argparse.ArgumentParser(description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{version}")
 
     parser.add_argument("--input_csv", "-csv",
                         type=str,
@@ -167,7 +167,7 @@ if __name__ == "__main__":
                          (\033[94mian.bollinger@entheome.org)\033[0m
 
                               \033[92mdraft_assembly.nf\033[0m
-                                version {version}
+                                Version {version}
                                   
  Input-Setup \033[94m-\033[92m>\033[0m Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess
     """)
@@ -432,3 +432,4 @@ if __name__ == "__main__":
             raise RuntimeError(f"html_reporter failed with return code {reporter_return_code}")
     
     print("\nPASS:\tAll samples processed successfully.")
+
