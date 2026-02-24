@@ -10,16 +10,248 @@ CPU threads and RAM resources.
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on Wed Feb 25 2026
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import argparse, sys, time, subprocess, re, os
+
+import argparse
+import sys
+import time
+import subprocess
+import re
+import os
 from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
-version = "3.3.6"
+
+# --------------------------------------------------------------
+# Establish Global Pipeline Settings (i.e. command variables)
+# --------------------------------------------------------------
+VERSION = "3.4.0"
+
+TRIMMOMATIC_SETTINGS = {
+    "mode": "-PE",
+    "phred version": "-phred33",
+    "illuminaclip adapter": "/opt/conda/envs/EGAP_env/share/trimmomatic-0.39-2/adapters/TruSeq3-PE.fa",
+    "fastaWithAdaptersEtc": 2,
+    "seed mismatches": 30,
+    "palindrome clip threshold": 10,
+    "simple clip threshold": 11,
+    "HEADCROP": 0,
+    "CROP": 145,
+    "SLIDINGWINDOW": "50:25",
+    "MINLEN": 125,
+}
+
+BBDUK_SETTINGS = {
+    "ktrim": "-r",
+    "k": 23,
+    "mink": 11,
+    "hdist": 1,
+    "trimpairsevenly": "-tpe",
+    "trimbyoverlap": "-tbo",
+    "qtrim": "-rl",
+    "trimq": 20,
+}
+
+CLUMPIFY_SETTINGS = {
+    "settings": "default",
+}
+
+FILTLONG_SETTINGS = {
+    "min_length": 1000,
+    "min_mean_q": 8,
+    "keep_percent": 90,
+    "coverage": 75,
+    "target_bases": "estimated size (bp) * 75 (coverage)",
+}
+
+MASURCA_SETTINGS = {
+    "configuration file sections": "DATA, PARAMETERS",
+    "graph kmer size": "auto",
+    "use linking mates": "(0 if Hybrid assembly, else 1)",
+    "close gaps": "(0 if Hybrid assembly, else 1)",
+    "mega reads one pass": 0,
+    "limit jump coverage": 300,
+    "ca parameters": "cgwErrorRate=0.15",
+    "jellyfish hash size": "based on the estimated size of the genome provided",
+    "soap assembly": "0 (disabled to force CABOG assembly)",
+    "flye assembly": "0 (disabled to force CABOG assembly)",
+}
+
+SPADES_SETTINGS = {
+    "high-cov. isolate & multi-cell": "--isolate",
+    "coverage cutoff ": "auto",
+}
+
+FLYE_SETTINGS = {
+    "estimated genome size": "est_size",
+    "number of polishing iterations": 3,
+    "collapse alternative haplotypes": "--keep-haplotypes",
+}
+
+HIFIASM_SETTINGS = {
+    "settings": "default",
+}
+
+RACON_SETTINGS = {
+    "settings": "default",
+}
+
+PILON_SETTINGS = {
+    "change file generation": "-changes",
+    "vcf file generation": "-vcf",
+    "tracks file generation": "-tracks",
+    "largest chunksize limit": 5000000,
+    "fix list": "indels, local, snps",
+}
+
+RAGTAG_SETTINGS = {
+    "concatenate unplaced": "-C",
+    "madd suffix to unplaced": "-u",
+}
+
+TGSGAPCLOSER_SETTINGS = {
+    "do not error correct": "-ne",
+}
+
+ABYSSSEALER_SETTINGS = {
+    "pseudoreads length used": 400,
+    "bloom filter size": "500M",
+}
+
+FASTQC_SETTINGS = {
+    "settings": "default",
+}
+
+NANOPLOT_SETTINGS = {
+    "bivariate plots": "kde, dot",
+    "show logarithmic lengths scaling": "--loglength",
+    "N50 mark in read length histogram": "--N50",
+    "log messages to terminal": "--verbose",
+}
+
+BUSCO_SETTINGS = {
+    "mode": "genome",
+    "force overwrite": "-f",
+    "database version": "odb12",
+}
+
+COMPLEASM_SETTINGS = {
+    "settings": "default",
+    "database version": "odb12",
+} 
+
+QUAST_SETTINGS = {
+    "settings": "default",
+}
+
+TIARA_SETTINGS = {
+    "min_length_illumina_only": 1100,
+    "min_length_hybrid": 3000,
+    "probability_cutoff": "0.65,0.65",
+    "first_stage_kmer": 6,
+    "second_stage_kmer": 7,
+    "keep_classes": "eukarya, organelle, unknown",
+    "remove_classes": "bacteria, archaea, prokarya",
+}
+
+
+def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, output_dir):
+    """Return all pipeline settings as a structured dict for reuse (TUI, logs, etc.)."""
+    return {
+        "input-setup settings": {
+            "started at": str(current_moment),
+            "config files": "N/A (running python version)",
+            "container": "N/A (running python version)",
+            "RAM GB": str(ram_gb),
+            "CPU threads": str(cpu_threads),
+            "input csv": str(input_csv),
+            "output to": str(output_dir),
+        },
+        "trimmomatic settings": TRIMMOMATIC_SETTINGS,
+        "bbduk settings": BBDUK_SETTINGS,
+        "clumpify settings": CLUMPIFY_SETTINGS,
+        "filtlong settings": FILTLONG_SETTINGS,
+        "masurca settings": MASURCA_SETTINGS,
+        "spades settings": SPADES_SETTINGS,
+        "flye settings": FLYE_SETTINGS,
+        "hifiasm settings": HIFIASM_SETTINGS,
+        "racon settings": RACON_SETTINGS,
+        "pilon settings": PILON_SETTINGS,
+        "ragtag settings": RAGTAG_SETTINGS,
+        "tgs-gapcloser settings": TGSGAPCLOSER_SETTINGS,
+        "abyss-sealer settings": ABYSSSEALER_SETTINGS,
+        "fastqc settings": FASTQC_SETTINGS,
+        "nanoplot settings": NANOPLOT_SETTINGS,
+        "busco settings": BUSCO_SETTINGS,
+        "compleasm settings": COMPLEASM_SETTINGS,
+        "quast settings": QUAST_SETTINGS,
+        "tiara settings": TIARA_SETTINGS,
+    }
+
+
+def print_nested_dict(data, indent=0,
+                      section_color="\033[92m",
+                      key_color="\033[94m",
+                      reset="\033[0m"):
+    """
+    Recursively print nested dictionaries in a readable, indented format.
+
+    - Top-level dict keys (sections) are printed in section_color.
+    - Nested key/value lines are printed in key_color.
+    """
+    pad = " " * indent
+
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if isinstance(v, dict):
+                # Section header
+                if indent < 5:
+                    print(f"{pad}{section_color}{k}{reset}")
+                else:
+                    print(f"{pad}{key_color}{k}{reset}")
+                print_nested_dict(v, indent=indent + 4,
+                                  section_color=section_color,
+                                  key_color=key_color,
+                                  reset=reset)
+            else:
+                # Leaf item
+                print(f"{pad}{key_color}{str(k):<34}{reset}: {v}")
+    else:
+        # Non-dict fallback
+        print(f"{pad}{data}")
+
+
+def print_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, output_dir,
+                            header=True, divider=True, sleep_s=0.0):
+    """
+    Calls get_pipeline_settings(...) and prints the entire nested structure.
+    Returns the settings dict for reuse in logs, TUI, etc.
+    """
+    settings = get_pipeline_settings(
+        current_moment=current_moment,
+        ram_gb=ram_gb,
+        cpu_threads=cpu_threads,
+        input_csv=input_csv,
+        output_dir=output_dir,
+    )
+
+    if header:
+        print(f"\n\033[91m{'=' * 80}\033[0m\n")
+
+    print_nested_dict(settings, indent=4)
+
+    if divider:
+        print(f"\n\033[91m{'=' * 80}\033[0m\n")
+
+    if sleep_s and sleep_s > 0:
+        time.sleep(sleep_s)
+
+    return settings
+
 
 # --------------------------------------------------------------
 # Updates the input.csv with any .fq -> .fastq
@@ -113,13 +345,13 @@ def locate_bin_dir(required_scripts, search_root):
             return root_path
     return None
 
+
 # --------------------------------------------------------------
 # Orchestrate the Entheome Genome Assembly Pipeline
 # --------------------------------------------------------------
 if __name__ == "__main__":
     # Parse command-line arguments for pipeline configuration
-    parser = argparse.ArgumentParser(description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{version}")
-
+    parser = argparse.ArgumentParser(description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{VERSION}")
     parser.add_argument("--input_csv", "-csv",
                         type=str,
                         required=True,
@@ -144,7 +376,6 @@ if __name__ == "__main__":
     ram_gb      = args.ram_gb
     current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-
     # Print Banner & Parameters
     print(f"""
 \033[91m.---.\033[92m________\\\033[38;5;208m=\033[96m/\033[92m________\033[91m.---.\033[0m 
@@ -164,12 +395,12 @@ if __name__ == "__main__":
 \033[91m`---'\033[92m~~~~~~\033[92m|::\033[94m:\033[96m:\033[94m:\033[92m|~~~~~~\033[91m`---'    \033[92m╚═══════════════════════════════════════════╝\033[0m
 
                     Curated & Maintained by Ian M Bollinger
-                         (\033[94mian.bollinger@entheome.org)\033[0m
+                         (\033[94mian.bollinger@entheome.org\033[0m)
 
-                              \033[92mdraft_assembly.nf\033[0m
-                                Version {version}
+                                   \033[92mEGAP.py\033[0m
+                                Version {VERSION}
                                   
- Input-Setup \033[94m-\033[92m>\033[0m Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess
+   Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Decontaminate \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess \033[94m-\033[92m>\033[0m Report
     """)
     time.sleep(1.5)
     print(f"""
@@ -319,6 +550,19 @@ if __name__ == "__main__":
 
     \033[0m*: Currently disabled since version 3.0.0
 
+    \033[96m-----------------------------------------------------------------------\033[0m
+    """)
+    time.sleep(0.25)
+    print("""
+    \033[92mtiara settings
+       \033[94mmin_length (Illumina-only)        \033[0m: 1100 bp
+       \033[94mmin_length (Hybrid/Long-read)     \033[0m: 3000 bp
+       \033[94mprobability_cutoff               \033[0m: 0.65,0.65
+       \033[94mfirst_stage_kmer                 \033[0m: 6
+       \033[94msecond_stage_kmer                \033[0m: 7
+       \033[94mkeep_classes                     \033[0m: eukarya, organelle, unknown
+       \033[94mremove_classes                   \033[0m: bacteria, archaea, prokarya
+
 \033[91m================================================================================\033[0m
     """)
     print(f"""
@@ -339,18 +583,32 @@ if __name__ == "__main__":
 \033[91m`---'\033[92m~~~~~~\033[92m|::\033[94m:\033[96m:\033[94m:\033[92m|~~~~~~\033[91m`---'    \033[92m╚═══════════════════════════════════════════╝\033[0m
 
                     Curated & Maintained by Ian M Bollinger
-                         (\033[94mian.bollinger@entheome.org)\033[0m
+                         (\033[94mian.bollinger@entheome.org\033[0m)
 
-                              \033[92mdraft_assembly.nf\033[0m
-                                version {version}
+                                   \033[92mEGAP.py\033[0m
+                                Version {VERSION}
                                   
-\033[91m================================================================================\033[0m
+   Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Decontaminate \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess \033[94m-\033[92m>\033[0m Report
     """)
+    time.sleep(1.5)
+
+
+    # Print settings from the structured dict (single source of truth)
+    pipeline_settings = print_pipeline_settings(
+        current_moment=current_moment,
+        ram_gb=ram_gb,
+        cpu_threads=cpu_threads,
+        input_csv=input_csv,
+        output_dir=output_dir,
+        header=True,
+        divider=True,
+        sleep_s=0.0,
+    )
    
-    processes = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont", 
+    processes = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont",
                  "preprocess_pacbio", "assemble_masurca", "assemble_flye",
                  "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-                 "polish_assembly", "curate_assembly"]
+                 "decontaminate_assembly", "polish_assembly", "curate_assembly"]
 
     # Determine project root and locate the bin/ directory there
     this_file   = Path(__file__).resolve()
@@ -432,4 +690,3 @@ if __name__ == "__main__":
             raise RuntimeError(f"html_reporter failed with return code {reporter_return_code}")
     
     print("\nPASS:\tAll samples processed successfully.")
-

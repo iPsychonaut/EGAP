@@ -3,14 +3,16 @@
 """
 compare_assemblies.py
 
-This script compares assemblies from MaSuRCA, SPAdes, Flye, and Hifiasm, selecting the best based on BUSCO completeness, contig count, and N50.
+This script compares assemblies from MaSuRCA, SPAdes, Flye, and Hifiasm, selecting
+the best based on BUSCO completeness, contig count, and N50.
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on Wed Feb 25 2026
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
+
 import os
 import sys
 import shutil
@@ -20,6 +22,7 @@ from pathlib import Path
 from collections import Counter
 from utilities import run_subprocess_cmd, get_current_row_data
 from Bio import SeqIO
+from qc_assessment import run_lineage_eval
 
 
 # --------------------------------------------------------------
@@ -73,57 +76,28 @@ def get_busco_score(assembly, db, cpu_threads, sample_dir):
     Returns:
         float or None: completeness (S+D) percentage, or None on failure.
     """
-    # 1) sanity check
-    if not validate_fasta(assembly):
-        print(f"ERROR:\tInvalid assembly for BUSCO: {assembly}")
-        return None
+    # This dict is how your QC system communicates results
+    stats = {}
 
-    # 2) assembler folder is where the assembly lives
-    asm_dir = os.path.dirname(assembly)
-
-    # 3) basename without .fasta
-    base = os.path.splitext(os.path.basename(assembly))[0]
-
-    # 4) BUSCO writes into <asm_dir>/<base>_<db>_busco
-    out_dir = os.path.join(asm_dir, f"{base}_{db}_busco")
-    os.makedirs(out_dir, exist_ok=True)
-
-    # 5) expected summary path
-    summary = os.path.join(
-        out_dir,
-        f"short_summary.specific.{db}_odb12.{base}_{db}_busco.txt"
+    # busco_count can be anything here — it's just a label
+    run_lineage_eval(
+        assembly_path=assembly,
+        sample_id="temp",
+        sample_stats_dict=stats,
+        busco_count="first",
+        busco_odb=db,
+        assembly_type="assembly",
+        cpu_threads=cpu_threads
     )
 
-    # 6) skip if it’s already there
-    if os.path.exists(summary):
-        print(f"SKIP:\tBUSCO summary already exists: {summary}")
-    else:
-        # run BUSCO with --out_path asm_dir so it lands in the same assembler folder
-        busco_cmd = [
-            "busco", "-m", "genome",
-            "-i", assembly, "-f",
-            "-l", db,
-            "-c", str(cpu_threads),
-            "-o", f"{base}_{db}_busco",
-            "--out_path", asm_dir
-        ]
-        print(f"DEBUG - Running BUSCO: {' '.join(busco_cmd)}")
-        rc = run_subprocess_cmd(busco_cmd, shell_check=False)
-        if rc != 0:
-            print(f"WARN:\tBUSCO failed for {assembly} (code {rc})")
-            return None
+    # Your QC code always guarantees these keys if successful
+    s = stats.get("FIRST_BUSCO_S", 0.0)
+    d = stats.get("FIRST_BUSCO_D", 0.0)
 
-    # 7) parse completeness: look for the first "C:XX.X%" line
-    try:
-        with open(summary) as fh:
-            for line in fh:
-                if "C:" in line and "%" in line:
-                    # e.g. "C:98.3%[S:97.1%,D:1.2%]..."
-                    return float(line.split("%")[0].split(":")[1])
-    except FileNotFoundError:
-        print(f"ERROR:\tBUSCO summary not found: {summary}")
+    if s == 0.0 and d == 0.0:
+        return None
 
-    return None
+    return s + d
 
 
 # --------------------------------------------------------------
