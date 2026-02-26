@@ -9,18 +9,22 @@ and retrieves iNaturalist observation data with reverse geocoding for location d
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on Wed Feb 25 2026
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 
-import os, sys, warnings, requests
+import os
+import sys
+import warnings
+import requests
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
 from utilities import get_current_row_data, calculate_genome_coverage
+
 
 # ignore only the Data Validation extension warning from openpyxl
 warnings.filterwarnings("ignore",

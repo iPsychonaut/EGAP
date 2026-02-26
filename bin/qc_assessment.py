@@ -8,10 +8,11 @@ analyzes and classifies the assembly, and finalizes renaming and compression.
 
 Created on Wed Aug 16 2023
 
-Updated on Mon Sept 8 2025
+Updated on Wed Feb 25 2026
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
+
 import os
 import sys
 import shutil
@@ -21,6 +22,7 @@ from Bio import SeqIO
 from collections import Counter
 import matplotlib.pyplot as plt
 from utilities import run_subprocess_cmd, pigz_compress, pigz_decompress, get_current_row_data, analyze_nanostats
+
 
 # === Global BUSCO/Compleasm toggle ===
 # If True, prefer Compleasm over BUSCO for completeness analysis.
@@ -273,9 +275,6 @@ def classify_assembly(sample_stats):
 # --------------------------------------------------------------
 def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, assembly_type,
                output_tag=None, out_dir=None):
-    import os, re
-    import pandas as pd
-    import matplotlib.pyplot as plt
 
     print(f"Generating BUSCO plot for {input_busco_tsv}...")
 
