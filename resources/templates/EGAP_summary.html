@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ sample_id }} Final Assembly Run Report</title>
+  <style>
+    /* Base font and colors */
+    @import url('https://fonts.googleapis.com/css2?family=Avenir&display=swap');
+    body {
+      font-family: 'Avenir', sans-serif;
+      color: #2A2035FF;
+      background-color: #FFFFFFFF;
+      margin: 0;
+    }
+    /* Fixed top banner */
+    .banner-section {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 200px;
+      background-color: #FFFFFFFF;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      box-sizing: border-box;
+      z-index: 1000;
+      border-bottom: 1px solid #DFDBDDFF;
+    }
+    .banner-left {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .banner-section h1 {
+      margin: 0;
+      font-size: 1.8em;
+      color: #2A2035FF;
+    }
+    .generated-time {
+      font-size: 0.9em;
+      color: #619B8AFFFF;
+      margin-top: 4px;
+    }
+    .banner-section img {
+      height: 200px;
+      width: auto;
+    }
+    /* Main content wrapper with top padding to avoid banner */
+    .content {
+      padding: 220px 20px 20px;
+      box-sizing: border-box;
+    }
+    /* Collapsible sections using <details> */
+    details {
+      margin-bottom: 1em;
+      border: 1px solid #DFDBDDFF;
+      border-radius: 4px;
+      background: #FFFFFFFF;
+    }
+    details, details > div, details > div * {
+      color: #2A2035FF !important;
+    }
+    details > summary {
+      font-weight: bold;
+      cursor: pointer;
+      padding: 0.5em;
+      background-color: #233D4DFF;
+      color: #FFFFFFFF !important;
+      border-radius: 4px;
+      outline: none;
+    }
+    summary::-webkit-details-marker { display: none; }
+    details > div { padding: 0.5em 1em; }
+    /* Table styling */
+    table { border-collapse: collapse; width: 100%; margin-top: 0.5em; }
+    th, td { border: 1px solid #DFDBDDFF; padding: 6px 10px; text-align: left; }
+    th { background-color: #619B8AFF; color: #FFFFFFFF !important; }
+    tr:nth-child(even) { background-color: #DFDBDDFF; }
+    tr:nth-child(odd)  { background-color: #FFFFFFFF; }
+    a { color: #FE7F2DFF; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    /* Ensure headers inside details tables are white */
+    details > div table th { color: #FFFFFFFF !important; }
+  </style>
+</head>
+<body>
+  <!-- Fixed banner header -->
+  <header class="banner-section">
+    <div class="banner-left">
+      <h1>{{ sample_id }} <br> Final Assembly Run Report</h1>
+      <div class="generated-time">Generated on: {{ generated_time }}</div>
+    </div>
+    <a href="https://github.com/iPsychonaut/EGAP" target="_blank" rel="noopener noreferrer">
+      <img src="https://github.com/iPsychonaut/EGAP/blob/main/resources/EGAP_banner.png?raw=true" alt="EGAP Banner" />
+    </a>
+  </header>
+
+  <div class="content">
+    <details open>
+      <summary>iNaturalist Observation Summary</summary>
+      <div style="display: flex; align-items: flex-start; gap: 20px; margin-top: 1em;">
+        <!-- LEFT: thumbnail + link -->
+        <div>
+          <img src="{{ inat_photo }}" 
+               alt="iNaturalist Photo" 
+               style="max-width:250px; border:1px solid #DFDBDDFF; border-radius:4px;" />
+          {% if inat_link %}
+          <p style="margin-top:0.5em;">
+            <a href="{{ inat_link }}" target="_blank">View on iNaturalist</a>
+          </p>
+          {% endif %}
+        </div>
+    
+        <!-- RIGHT: metrics table -->
+        <table style="flex: 1;">
+          <thead>
+            <tr><th>Metric</th><th>Value</th></tr>
+          </thead>
+          <tbody>
+            {% for m in inat_metrics %}
+            <tr>
+              <td>{{ m }}</td>
+              <td>{{ inat_map.get(m, '-') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <details>
+      <summary>Input Preprocessing</summary>
+      <div>
+        <!-- ONT Reads Summary -->
+        <details>
+          <summary>ONT Reads Summary</summary>
+          <div>
+            <p><strong>Full reports:</strong>
+              {% if ont_raw_link %}<a href="{{ ont_raw_link }}">Raw</a>{% else %}Raw{% endif %} |
+              {% if ont_filt_link %}<a href="{{ ont_filt_link }}">Filtered</a>{% else %}Filtered{% endif %} |
+              {% if ont_corr_link %}<a href="{{ ont_corr_link }}">Corrected</a>{% else %}Corrected{% endif %}
+            </p>
+            <table>
+              <thead>
+                <tr><th>Metric</th><th>Raw</th><th>Filtered</th><th>Corrected</th></tr>
+              </thead>
+              <tbody>
+              {% for m in ont_metrics %}
+                <tr>
+                  <td>{{ m }}</td>
+                  <td>{{ ont_raw_map.get(m, '-') }}</td>
+                  <td>{{ ont_filt_map.get(m, '-') }}</td>
+                  <td>{{ ont_corr_map.get(m, '-') }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <!-- Illumina Reads Summary -->
+        <details open>
+          <summary>Illumina Reads Summary</summary>
+          <div>
+            <p><strong>Raw vs. Deduplicated (Forward):</strong>
+              {% if illumina_raw_f_link %}<a href="{{ illumina_raw_f_link }}">Raw</a>{% else %}Raw{% endif %} |
+              {% if illumina_dedup_f_link %}<a href="{{ illumina_dedup_f_link }}">Dedup</a>{% else %}Dedup{% endif %}
+            </p>
+            <table>
+              <thead>
+                <tr><th>Metric</th><th>Raw</th><th>Dedup</th></tr>
+              </thead>
+              <tbody>
+              {% for m in illumina_metrics %}
+                <tr>
+                  <td>{{ m }}</td>
+                  <td>{{ illumina_raw_f_map.get(m, '-') }}</td>
+                  <td>{{ illumina_dedup_f_map.get(m, '-') }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+            <p><strong>Raw vs. Deduplicated (Reverse):</strong>
+              {% if illumina_raw_r_link %}<a href="{{ illumina_raw_r_link }}">Raw</a>{% else %}Raw{% endif %} |
+              {% if illumina_dedup_r_link %}<a href="{{ illumina_dedup_r_link }}">Dedup</a>{% else %}Dedup{% endif %}
+            </p>
+            <table>
+              <thead>
+                <tr><th>Metric</th><th>Raw</th><th>Dedup</th></tr>
+              </thead>
+              <tbody>
+              {% for m in illumina_metrics %}
+                <tr>
+                  <td>{{ m }}</td>
+                  <td>{{ illumina_raw_r_map.get(m, '-') }}</td>
+                  <td>{{ illumina_dedup_r_map.get(m, '-') }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <!-- PacBio Reads Summary -->
+        <details open>
+          <summary>PacBio Reads Summary</summary>
+          <div>
+            <p><strong>Full reports:</strong>
+              {% if pacbio_raw_link %}<a href="{{ pacbio_raw_link }}">Raw</a>{% else %}Raw{% endif %} |
+              {% if pacbio_filt_link %}<a href="{{ pacbio_filt_link }}">Filtered</a>{% else %}Filtered{% endif %}
+            </p>
+            <table>
+              <thead>
+                <tr><th>Metric</th><th>Raw</th><th>Filtered</th></tr>
+              </thead>
+              <tbody>
+              {% for m in pacbio_metrics %}
+                <tr>
+                  <td>{{ m }}</td>
+                  <td>{{ pacbio_raw_map.get(m, '-') }}</td>
+                  <td>{{ pacbio_filt_map.get(m, '-') }}</td>
+                </tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+    </details>
+
+    <!-- Initial Assembly -->
+      <details>
+      <summary>Initial Assembly</summary>
+      <div>
+        <p><strong>QUAST Reports:</strong>
+          {% if masurca_quast_link %}<a href="{{ masurca_quast_link }}">MaSuRCA</a>{% else %}MaSuRCA{% endif %} |
+          {% if flye_quast_link %}<a href="{{ flye_quast_link }}">Flye</a>{% else %}Flye{% endif %} |
+          {% if spades_quast_link %}<a href="{{ spades_quast_link }}">SPAdes</a>{% else %}SPAdes{% endif %} |
+          {% if hifiasm_quast_link %}<a href="{{ hifiasm_quast_link }}">HiFiAsm</a>{% else %}HiFiAsm{% endif %}
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th><th>MaSuRCA</th><th>Flye</th><th>SPAdes</th><th>HiFiAsm</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for metric in quast_metrics %}
+            <tr>
+              <td>{{ metric }}</td>
+              <td>{{ masurca_quast_map.get(metric, '-') }}</td>
+              <td>{{ flye_quast_map.get(metric, '-') }}</td>
+              <td>{{ spades_quast_map.get(metric, '-') }}</td>
+              <td>{{ hifiasm_quast_map.get(metric, '-') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p><strong>First BUSCO Completeness:</strong>
+          {% if masurca_first_busco_link %}<a href="{{ masurca_first_busco_link }}">MaSuRCA</a>{% else %}MaSuRCA{% endif %} |
+          {% if flye_first_busco_link %}<a href="{{ flye_first_busco_link }}">Flye</a>{% else %}Flye{% endif %} |
+          {% if spades_first_busco_link %}<a href="{{ spades_first_busco_link }}">SPAdes</a>{% else %}SPAdes{% endif %} |
+          {% if hifiasm_first_busco_link %}<a href="{{ hifiasm_first_busco_link }}">HiFiAsm</a>{% else %}HiFiAsm{% endif %}
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th><th>MaSuRCA</th><th>Flye</th><th>SPAdes</th><th>HiFiAsm</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for metric in busco_metrics %}
+            <tr>
+              <td>{{ metric }}</td>
+              <td>
+                {% if masurca_first_busco_map.get(metric) %}
+                  <a href="{{ masurca_first_busco_link }}">{{ masurca_first_busco_map.get(metric, '-') }}</a>
+                {% else %}
+                  {{ masurca_first_busco_map.get(metric, '-') }}
+                {% endif %}
+              </td>
+              <td>
+                {% if flye_first_busco_map.get(metric) %}
+                  <a href="{{ flye_first_busco_link }}">{{ flye_first_busco_map.get(metric, '-') }}</a>
+                {% else %}
+                  {{ flye_first_busco_map.get(metric, '-') }}
+                {% endif %}
+              </td>
+              <td>
+                {% if spades_first_busco_map.get(metric) %}
+                  <a href="{{ spades_first_busco_link }}">{{ spades_first_busco_map.get(metric, '-') }}</a>
+                {% else %}
+                  {{ spades_first_busco_map.get(metric, '-') }}
+                {% endif %}
+              </td>
+              <td>
+                {% if hifiasm_first_busco_map.get(metric) %}
+                  <a href="{{ hifiasm_first_busco_link }}">{{ hifiasm_first_busco_map.get(metric, '-') }}</a>
+                {% else %}
+                  {{ hifiasm_first_busco_map.get(metric, '-') }}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p><strong>Second BUSCO Completeness:</strong>
+          {% if masurca_second_busco_link %}<a href="{{ masurca_second_busco_link }}">MaSuRCA</a>{% else %}MaSuRCA{% endif %} |
+          {% if flye_second_busco_link %}<a href="{{ flye_second_busco_link }}">Flye</a>{% else %}Flye{% endif %} |
+          {% if spades_second_busco_link %}<a href="{{ spades_second_busco_link }}">SPAdes</a>{% else %}SPAdes{% endif %} |
+          {% if hifiasm_second_busco_link %}<a href="{{ hifiasm_second_busco_link }}">HiFiAsm</a>{% else %}HiFiAsm{% endif %}
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Metric</th><th>MaSuRCA</th><th>Flye</th><th>SPAdes</th><th>HiFiAsm</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for metric in busco_metrics %}
+            <tr>
+              <td>{{ metric }}</td>
+              <td>
+                {% if masurca_second_busco_map.get(metric) %}
+                  <a href="{{ masurca_second_busco_link }}">{{ masurca_second_busco_map.get(metric, '-') }}</a>
+                {% else %}
+                  {{ masurca_second_busco_map.get(metric, '-') }}
+                {% endif %}
+              </td>
+              <td>
+                {% if flye_second_busco_map.get(metric) %}
+                  <a href="{{ flye_second_busco_link }}">{{ flye_second_busco_map.get(metric, '-') }}</a>
+                {% else %}
+                  {{ flye_second_busco_map.get(metric, '-') }}
+                {% endif %}
+              </td>
+              <td>
+                {% if spades_second_busco_map.get(metric) %}
+                  <a href="{{ spades_second_busco_link }}">{{ spades_second_busco_map.get(metric, '-') }}</a>
+                {% else %}
+                  {{ spades_second_busco_map.get(metric, '-') }}
+                {% endif %}
+              </td>
+              <td>
+                {% if hifiasm_second_busco_map.get(metric) %}
+                  <a href="{{ hifiasm_second_busco_link }}">{{ hifiasm_second_busco_map.get(metric, '-') }}</a>
+                {% else %}
+                  {{ hifiasm_second_busco_map.get(metric, '-') }}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+
+    <!-- Final Assembly -->
+    <details open>
+      <summary>Final Assembly</summary>
+          <div>
+            <p><strong>QUAST Report:</strong>
+              {% if final_quast_link %}<a href="{{ final_quast_link }}">Final</a>{% else %}Final{% endif %}
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Metric</th><th>Final</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for metric in quast_metrics %}
+                <tr>
+                  <td>{{ metric }}</td>
+                  <td>{{ final_quast_map.get(metric, '-') }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <p><strong>First BUSCO Completeness:</strong>
+              {% if final_first_busco_link %}<a href="{{ final_first_busco_link }}">Final</a>{% else %}Final{% endif %}
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Metric</th><th>Final</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for metric in busco_metrics %}
+                <tr>
+                  <td>{{ metric }}</td>
+                  <td>
+                    {% if final_first_busco_map.get(metric) %}
+                      <a href="{{ final_first_busco_link }}">{{ final_first_busco_map.get(metric, '-') }}</a>
+                    {% else %}
+                      {{ final_first_busco_map.get(metric, '-') }}
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            <p><strong>Second BUSCO Completeness:</strong>
+              {% if final_second_busco_link %}<a href="{{ final_second_busco_link }}">Final</a>{% else %}Final{% endif %}
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Metric</th><th>Final</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for metric in busco_metrics %}
+                <tr>
+                  <td>{{ metric }}</td>
+                  <td>
+                    {% if final_second_busco_map.get(metric) %}
+                      <a href="{{ final_second_busco_link }}">{{ final_second_busco_map.get(metric, '-') }}</a>
+                    {% else %}
+                      {{ final_second_busco_map.get(metric, '-') }}
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+    </details>
+
+  </div>
+</body>
+</html>
