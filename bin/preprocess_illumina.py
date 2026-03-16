@@ -139,9 +139,12 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             ]
             _ = run_subprocess_cmd(prefetch_cmd, False)
 
+            # Use the pre-fetched path only if prefetch succeeded and the file exists;
+            # otherwise fall back to passing the bare accession so fasterq-dump downloads directly.
+            sra_path = illumina_dir / sra_id
+            fq_input = f"'{sra_path}'" if sra_path.exists() else sra_id
+
             # 2) fasterq-dump with explicit output dir AND temp dir in <Illumina/>.
-            #    Many environments honor TMPDIR for large temps; we set it only for this call.
-            #    We also set VDB_CONFIG to avoid surprises from user/global configs.
             env_prefix = (
                 f"TMPDIR='{illumina_dir}' "
                 f"VDB_CONFIG='{illumina_dir}' "
@@ -151,19 +154,20 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 "fasterq-dump "
                 f"--split-files -e {int(cpu_threads)} "
                 f"-O '{illumina_dir}' "
-                f"'{illumina_dir}/{sra_id}'"
+                f"{fq_input}"
             )
             ret = run_subprocess_cmd(fq_cmd, True)
 
             # Fallback to fastq-dump if fasterq-dump failed or outputs missing
             if ret != 0 or not (r1.exists() and r2.exists()):
                 print("WARN:\tfasterq-dump failed or files not found; trying fastq-dump fallback...")
+                fq2_input = f"'{sra_path}'" if sra_path.exists() else sra_id
                 fq2_cmd = (
                     env_prefix +
                     "fastq-dump "
                     "--split-files "
                     f"-O '{illumina_dir}' "
-                    f"'{illumina_dir}/{sra_id}'"
+                    f"{fq2_input}"
                 )
                 ret2 = run_subprocess_cmd(fq2_cmd, True)
 
