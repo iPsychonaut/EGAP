@@ -319,6 +319,8 @@ def get_current_row_data(input_df, sample_id):
     Returns:
         tuple: (filtered DataFrame row, row index list, sample statistics dictionary).
     """
+    # Normalize "None" strings (written by na_rep="None") back to NaN so pd.isna() works correctly
+    input_df = input_df.replace("None", float("nan"))
     # Filter the DataFrame for rows where the "SAMPLE_ID" column equals the provided sample_id
     current_row = input_df[input_df["SAMPLE_ID"] == sample_id]
     sample_stats_dict = gen_sample_stats_dict(current_row)

@@ -52,17 +52,15 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
 
-    # Pull fields (normalize NaNs and "None"/"nan" strings → None)
-    _EMPTY = {"", "nan", "none"}
-
+    # Pull fields (normalize NaNs → None)
     ref_seq_gca = None
     tmp = current_series.get("REF_SEQ_GCA")
-    if pd.notna(tmp) and str(tmp).strip().lower() not in _EMPTY:
+    if pd.notna(tmp):
         ref_seq_gca = str(tmp).strip()
 
     ref_seq = None
     tmp = current_series.get("REF_SEQ")
-    if pd.notna(tmp) and str(tmp).strip().lower() not in _EMPTY:
+    if pd.notna(tmp):
         ref_seq = str(tmp).strip()
 
     species_id = str(current_series["SPECIES_ID"]).strip()
