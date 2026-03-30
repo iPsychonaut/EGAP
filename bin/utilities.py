@@ -17,6 +17,9 @@ from Bio import SeqIO
 from pathlib import Path
 from typing import List
 
+DEFAULT_LOG_FILE = None
+ENVIRONMENT_TYPE = None
+
 
 # --------------------------------------------------------------
 # Catches and unzips compressed files for FASTQ
@@ -160,20 +163,20 @@ def run_subprocess_cmd(cmd_list, shell_check):
         int: The subprocess return code.
     """
     if isinstance(cmd_list, str):
-        print(f"CMD:\t{cmd_list}")
+        log_print(f"CMD:\t{cmd_list}")
         process = subprocess.Popen(cmd_list, shell=shell_check, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)
     else:
-        print(f"CMD:\t{' '.join(cmd_list)}")
+        log_print(f"CMD:\t{' '.join(cmd_list)}")
         process = subprocess.Popen(cmd_list, shell=shell_check, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)
     for line in process.stdout:
-        print(line, end="")
+        log_print(line.rstrip())
     process.wait()
     if process.returncode != 0:
-        print(f"NOTE:\tCommand failed with return code {process.returncode}")
+        log_print(f"NOTE:\tCommand failed with return code {process.returncode}")
     else:
-        print(f"PASS:\tSuccessfully processed command: {' '.join(cmd_list) if isinstance(cmd_list, list) else cmd_list}")
+        log_print(f"PASS:\tSuccessfully processed command: {' '.join(cmd_list) if isinstance(cmd_list, list) else cmd_list}")
     return process.returncode
 
 

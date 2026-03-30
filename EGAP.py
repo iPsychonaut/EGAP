@@ -25,6 +25,10 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
+# Make utilities importable from bin/
+sys.path.insert(0, str(Path(__file__).resolve().parent / "bin"))
+from utilities import initialize_logging_environment, log_print
+
 
 # --------------------------------------------------------------
 # Establish Global Pipeline Settings (i.e. command variables)
@@ -363,6 +367,8 @@ if __name__ == "__main__":
     ram_gb      = args.ram_gb
     current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    initialize_logging_environment(output_dir)
+
     # Print Banner & Parameters
     print(f"""
 \033[91m.---.\033[92m________\\\033[38;5;208m=\033[96m/\033[92m________\033[91m.---.\033[0m 
@@ -618,7 +624,7 @@ if __name__ == "__main__":
                    output_dir,
                    str(cpu_threads),
                    str(ram_gb)]
-            print(f"\n→ Running {proc}: {' '.join(current_cmd)}\n")
+            log_print(f"NOTE:\t→ Running {proc}: {' '.join(current_cmd)}")
             current_process = subprocess.Popen(current_cmd)
             current_return_code = current_process.wait()
             if current_return_code != 0:
@@ -638,7 +644,7 @@ if __name__ == "__main__":
                   output_dir,
                   str(cpu_threads),
                   str(ram_gb)]
-        print(f"\n→ Running qc_assessment: {' '.join(qc_cmd)}\n")
+        log_print(f"NOTE:\t→ Running qc_assessment: {' '.join(qc_cmd)}")
         qc_process = subprocess.Popen(qc_cmd)
         qc_return_code = qc_process.wait()
         if qc_return_code != 0:
@@ -657,10 +663,10 @@ if __name__ == "__main__":
                         output_dir,
                         str(cpu_threads),
                         str(ram_gb)]
-        print(f"\n→ Running html_reporter: {' '.join(reporter_cmd)}\n")
+        log_print(f"NOTE:\t→ Running html_reporter: {' '.join(reporter_cmd)}")
         reporter_process = subprocess.Popen(reporter_cmd)
         reporter_return_code = reporter_process.wait()
         if reporter_return_code != 0:
             raise RuntimeError(f"html_reporter failed with return code {reporter_return_code}")
     
-    print("\nPASS:\tAll samples processed successfully.")
+    log_print("PASS:\tAll samples processed successfully.")

@@ -21,7 +21,7 @@ import pandas as pd
 from Bio import SeqIO
 from collections import Counter
 import matplotlib.pyplot as plt
-from utilities import run_subprocess_cmd, pigz_compress, pigz_decompress, get_current_row_data, analyze_nanostats
+from utilities import run_subprocess_cmd, pigz_compress, pigz_decompress, get_current_row_data, analyze_nanostats, initialize_logging_environment, log_print
 
 
 # === Global BUSCO/Compleasm toggle ===
@@ -65,7 +65,7 @@ def run_lineage_eval(assembly_path: str,
     Respects USE_COMPLEASM and will optionally fall back to BUSCO.
     """
     if USE_COMPLEASM:
-        print("INFO:\tUsing Compleasm for BUSCO-like analysis.")
+        log_print("INFO:\tUsing Compleasm for BUSCO-like analysis.")
         try:
             compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
                                busco_count, busco_odb, assembly_type, cpu_threads)
@@ -78,18 +78,18 @@ def run_lineage_eval(assembly_path: str,
                 (f"{up}_BUSCO_S" in sample_stats_dict and f"{up}_BUSCO_D" in sample_stats_dict)
             )
             if not got_any and FALLBACK_TO_BUSCO_ON_FAIL:
-                print("WARN:\tCompleasm produced no metrics; falling back to BUSCO.")
+                log_print("WARN:\tCompleasm produced no metrics; falling back to BUSCO.")
                 busco_assembly(assembly_path, sample_id, sample_stats_dict,
                                busco_count, busco_odb, assembly_type, cpu_threads)
 
         except Exception as e:
-            print(f"WARN:\tCompleasm raised an exception: {e}")
+            log_print(f"WARN:\tCompleasm raised an exception: {e}")
             if FALLBACK_TO_BUSCO_ON_FAIL:
-                print("WARN:\tFalling back to BUSCO.")
+                log_print("WARN:\tFalling back to BUSCO.")
                 busco_assembly(assembly_path, sample_id, sample_stats_dict,
                                busco_count, busco_odb, assembly_type, cpu_threads)
     else:
-        print("INFO:\tUsing BUSCO for completeness analysis.")
+        log_print("INFO:\tUsing BUSCO for completeness analysis.")
         busco_assembly(assembly_path, sample_id, sample_stats_dict,
                        busco_count, busco_odb, assembly_type, cpu_threads)
 
@@ -108,23 +108,23 @@ def validate_fasta(file_path):
         bool: True if valid, False otherwise.
     """
     if not os.path.exists(file_path):
-        print(f"ERROR:\tFASTA file not found: {file_path}")
+        log_print(f"ERROR:\tFASTA file not found: {file_path}")
         return False
     if os.path.getsize(file_path) < 100:
-        print(f"ERROR:\tFASTA file is suspiciously small: {file_path}")
+        log_print(f"ERROR:\tFASTA file is suspiciously small: {file_path}")
         return False
     try:
         with open(file_path, "r") as f:
             for record in SeqIO.parse(f, "fasta"):
                 if not record.seq:
-                    print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
+                    log_print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
                     return False
                 if not all(c.upper() in "ATCGN" for c in record.seq):
-                    print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
+                    log_print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
                     return False
                 return True
     except Exception as e:
-        print(f"ERROR:\tInvalid FASTA format in {file_path}: {str(e)}")
+        log_print(f"ERROR:\tInvalid FASTA format in {file_path}: {str(e)}")
         return False
     return False
 
@@ -147,13 +147,13 @@ def nanoplot_qc_reads(INPUT_READS, READS_ORIGIN, CPU_THREADS, sample_stats_dict)
     Returns:
         dict: Updated sample statistics dictionary with NanoPlot metrics.
     """
-    print(f"NanoPlotting reads: {INPUT_READS}...")
+    log_print(f"NanoPlotting reads: {INPUT_READS}...")
     output_dir = os.path.join(os.path.dirname(INPUT_READS), f"{READS_ORIGIN}nanoplot_analysis")
-    print(f"DEBUG - output_dir - {output_dir}")
+    log_print(f"DEBUG - output_dir - {output_dir}")
     os.makedirs(output_dir, exist_ok=True)
     nanoplot_out_file = os.path.join(output_dir, f"{READS_ORIGIN}NanoStats.txt")
     if os.path.exists(nanoplot_out_file):
-        print(f"SKIP:\tNanoPlot output already exists: {nanoplot_out_file}.")
+        log_print(f"SKIP:\tNanoPlot output already exists: {nanoplot_out_file}.")
     else:
         raw_nanoplot_cmd = ["NanoPlot", "--fastq", INPUT_READS, "-t", str(CPU_THREADS),
                             "-o", output_dir, "--plots", "kde", "dot", "--loglength",
@@ -161,7 +161,7 @@ def nanoplot_qc_reads(INPUT_READS, READS_ORIGIN, CPU_THREADS, sample_stats_dict)
                             "--prefix", READS_ORIGIN, "--verbose"]
         result = run_subprocess_cmd(raw_nanoplot_cmd, shell_check=False)
         if result != 0:
-            print(f"WARN:\tNanoPlot failed with return code {result}")
+            log_print(f"WARN:\tNanoPlot failed with return code {result}")
 
     sample_stats_dict = analyze_nanostats(READS_ORIGIN, nanoplot_out_file, sample_stats_dict)
     return sample_stats_dict
@@ -276,10 +276,10 @@ def classify_assembly(sample_stats):
 def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, assembly_type,
                output_tag=None, out_dir=None):
 
-    print(f"Generating BUSCO plot for {input_busco_tsv}...")
+    log_print(f"Generating BUSCO plot for {input_busco_tsv}...")
 
     if not os.path.exists(input_busco_tsv):
-        print(f"ERROR:\tBUSCO TSV not found: {input_busco_tsv}. Skipping plot generation.")
+        log_print(f"ERROR:\tBUSCO TSV not found: {input_busco_tsv}. Skipping plot generation.")
         return
 
     # Where to write, and what to name the plot
@@ -308,7 +308,7 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
             if "Sequence" not in df.columns and "Contig" in df.columns:
                 df = df.rename(columns={"Contig": "Sequence"})
             if not {"Sequence","Status"}.issubset(df.columns):
-                print("ERROR:\tBUSCO TSV missing 'Sequence'/'Status'.")
+                log_print("ERROR:\tBUSCO TSV missing 'Sequence'/'Status'.")
                 return
         else:
             # Try BUSCO-like table first (what you pass now)
@@ -350,7 +350,7 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
                 i_cnt = _get_count("I", chosen)
                 total = s_cnt + d_cnt + f_cnt + i_cnt
                 if total == 0:
-                    print("WARNING: Compleasm summary has zero S/D/F/I.")
+                    log_print("WARNING: Compleasm summary has zero S/D/F/I.")
                     _save_no_data(); return
 
                 asm_name = os.path.splitext(os.path.basename(input_fasta or "assembly"))[0] or "assembly"
@@ -362,11 +362,11 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
                 )
                 df = pd.DataFrame.from_records(rows, dtype=str)
     except Exception as e:
-        print(f"ERROR:\tFailed to read/normalize TSV {input_busco_tsv}: {e}")
+        log_print(f"ERROR:\tFailed to read/normalize TSV {input_busco_tsv}: {e}")
         return
 
     if df.empty:
-        print("WARNING: BUSCO input is empty.")
+        log_print("WARNING: BUSCO input is empty.")
         _save_no_data(); return
 
     # --- Plot ---
@@ -376,7 +376,7 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
     try:
         status_counts = df.pivot_table(index='Sequence', columns='Status', aggfunc='size', fill_value=0)
     except KeyError:
-        print("ERROR:\tExpected 'Sequence' and 'Status'.")
+        log_print("ERROR:\tExpected 'Sequence' and 'Status'.")
         return
 
     desired_order = ['Single','Duplicated','Incomplete','Fragmented']
@@ -384,7 +384,7 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
     non_dup_sum = status_counts.drop(columns='Duplicated', errors='ignore').sum(axis=1)
     filtered = status_counts.loc[non_dup_sum > 0]
     if filtered.empty:
-        print("WARNING: No valid BUSCO rows to plot.")
+        log_print("WARNING: No valid BUSCO rows to plot.")
         _save_no_data(); return
 
     filtered = filtered.loc[filtered.sum(axis=1).sort_values(ascending=False).index]
@@ -415,7 +415,7 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
     out_png = os.path.join(out_dir, f"{output_tag}.png")
     plt.savefig(out_svg, format="svg")
     plt.savefig(out_png, format="png")
-    print(f"PASS:\tBUSCO plot saved: {out_svg} & {out_png}")
+    log_print(f"PASS:\tBUSCO plot saved: {out_svg} & {out_png}")
     plt.close()
 
 
@@ -456,7 +456,7 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
     
     # Validate the input FASTA
     if not validate_fasta(assembly_path):
-        print(f"ERROR:\tInvalid assembly for BUSCO: {assembly_path}. Skipping BUSCO.")
+        log_print(f"ERROR:\tInvalid assembly for BUSCO: {assembly_path}. Skipping BUSCO.")
         return assembly_path
     
     # Normalize lineage dir name to avoid double _odb12
@@ -475,7 +475,7 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
  
     # Run BUSCO if the summary does not already exist
     if os.path.exists(busco_summary):
-        print(f"SKIP:\tBUSCO Summary already exists: {busco_summary}.")
+        log_print(f"SKIP:\tBUSCO Summary already exists: {busco_summary}.")
     else:
         busco_cmd = [
             "busco", "-m", "genome",
@@ -485,10 +485,10 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
             "-o", busco_tag,                # NOTE: matches _b tag
             "--out_path", assembly_dir
         ]
-        print(f"DEBUG - Running BUSCO: {' '.join(busco_cmd)}")
+        log_print(f"DEBUG - Running BUSCO: {' '.join(busco_cmd)}")
         rc = run_subprocess_cmd(busco_cmd, shell_check=False)
         if rc != 0:
-            print(f"WARN:\tBUSCO failed with return code {rc}. Skipping BUSCO metrics.")
+            log_print(f"WARN:\tBUSCO failed with return code {rc}. Skipping BUSCO metrics.")
             return assembly_path
     
     # Generate BUSCO plot if needed (NOTE: writes .svg/.png with _b)
@@ -517,7 +517,7 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
                         elif "M" in item:
                             sample_stats_dict[f"{busco_count.upper()}_BUSCO_M"] = float(item.split(":")[1])
     except FileNotFoundError:
-        print(f"ERROR:\tBUSCO summary not found: {busco_summary}")
+        log_print(f"ERROR:\tBUSCO summary not found: {busco_summary}")
 
     return assembly_path
 
@@ -549,31 +549,31 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
     # NOTE: _c suffix for Compleasm
     compleasm_tag = f"{asm_base}_{busco_odb}_compleasm"
     compleasm_dir = os.path.join(sample_dir, compleasm_tag)
-    print(f"DEBUG - busco_odb - {busco_odb}")
-    print(f"DEBUG - compleasm_dir - {compleasm_dir}")
+    log_print(f"DEBUG - busco_odb - {busco_odb}")
+    log_print(f"DEBUG - compleasm_dir - {compleasm_dir}")
     
     if not os.path.exists(compleasm_dir):
         os.makedirs(compleasm_dir)
     
     # Validate assembly
     if not validate_fasta(assembly_path):
-        print(f"ERROR:\tInvalid assembly for Compleasm: {assembly_path}. Skipping Compleasm.")
+        log_print(f"ERROR:\tInvalid assembly for Compleasm: {assembly_path}. Skipping Compleasm.")
         return assembly_path
     
     # Check if a Compleasm summary already exists
     compleasm_summary = os.path.join(compleasm_dir, "summary.txt")
     if os.path.exists(compleasm_summary):
-        print(f"SKIP:\tCompleasm Summary already exists: {compleasm_summary}.")
+        log_print(f"SKIP:\tCompleasm Summary already exists: {compleasm_summary}.")
     else:
         compleasm_cmd = ["compleasm", "run",
                          "-a", assembly_path,
                          "-o", compleasm_dir,           # NOTE: writes into _c dir
                          "--lineage", busco_odb,
                          "-t", str(cpu_threads)]
-        print(f"DEBUG - Running Compleasm: {' '.join(compleasm_cmd)}")
+        log_print(f"DEBUG - Running Compleasm: {' '.join(compleasm_cmd)}")
         result = run_subprocess_cmd(compleasm_cmd, shell_check=False)
         if result != 0:
-            print(f"WARN:\tCompleasm failed with return code {result}. Skipping Compleasm metrics.")
+            log_print(f"WARN:\tCompleasm failed with return code {result}. Skipping Compleasm metrics.")
             return assembly_path
     
     # Generate a BUSCO-like plot if not already present (NOTE: _c)
@@ -597,7 +597,7 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
                 elif "M:" in line:
                     sample_stats_dict[f"{busco_count}_BUSCO_M"] = float(line.split("M:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
     except FileNotFoundError:
-        print(f"ERROR:\tCompleasm summary not found: {compleasm_summary}")
+        log_print(f"ERROR:\tCompleasm summary not found: {compleasm_summary}")
         return assembly_path
 
     # Compute combined completeness: S + D
@@ -652,16 +652,16 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
-    print(f"Parsing assembly for index {current_index} from {input_csv}:\n{current_row}")
+    log_print(f"Parsing assembly for index {current_index} from {input_csv}:\n{current_row}")
 
     # Ensure working directory is sample_dir
     os.makedirs(sample_dir, exist_ok=True)
     os.chdir(sample_dir)
-    print(f"DEBUG - Set working directory to: {os.getcwd()}")
+    log_print(f"DEBUG - Set working directory to: {os.getcwd()}")
 
     # Validate assembly path
     if not validate_fasta(assembly_path):
-        print(f"ERROR:\tInvalid or missing assembly: {assembly_path}")
+        log_print(f"ERROR:\tInvalid or missing assembly: {assembly_path}")
         return None, None, sample_stats_dict
 
     # --------------------------------------------------------------
@@ -681,7 +681,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
 
     # Run QUAST only if no existing report
     if os.path.exists(quast_report_tsv):
-        print(f"SKIP:\tQUAST Report already exists: {quast_report_tsv}.")
+        log_print(f"SKIP:\tQUAST Report already exists: {quast_report_tsv}.")
     else:
         quast_cmd = ["quast", "--threads", str(cpu_threads)]
         if karyote_id == "eukaryote":
@@ -691,10 +691,10 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
         if pd.notna(ref_seq) and os.path.exists(ref_seq):
             quast_cmd.extend(["-r", ref_seq])
         quast_cmd.extend(["-o", quast_dir, assembly_path])
-        print(f"DEBUG - Running QUAST: {' '.join(quast_cmd)}")
+        log_print(f"DEBUG - Running QUAST: {' '.join(quast_cmd)}")
         result = run_subprocess_cmd(quast_cmd, shell_check=False)
         if result != 0:
-            print(f"WARN:\tQUAST failed with return code {result}. Skipping QUAST metrics.")
+            log_print(f"WARN:\tQUAST failed with return code {result}. Skipping QUAST metrics.")
             return assembly_path, None, sample_stats_dict
 
     # Parse QUAST report to populate sample_stats_dict
@@ -721,7 +721,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
                     elif "# indels per 100 kbp" in line:
                         sample_stats_dict["INDELS_PER_100KPB"] = float(line.split("\t")[-1].strip())
     except FileNotFoundError:
-        print(f"ERROR:\tQUAST report not found: {quast_report_tsv}")
+        log_print(f"ERROR:\tQUAST report not found: {quast_report_tsv}")
         sample_stats_dict["GENOME_SIZE"] = None
         sample_stats_dict["ASSEMBLY_CONTIGS"] = None
         sample_stats_dict["ASSEMBLY_N50"] = None
@@ -766,7 +766,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
                     sample_stats_dict["RAW_PACBIO_COVERAGE"] = round(sample_stats_dict["RAW_PACBIO_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
                     sample_stats_dict["FILT_PACBIO_COVERAGE"] = round(sample_stats_dict["FILT_PACBIO_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
     except TypeError:
-        print("SKIP:\tNot updating coverage as raw reads were not analyzed and updated.")
+        log_print("SKIP:\tNot updating coverage as raw reads were not analyzed and updated.")
 
     # Annotate sample metadata
     sample_stats_dict["SPECIES_ID"] = sample_id.split("-")[0]
@@ -817,10 +817,10 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     Returns:
         tuple: (path to compressed assembly, path to final stats CSV).
     """
-    print(f"DEBUG: assembly_type - {assembly_type}")
-    print(f"DEBUG: input_csv - {input_csv}")
-    print(f"DEBUG: sample_id - {sample_id}")
-    print(f"DEBUG: output_dir - {output_dir}")
+    log_print(f"DEBUG: assembly_type - {assembly_type}")
+    log_print(f"DEBUG: input_csv - {input_csv}")
+    log_print(f"DEBUG: sample_id - {sample_id}")
+    log_print(f"DEBUG: output_dir - {output_dir}")
 
     # Read the CSV file and filter to the row corresponding to the sample of interest
     input_df = pd.read_csv(input_csv)
@@ -872,12 +872,12 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         if os.path.exists(illu_dedup_r_reads_gz) and not os.path.exists(illu_dedup_r_reads):
             _ = pigz_decompress(illu_dedup_r_reads_gz, cpu_threads)
         if not os.path.exists(illu_dedup_f_reads) or not os.path.exists(illu_dedup_r_reads):
-            print(f"ERROR:\tIllumina deduplicated reads not found: {illu_dedup_f_reads}, {illu_dedup_r_reads}")
+            log_print(f"ERROR:\tIllumina deduplicated reads not found: {illu_dedup_f_reads}, {illu_dedup_r_reads}")
             return None, None
 
     labeled_assembly = None
     if pd.isna(est_size):
-        print(f"Processing assembly for quality control only: {ref_seq}")
+        log_print(f"Processing assembly for quality control only: {ref_seq}")
         assembly_path = ref_seq
         sample_dir = os.path.dirname(assembly_path)
         labeled_assembly = os.path.join(sample_dir, f"{sample_id}_EGAP_assembly.fasta")
@@ -889,7 +889,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     # Ensure working directory is sample_dir
     os.makedirs(sample_dir, exist_ok=True)
     os.chdir(sample_dir)
-    print(f"DEBUG - Set working directory to: {os.getcwd()}")
+    log_print(f"DEBUG - Set working directory to: {os.getcwd()}")
     
     # ---- NEW: use the final (homogeneous) filename BEFORE any QC ----
     def _promote_to_final(src_path: str, dst_path: str, copy_only: bool) -> str:
@@ -897,27 +897,27 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         if src_path == dst_path and os.path.exists(dst_path):
             return dst_path
         if not os.path.exists(src_path) and os.path.exists(src_path + ".gz"):
-            print(f"INFO:\tDecompressing {src_path}.gz ...")
+            log_print(f"INFO:\tDecompressing {src_path}.gz ...")
             _ = pigz_decompress(src_path + ".gz", cpu_threads)
         if not os.path.exists(src_path):
             raise FileNotFoundError(f"Assembly path not found: {src_path}")
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
         if copy_only:
-            print(f"INFO:\tCopying assembly -> {dst_path}")
+            log_print(f"INFO:\tCopying assembly -> {dst_path}")
             shutil.copy2(src_path, dst_path)
         else:
             try:
-                print(f"INFO:\tRenaming assembly -> {dst_path}")
+                log_print(f"INFO:\tRenaming assembly -> {dst_path}")
                 os.replace(src_path, dst_path)
             except OSError:
-                print("WARN:\tRename failed; copying instead.")
+                log_print("WARN:\tRename failed; copying instead.")
                 shutil.copy2(src_path, dst_path)
         return dst_path
     
     # QC-only mode (no curated final): copy the ref to a stable EGAP name
     if pd.isna(est_size):
         if not ref_seq or not os.path.exists(ref_seq):
-            print(f"ERROR:\tReference path not found: {ref_seq}")
+            log_print(f"ERROR:\tReference path not found: {ref_seq}")
             return None, None
         if not os.path.exists(labeled_assembly):
             assembly_path = _promote_to_final(ref_seq, labeled_assembly, copy_only=True)
@@ -946,7 +946,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
             if os.path.exists(polished_assembly) and validate_fasta(polished_assembly):
                 cand = polished_assembly
             else:
-                print(f"ERROR:\tAssembly path not found: {assembly_path} "
+                log_print(f"ERROR:\tAssembly path not found: {assembly_path} "
                       f"(also tried {labeled_assembly} and polished).")
                 return None, None
 
@@ -956,10 +956,10 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     
     # Validate final-named assembly
     if not validate_fasta(assembly_path):
-        print(f"ERROR:\tInvalid assembly after promotion: {assembly_path}")
+        log_print(f"ERROR:\tInvalid assembly after promotion: {assembly_path}")
         return None, None
     
-    print(f"Parsing final assembly for index {current_index} from {input_csv}:\n{current_row}")
+    log_print(f"Parsing final assembly for index {current_index} from {input_csv}:\n{current_row}")
     
     # -------- Compleasm/BUSCO (now runs on the final-labeled path) --------
     run_lineage_eval(assembly_path, sample_id, sample_stats_dict,
@@ -973,7 +973,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     quast_report_tsv = os.path.join(quast_dir, "report.tsv")
     
     if os.path.exists(quast_report_tsv):
-        print(f"SKIP:\tQUAST Report already exists: {quast_report_tsv}.")
+        log_print(f"SKIP:\tQUAST Report already exists: {quast_report_tsv}.")
     else:
         quast_cmd = ["quast", "--threads", str(cpu_threads)]
         if karyote_id == "eukaryote":
@@ -983,10 +983,10 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         if pd.notna(ref_seq) and os.path.exists(ref_seq):
             quast_cmd.extend(["-r", ref_seq])
         quast_cmd.extend(["-o", quast_dir, assembly_path])
-        print(f"DEBUG - Running QUAST: {' '.join(quast_cmd)}")
+        log_print(f"DEBUG - Running QUAST: {' '.join(quast_cmd)}")
         result = run_subprocess_cmd(quast_cmd, shell_check=False)
         if result != 0:
-            print(f"WARN:\tQUAST failed with return code {result}. Skipping QUAST metrics.")
+            log_print(f"WARN:\tQUAST failed with return code {result}. Skipping QUAST metrics.")
             return None, None, sample_stats_dict
     
     # Parse QUAST report to populate sample_stats_dict
@@ -1013,7 +1013,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
                     elif "# indels per 100 kbp" in line:
                         sample_stats_dict["INDELS_PER_100KPB"] = float(line.split("\t")[-1].strip())
     except FileNotFoundError:
-        print(f"ERROR:\tQUAST report not found: {quast_report_tsv}")
+        log_print(f"ERROR:\tQUAST report not found: {quast_report_tsv}")
         sample_stats_dict["GENOME_SIZE"] = None
         sample_stats_dict["ASSEMBLY_CONTIGS"] = None
         sample_stats_dict["ASSEMBLY_N50"] = None
@@ -1058,7 +1058,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
                     sample_stats_dict["RAW_PACBIO_COVERAGE"] = round(sample_stats_dict["RAW_PACBIO_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
                     sample_stats_dict["FILT_PACBIO_COVERAGE"] = round(sample_stats_dict["FILT_PACBIO_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
     except TypeError:
-        print("SKIP:\tNot updating coverage as raw reads were not analyzed and updated.")
+        log_print("SKIP:\tNot updating coverage as raw reads were not analyzed and updated.")
 
     # Annotate sample metadata
     sample_stats_dict["SPECIES_ID"] = sample_id.split("-")[0]
@@ -1092,16 +1092,16 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     # Save sample_stats_dict to a CSV for final reference
     final_stats_csv = labeled_assembly.replace(".fasta", "_final_stats.csv")
     pd.DataFrame([sample_stats_dict]).to_csv(final_stats_csv, index=False)
-    print(f"PASS: Full stats CSV saved: {final_stats_csv}")
+    log_print(f"PASS: Full stats CSV saved: {final_stats_csv}")
 
-    print(f"PASS:\tAssembly Stats for {labeled_assembly}:\n{sample_stats_list}")
+    log_print(f"PASS:\tAssembly Stats for {labeled_assembly}:\n{sample_stats_list}")
 
     # # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
     # for root, dirs, files in os.walk(sample_dir):
     #     for file in files:
     #         if file.endswith(('.fasta', '.fastq')):
     #             full_path = os.path.join(root, file)
-    #             print(f"Compressing: {full_path}")
+    #             log_print(f"Compressing: {full_path}")
     #             _ = pigz_compress(full_path, cpu_threads)
 
     return labeled_assembly, final_stats_csv
@@ -1113,6 +1113,8 @@ if __name__ == "__main__":
         print("Usage: python3 qc_assessment.py <assembly_type> <input_csv> "
               "<sample_id> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    initialize_logging_environment(sys.argv[4])
 
     if sys.argv[1] == "final":
         labeled_assembly, final_stats_csv = final_assessment(sys.argv[1],       # assembly_type

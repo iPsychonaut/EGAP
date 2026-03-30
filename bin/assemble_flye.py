@@ -14,7 +14,7 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 import os, sys, shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print
 from qc_assessment import qc_assessment
 
 
@@ -74,33 +74,33 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     pacbio_raw_reads     = _norm(pacbio_raw_reads)
     ref_seq              = _norm(ref_seq)
 
-    print(f"DEBUG - illumina_sra - {illumina_sra}")
-    print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
-    print(f"DEBUG - illumina_r_raw_reads - {illumina_r_raw_reads}")
-    print(f"DEBUG - ont_sra - {ont_sra}")
-    print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
-    print(f"DEBUG - pacbio_sra - {pacbio_sra}")
-    print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
-    print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
-    print(f"DEBUG - ref_seq - {ref_seq}")
-    print(f"DEBUG - species_id - {species_id}")
-    print(f"DEBUG - est_size - {est_size}")
+    log_print(f"DEBUG - illumina_sra - {illumina_sra}")
+    log_print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
+    log_print(f"DEBUG - illumina_r_raw_reads - {illumina_r_raw_reads}")
+    log_print(f"DEBUG - ont_sra - {ont_sra}")
+    log_print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
+    log_print(f"DEBUG - pacbio_sra - {pacbio_sra}")
+    log_print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
+    log_print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
+    log_print(f"DEBUG - ref_seq - {ref_seq}")
+    log_print(f"DEBUG - species_id - {species_id}")
+    log_print(f"DEBUG - est_size - {est_size}")
 
     # Set long-read source (prefer preprocessed highest, fallback to raw)
     highest_mean_qual_long_reads = None
     if isinstance(ont_raw_reads, str) and os.path.exists(ont_raw_reads):
-        print("DEBUG - ONT RAW READS EXIST!")
+        log_print("DEBUG - ONT RAW READS EXIST!")
         candidate = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")
         highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else ont_raw_reads
     elif isinstance(pacbio_raw_reads, str) and os.path.exists(pacbio_raw_reads):
-        print("DEBUG - PACBIO RAW READS EXIST!")
+        log_print("DEBUG - PACBIO RAW READS EXIST!")
         candidate = os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq")
         highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else pacbio_raw_reads
 
-    print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
+    log_print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
     if not isinstance(highest_mean_qual_long_reads, str) or not os.path.exists(highest_mean_qual_long_reads):
-        print("SKIP:\tNo reads available for processing")
+        log_print("SKIP:\tNo reads available for processing")
         return None
 
     sample_dir = os.path.join(species_dir, sample_id)
@@ -111,7 +111,7 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # ---------- FAST SKIP if final output exists (re-run QC) ----------
     if os.path.exists(egap_flye_assembly_path) and os.path.getsize(egap_flye_assembly_path) > 0:
-        print(f"SKIP:\tFinal Flye assembly already present: {egap_flye_assembly_path}")
+        log_print(f"SKIP:\tFinal Flye assembly already present: {egap_flye_assembly_path}")
         egap_flye_assembly_path, flye_stats_list, _ = qc_assessment(
             "flye", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
         )
@@ -159,6 +159,9 @@ if __name__ == "__main__":
     if len(sys.argv) != 6:
         print("Usage: python3 assemble_flye.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    output_dir = sys.argv[3]
+    initialize_logging_environment(output_dir)
 
     egap_flye_assembly_path = assemble_flye(
         sys.argv[1],  # sample_id

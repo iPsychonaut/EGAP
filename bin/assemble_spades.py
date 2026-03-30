@@ -13,7 +13,7 @@ Updated on Wed Sept 3 2025
 """
 import os, sys, shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print
 from qc_assessment import qc_assessment
 
 
@@ -60,17 +60,17 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
-    print(f"DEBUG - illumina_sra - {illumina_sra}")
-    print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
-    print(f"DEBUG - illumina_r_raw_reads - {illumina_r_raw_reads}")
-    print(f"DEBUG - ont_sra - {ont_sra}")
-    print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
-    print(f"DEBUG - pacbio_sra - {pacbio_sra}")
-    print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
-    print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
-    print(f"DEBUG - ref_seq - {ref_seq}")
-    print(f"DEBUG - species_id - {species_id}")
-    print(f"DEBUG - est_size - {est_size}")
+    log_print(f"DEBUG - illumina_sra - {illumina_sra}")
+    log_print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
+    log_print(f"DEBUG - illumina_r_raw_reads - {illumina_r_raw_reads}")
+    log_print(f"DEBUG - ont_sra - {ont_sra}")
+    log_print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
+    log_print(f"DEBUG - pacbio_sra - {pacbio_sra}")
+    log_print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
+    log_print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
+    log_print(f"DEBUG - ref_seq - {ref_seq}")
+    log_print(f"DEBUG - species_id - {species_id}")
+    log_print(f"DEBUG - est_size - {est_size}")
 
     # Set Illumina deduplicated read paths only if Illumina reads are present
     illu_dedup_f_reads = None
@@ -79,8 +79,8 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         illu_dedup_f_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
         illu_dedup_r_reads = os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq")
 
-    print(f"DEBUG - illu_dedup_f_reads - {illu_dedup_f_reads}")
-    print(f"DEBUG - illu_dedup_r_reads - {illu_dedup_r_reads}")
+    log_print(f"DEBUG - illu_dedup_f_reads - {illu_dedup_f_reads}")
+    log_print(f"DEBUG - illu_dedup_r_reads - {illu_dedup_r_reads}")
 
     # Prepare output locations early so we can fast-skip (and still QC) even if reads are missing
     sample_dir = os.path.join(species_dir, sample_id)
@@ -90,7 +90,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # ---------- FAST SKIP if final output exists (re-run QC) ----------
     if os.path.exists(egap_spades_assembly_path) and os.path.getsize(egap_spades_assembly_path) > 0:
-        print(f"SKIP:\tSPAdes assembly already present: {egap_spades_assembly_path}")
+        log_print(f"SKIP:\tSPAdes assembly already present: {egap_spades_assembly_path}")
         egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
             "spades", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
         )
@@ -99,18 +99,18 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # Set long-read paths (ONT only for SPAdes), prefer prefiltered, fallback to raw
     highest_mean_qual_long_reads = None
     if pd.notna(ont_raw_reads):
-        print("DEBUG - ONT RAW READS EXIST!")
+        log_print("DEBUG - ONT RAW READS EXIST!")
         candidate = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")
         highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else ont_raw_reads
     elif pd.notna(pacbio_raw_reads):
-        print("SKIP:\tSPAdes cannot be used to assemble PacBio reads...")
+        log_print("SKIP:\tSPAdes cannot be used to assemble PacBio reads...")
         return None
 
-    print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
+    log_print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
     # If no usable reads at all, bail
     if pd.isna(ont_raw_reads) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads) and pd.isna(pacbio_raw_reads):
-        print("SKIP:\tNo reads available for processing")
+        log_print("SKIP:\tNo reads available for processing")
         return None
 
     # -------- Resolve EVERYTHING to absolute paths (no chdir, no double nesting) --------
@@ -142,7 +142,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         illu_dedup_f_reads = illumina_f_raw_reads
         illu_dedup_r_reads = illumina_r_raw_reads
 
-    print(f"DEBUG - spades_out_dir - {spades_out_dir}")
+    log_print(f"DEBUG - spades_out_dir - {spades_out_dir}")
 
     # Establish command (no chdir; output is spades_out_dir)
     kmer_list = ["21", "33", "55", "77", "99"]
@@ -163,13 +163,13 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         spades_cmd += ["--trusted-contigs", ref_seq]
     spades_cmd += ["-o", spades_out_dir, "-k", ",".join(kmer_list)]
 
-    print(f"DEBUG - spades_path - {spades_path}")
-    print(f"DEBUG - spades_cmd - {spades_cmd}")
+    log_print(f"DEBUG - spades_path - {spades_path}")
+    log_print(f"DEBUG - spades_cmd - {spades_cmd}")
 
     _ = run_subprocess_cmd(spades_cmd, shell_check=False)
 
     if not os.path.exists(spades_path):
-        print("ERROR:\tSPAdes finished but scaffolds.fasta not found; check spades.log and params.txt.")
+        log_print("ERROR:\tSPAdes finished but scaffolds.fasta not found; check spades.log and params.txt.")
         return None
 
     shutil.move(spades_path, egap_spades_assembly_path)
@@ -186,6 +186,9 @@ if __name__ == "__main__":
         print("Usage: python3 assemble_spades.py <sample_id> <input_csv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    output_dir = sys.argv[3]
+    initialize_logging_environment(output_dir)
 
     egap_spades_assembly_path = assemble_spades(
         sys.argv[1],       # sample_id

@@ -23,7 +23,7 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 import os, sys, glob, shutil, re
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads
+from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads, initialize_logging_environment, log_print
 from qc_assessment import nanoplot_qc_reads
 
 
@@ -38,7 +38,7 @@ def _nonempty(fp, min_bytes=1024) -> bool:
 
 
 def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
-    print(f"Preprocessing PacBio reads for {sample_id}...")
+    log_print(f"Preprocessing PacBio reads for {sample_id}...")
 
     # Resolve to absolute so later chdir is safe
     input_csv_abs  = _abs(input_csv)
@@ -57,12 +57,12 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     ref_seq_gca      = current.get("REF_SEQ_GCA", None)
     ref_seq          = current.get("REF_SEQ", None)
 
-    print(f"DEBUG - pacbio_sra - {pacbio_sra}")
-    print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
-    print(f"DEBUG - pacbio_raw_dir - {pacbio_raw_dir}")
+    log_print(f"DEBUG - pacbio_sra - {pacbio_sra}")
+    log_print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
+    log_print(f"DEBUG - pacbio_raw_dir - {pacbio_raw_dir}")
 
     if pd.isna(pacbio_sra) and pd.isna(pacbio_raw_reads) and pd.isna(pacbio_raw_dir):
-        print("SKIP:\tPacBio preprocessing; no reads provided")
+        log_print("SKIP:\tPacBio preprocessing; no reads provided")
         return None
 
     # Layout
@@ -90,10 +90,10 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             pb_raw_dir_abs = pacbio_raw_dir if os.path.isabs(pacbio_raw_dir) else os.path.join(output_dir_abs, pacbio_raw_dir)
             files = sorted(glob.glob(os.path.join(pb_raw_dir_abs, "*.fastq")))
             if not files:
-                print(f"ERROR:\tNo PacBio .fastq files found in {pb_raw_dir_abs}")
+                log_print(f"ERROR:\tNo PacBio .fastq files found in {pb_raw_dir_abs}")
                 return None
             pacbio_raw_reads = os.path.join(pacbio_dir_abs, f"{species_id}_pacbio_combined.fastq")
-            print(f"NOTE:\tConcatenating PacBio files from {pb_raw_dir_abs} -> {pacbio_raw_reads}")
+            log_print(f"NOTE:\tConcatenating PacBio files from {pb_raw_dir_abs} -> {pacbio_raw_reads}")
             with open(pacbio_raw_reads, "wb") as w:
                 for f in files:
                     with open(f, "rb") as r:
@@ -102,21 +102,21 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         # Option 2: SRA -> FASTQ into PacBio dir (ensure -O is used)
         if isinstance(pacbio_sra, str) and pacbio_sra.strip():
             if not pacbio_raw_reads or not os.path.exists(pacbio_raw_reads):
-                print(f"Downloading SRA {pacbio_sra} from GenBank...")
+                log_print(f"Downloading SRA {pacbio_sra} from GenBank...")
                 _ = run_subprocess_cmd(["prefetch", "--force", "yes", pacbio_sra], False)
                 _ = run_subprocess_cmd(["fasterq-dump", "--threads", str(cpu_threads), "-O", pacbio_dir_abs, pacbio_sra], False)
                 expected = os.path.join(pacbio_dir_abs, f"{pacbio_sra}.fastq")
                 if not os.path.exists(expected) or os.path.getsize(expected) == 0:
-                    print(f"ERROR:\tExpected FASTQ not found or empty after fasterq-dump: {expected}")
+                    log_print(f"ERROR:\tExpected FASTQ not found or empty after fasterq-dump: {expected}")
                     return None
                 pacbio_raw_reads = expected
-                print(f"PASS:\tSRA converted to FASTQ: {pacbio_raw_reads}")
+                log_print(f"PASS:\tSRA converted to FASTQ: {pacbio_raw_reads}")
             else:
-                print(f"SKIP:\tSRA already present as FASTQ: {pacbio_raw_reads}")
+                log_print(f"SKIP:\tSRA already present as FASTQ: {pacbio_raw_reads}")
 
         # Validate raw reads
         if not pacbio_raw_reads or not os.path.exists(pacbio_raw_reads) or os.path.getsize(pacbio_raw_reads) == 0:
-            print(f"ERROR:\tPacBio raw reads not found or empty: {pacbio_raw_reads}")
+            log_print(f"ERROR:\tPacBio raw reads not found or empty: {pacbio_raw_reads}")
             return None
 
         # Parse estimated genome size (e.g. "5.0m")
@@ -126,14 +126,14 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             mult = {'m': 10**6, 'g': 10**9}.get(est_unit.lower(), 25_000_000)
             est_size_bp = int(float(est_num) * mult)
         else:
-            print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
+            log_print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
             est_size_bp = 25_000_000
 
         # NanoPlot RAW (best-effort; do not fail pipeline on plotting errors)
         try:
             sample_stats_dict = nanoplot_qc_reads(pacbio_raw_reads, "Raw_PacBio_", cpu_threads, sample_stats_dict)
         except Exception as e:
-            print(f"WARN:\tNanoPlot failed on raw PacBio reads ({e}); continuing without NanoStats.")
+            log_print(f"WARN:\tNanoPlot failed on raw PacBio reads ({e}); continuing without NanoStats.")
 
         # Decide filtered output path
         if isinstance(pacbio_sra, str) and pacbio_sra.strip():
@@ -143,7 +143,7 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
         # If an old filtered file exists but is empty/suspicious, remove it to force regeneration
         if os.path.exists(filtered_pb) and not _nonempty(filtered_pb):
-            print(f"WARN:\tExisting filtered FASTQ is empty or tiny ({filtered_pb}); regenerating.")
+            log_print(f"WARN:\tExisting filtered FASTQ is empty or tiny ({filtered_pb}); regenerating.")
             try:
                 os.remove(filtered_pb)
             except Exception:
@@ -155,9 +155,9 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
         have_ref = isinstance(ref_seq, str) and os.path.exists(ref_seq) and os.path.getsize(ref_seq) > 0
         if have_ref:
-            print(f"INFO:\tUsing reference for filtlong trimming: {ref_seq}")
+            log_print(f"INFO:\tUsing reference for filtlong trimming: {ref_seq}")
         else:
-            print("INFO:\tNo reference available; running filtlong WITHOUT --trim (this was the cause of your empty file).")
+            log_print("INFO:\tNo reference available; running filtlong WITHOUT --trim (this was the cause of your empty file).")
 
         if not os.path.exists(filtered_pb):  # only run if we don't already have a good file
             common_flags = f"--min_length 1000 --min_mean_q 10 --keep_percent 90 --target_bases {target_bases}"
@@ -167,24 +167,24 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             else:
                 # Without a reference, DO NOT pass --trim
                 filt_cmd = f'filtlong {common_flags} "{pacbio_raw_reads}" > "{filtered_pb}"'
-            print(f"CMD:\t{filt_cmd}")
+            log_print(f"CMD:\t{filt_cmd}")
             rc = run_subprocess_cmd(filt_cmd, True)
             if rc != 0:
-                print(f"ERROR:\tfiltlong exited with code {rc}")
+                log_print(f"ERROR:\tfiltlong exited with code {rc}")
                 return None
 
             if not _nonempty(filtered_pb):
-                print(f"ERROR:\tFiltlong did not produce a non-empty FASTQ at {filtered_pb}")
-                print("HINT:\tIf you want trimming (--trim), provide a reference FASTA (REF_SEQ / REF_SEQ_GCA).")
+                log_print(f"ERROR:\tFiltlong did not produce a non-empty FASTQ at {filtered_pb}")
+                log_print("HINT:\tIf you want trimming (--trim), provide a reference FASTA (REF_SEQ / REF_SEQ_GCA).")
                 return None
         else:
-            print(f"SKIP:\tFiltlong filtered reads already present: {filtered_pb}")
+            log_print(f"SKIP:\tFiltlong filtered reads already present: {filtered_pb}")
 
         # NanoPlot FILTERED (best-effort)
         try:
             sample_stats_dict = nanoplot_qc_reads(filtered_pb, "Filt_PacBio_", cpu_threads, sample_stats_dict)
         except Exception as e:
-            print(f"WARN:\tNanoPlot failed on filtered PacBio reads ({e}); continuing.")
+            log_print(f"WARN:\tNanoPlot failed on filtered PacBio reads ({e}); continuing.")
 
         # Select best long reads via shared helper (absolute paths)
         best_long_reads = select_long_reads(output_dir_abs, input_csv_abs, sample_id, cpu_threads)
@@ -205,26 +205,27 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                     except Exception:
                         canonical = best_long_reads  # fall back to original
 
-        print(f"PASS:\tPreprocessed PacBio reads for {sample_id}: {canonical}")
+        log_print(f"PASS:\tPreprocessed PacBio reads for {sample_id}: {canonical}")
         return canonical
     finally:
         os.chdir(prev_cwd)
 
 
 if __name__ == "__main__":
-    print(f"DEBUG: Raw sys.argv = {sys.argv}")
-    print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
+    log_print(f"DEBUG: Raw sys.argv = {sys.argv}")
+    log_print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
 
     if len(sys.argv) != 6:
         print("Usage: python3 preprocess_pacbio.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
     for i, arg in enumerate(sys.argv):
-        print(f"DEBUG: sys.argv[{i}] = '{arg}'")
+        log_print(f"DEBUG: sys.argv[{i}] = '{arg}'")
 
     sample_id  = sys.argv[1]
     input_csv  = sys.argv[2]
     output_dir = sys.argv[3]
+    initialize_logging_environment(output_dir)
 
     # Robust parsing
     try:
@@ -236,10 +237,10 @@ if __name__ == "__main__":
     except Exception:
         ram_gb = 8
 
-    print(f"DEBUG: Parsed sample_id = '{sample_id}'")
-    print(f"DEBUG: Parsed input_csv = '{input_csv}'")
-    print(f"DEBUG: Parsed output_dir = '{output_dir}'")
-    print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' (converted to {cpu_threads})")
-    print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' (converted to {ram_gb})")
+    log_print(f"DEBUG: Parsed sample_id = '{sample_id}'")
+    log_print(f"DEBUG: Parsed input_csv = '{input_csv}'")
+    log_print(f"DEBUG: Parsed output_dir = '{output_dir}'")
+    log_print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' (converted to {cpu_threads})")
+    log_print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' (converted to {ram_gb})")
 
     best = preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb)

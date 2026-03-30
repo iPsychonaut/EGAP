@@ -25,12 +25,14 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from utilities import initialize_logging_environment, log_print
+
 # Optional iNat import (process_metadata may fail due to utilities.calculate_genome_coverage)
 _HAS_INAT = True
 try:
     from process_metadata import get_inat_obs, reverse_geocode
 except Exception as e:
-    print(f"WARN:\tprocess_metadata import failed ({e}); iNaturalist fields will be skipped.")
+    log_print(f"WARN:\tprocess_metadata import failed ({e}); iNaturalist fields will be skipped.")
     _HAS_INAT = False
     def get_inat_obs(_): return (None, None, None, None, None)
     def reverse_geocode(_, __): return (None, None, None)
@@ -39,7 +41,7 @@ except Exception as e:
 try:
     from utilities import get_current_row_data
 except Exception as e:
-    print(f"ERROR:\tutilities.get_current_row_data not importable: {e}")
+    log_print(f"ERROR:\tutilities.get_current_row_data not importable: {e}")
     raise
 
 
@@ -183,7 +185,7 @@ def _load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.Da
             try:
                 return _parse_compleasm_full_table(p)
             except Exception as e:
-                print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {p}: {e}")
+                log_print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {p}: {e}")
                 return pd.DataFrame()
     return pd.DataFrame()
 
@@ -201,11 +203,11 @@ def _download_templates_to(dst_dir: Path) -> bool:
     for name, url in RAW_URLS.items():
         out = dst_dir / name
         try:
-            print(f"INFO:\tDownloading template '{name}' -> {out}")
+            log_print(f"INFO:\tDownloading template '{name}' -> {out}")
             urllib.request.urlretrieve(url, out.as_posix())
         except Exception as e:
             ok = False
-            print(f"WARN:\tFailed to download {name} from {url}: {e}")
+            log_print(f"WARN:\tFailed to download {name} from {url}: {e}")
     return ok and _has_both_templates(dst_dir)
 
 def _resolve_templates_dir(output_dir_abs: str) -> Optional[Path]:
@@ -282,16 +284,16 @@ def _resolve_templates_dir(output_dir_abs: str) -> Optional[Path]:
     if found: return found
 
     # 9) Download into the SAME directory that html_reporter.py is in
-    print("INFO:\tTemplates not found in standard locations; attempting download into script directory.")
+    log_print("INFO:\tTemplates not found in standard locations; attempting download into script directory.")
     if _download_templates_to(script_dir):
-        print(f"PASS:\tTemplates downloaded to {script_dir}")
+        log_print(f"PASS:\tTemplates downloaded to {script_dir}")
         return script_dir
 
     # Still nothing: inform and continue (return None; caller will stub).
     msg = "Templates directory with BOTH required files not found.\nTried:\n  " + "\n  ".join(str(x) for x in tried)
     msg += ("\nAlso attempted download into script directory but failed.\n"
             "A report cannot be generated unless 'EGAP_summary.html' and 'EGAP_busco.html' are available.")
-    print("WARN:\t" + msg)
+    log_print("WARN:\t" + msg)
     return None
 
 
@@ -591,7 +593,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         sample_stats_dict["INAT_HTML"]  = inat_html
         sample_stats_dict["INAT_PHOTO"] = original_photo
     else:
-        print(f"SKIP:\tNo iNaturalist ID provided or iNat disabled ({inat_id}).")
+        log_print(f"SKIP:\tNo iNaturalist ID provided or iNat disabled ({inat_id}).")
 
     # ------------------------------ ONT NanoPlot ------------------------------
     if os.path.isdir(ont_dir):
@@ -604,13 +606,13 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             if stats_matches:
                 df_stats = parse_nanostats(stats_matches[0])
                 sample_stats_dict[f"{run_label}_ONT_NANOSTATS_DF"] = df_stats
-                print(f"\n=== {run_label} ONT NanoStats ===")
+                log_print(f"\n=== {run_label} ONT NanoStats ===")
                 try:
-                    print(df_stats.to_markdown(index=False))
+                    log_print(df_stats.to_markdown(index=False))
                 except Exception:
-                    print(df_stats.head())
+                    log_print(df_stats.head())
     else:
-        print(f"SKIP:\tNo ONT directory found at {ont_dir}.")
+        log_print(f"SKIP:\tNo ONT directory found at {ont_dir}.")
 
     # ------------------------------ Illumina FastQC ------------------------------
     if os.path.isdir(illumina_dir):
@@ -631,16 +633,16 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 try:
                     sample_stats_dict[f"{run_label}_ILLU_F_BASIC_STATS_DF"] = parse_fastqc_basic_stats(f_html)
                 except Exception as e:
-                    print(f"WARN:\tFailed to parse FastQC (F) {f_html}: {e}")
+                    log_print(f"WARN:\tFailed to parse FastQC (F) {f_html}: {e}")
             if r_html_matches:
                 r_html = r_html_matches[0]
                 sample_stats_dict[f"{run_label}_ILLU_R_FASTQC_HTML"] = r_html
                 try:
                     sample_stats_dict[f"{run_label}_ILLU_R_BASIC_STATS_DF"] = parse_fastqc_basic_stats(r_html)
                 except Exception as e:
-                    print(f"WARN:\tFailed to parse FastQC (R) {r_html}: {e}")
+                    log_print(f"WARN:\tFailed to parse FastQC (R) {r_html}: {e}")
     else:
-        print(f"SKIP:\tNo Illumina directory found at {illumina_dir}.")
+        log_print(f"SKIP:\tNo Illumina directory found at {illumina_dir}.")
 
     # ------------------------------ PacBio NanoPlot ------------------------------
     if os.path.isdir(pacbio_dir):
@@ -653,19 +655,19 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             if stats_matches:
                 df_stats = parse_nanostats(stats_matches[0])
                 sample_stats_dict[f"{run_label}_PACBIO_NANOSTATS_DF"] = df_stats
-                print(f"\n=== {run_label} PacBio NanoStats ===")
+                log_print(f"\n=== {run_label} PacBio NanoStats ===")
                 try:
-                    print(df_stats.to_markdown(index=False))
+                    log_print(df_stats.to_markdown(index=False))
                 except Exception:
-                    print(df_stats.head())
+                    log_print(df_stats.head())
     else:
-        print(f"SKIP:\tNo PacBio directory found at {pacbio_dir}.")
+        log_print(f"SKIP:\tNo PacBio directory found at {pacbio_dir}.")
 
     # ------------------------------ Per-assembler QUAST/BUSCO ------------------------------
     assembly_candidates = [masurca_dir, flye_dir, spades_dir, hifiasm_dir]
     for assembly_dir in assembly_candidates:
         if not os.path.isdir(assembly_dir):
-            print(f"SKIP:\tNo Assembly directory found at {assembly_dir}.")
+            log_print(f"SKIP:\tNo Assembly directory found at {assembly_dir}.")
             continue
 
         asm_type = os.path.basename(assembly_dir).split("_")[0].upper()  # MASURCA/FLYE/SPADES/HIFIASM
@@ -678,7 +680,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 sample_stats_dict[f"{asm_type}_QUAST_DF"]   = quast_df
                 sample_stats_dict[f"{asm_type}_QUAST_HTML"] = quast_html
             except FileNotFoundError as e:
-                print(f"QUAST processing failed for {quast_dir}: {e}")
+                log_print(f"QUAST processing failed for {quast_dir}: {e}")
 
         # BUSCO/Compleasm (skip if DB is NaN)
         for busco_index, busco_db in enumerate([first_busco_db, second_busco_db]):
@@ -690,7 +692,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             busco_dirs = glob.glob(os.path.join(assembly_dir, f"*_{busco_db}_busco")) + \
                          glob.glob(os.path.join(assembly_dir, f"*_{busco_db}_compleasm"))
             if not busco_dirs:
-                print(f"SKIP:\tNo BUSCO/Compleasm outputs for {busco_db} in {assembly_dir}")
+                log_print(f"SKIP:\tNo BUSCO/Compleasm outputs for {busco_db} in {assembly_dir}")
                 continue
         
             for busco_dir in busco_dirs:
@@ -709,7 +711,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                     metrics = _parse_compleasm_summary(os.path.join(busco_dir, "summary.txt"))
         
                 if not metrics:
-                    print(f"SKIP:\tNo parsable BUSCO/Compleasm summary in {busco_dir}")
+                    log_print(f"SKIP:\tNo parsable BUSCO/Compleasm summary in {busco_dir}")
                     continue
         
                 metrics_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
@@ -750,7 +752,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         assembly_base = candidate_bases[0]
     
     assembly_fasta = (assembly_base + ".fasta") if assembly_base else ""
-    print(f"DEBUG - final assembly base - {assembly_base}")
+    log_print(f"DEBUG - final assembly base - {assembly_base}")
     
     # -------- QUAST: choose the first available report.tsv --------
     quast_dir_candidates = []
@@ -763,16 +765,16 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             break
     
     if final_quast_dir:
-        print(f"DEBUG - final_quast_dir - {final_quast_dir}")
+        log_print(f"DEBUG - final_quast_dir - {final_quast_dir}")
         try:
             final_df, final_html = process_quast_folder(final_quast_dir)
             sample_stats_dict["FINAL_QUAST_DF"]   = final_df
             sample_stats_dict["FINAL_QUAST_HTML"] = final_html
         except FileNotFoundError as e:
-            print(f"FINAL QUAST processing failed for {final_quast_dir}: {e}")
+            log_print(f"FINAL QUAST processing failed for {final_quast_dir}: {e}")
     else:
         if quast_dir_candidates:
-            print(f"WARN:\tNo QUAST report found for final assembly; tried: {quast_dir_candidates}")
+            log_print(f"WARN:\tNo QUAST report found for final assembly; tried: {quast_dir_candidates}")
     
     # -------- BUSCO/Compleasm: accept either style and any of the basenames --------
     for busco_index, busco_db in enumerate([first_busco_db, second_busco_db]):
@@ -787,7 +789,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     
         chosen_busco_dir = _first_existing(busco_dir_candidates)
         if not chosen_busco_dir:
-            print(f"WARN:\tNo BUSCO/Compleasm dir found for {busco_db}. Tried: {busco_dir_candidates}")
+            log_print(f"WARN:\tNo BUSCO/Compleasm dir found for {busco_db}. Tried: {busco_dir_candidates}")
             continue
     
         metrics = {}
@@ -802,7 +804,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             metrics = _parse_compleasm_summary(os.path.join(chosen_busco_dir, "summary.txt"))
     
         if not metrics:
-            print(f"WARN:\tNo parsable BUSCO/Compleasm summary in {chosen_busco_dir}")
+            log_print(f"WARN:\tNo parsable BUSCO/Compleasm summary in {chosen_busco_dir}")
             continue
     
         metrics_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
@@ -813,7 +815,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             try:
                 busco_genes_df = _parse_compleasm_full_table(genes_file)
             except Exception as e:
-                print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {genes_file}: {e}")
+                log_print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {genes_file}: {e}")
     
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_DF"]        = metrics_df
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_HTML"]      = os.path.join(chosen_busco_dir, f"{sample_id}_{busco_db}_EGAP_busco.html")
@@ -840,11 +842,11 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 </body></html>"""
         with open(html_report_outpath, "w") as fh:
             fh.write(stub)
-        print(f"WARN:\tTemplates unavailable; wrote stub report: {html_report_outpath}")
+        log_print(f"WARN:\tTemplates unavailable; wrote stub report: {html_report_outpath}")
         return html_report_outpath
 
     # Templates are available: render real report
-    print(f"DEBUG - templates_dir - {templates_dir}")
+    log_print(f"DEBUG - templates_dir - {templates_dir}")
     env = Environment(
         loader=FileSystemLoader(str(templates_dir)),
         autoescape=select_autoescape(["html", "xml"])
@@ -1045,7 +1047,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     with open(html_report_outpath, "w") as fh:
         fh.write(html)
 
-    print(f"PASS:\tWrote report: {html_report_outpath}")
+    log_print(f"PASS:\tWrote report: {html_report_outpath}")
     return html_report_outpath
 
 
@@ -1053,6 +1055,9 @@ if __name__ == "__main__":
     if len(sys.argv) != 6:
         print("Usage: python3 html_reporter.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    output_dir = sys.argv[3]
+    initialize_logging_environment(output_dir)
 
     _ = html_reporter(
         sys.argv[1],              # sample_id
