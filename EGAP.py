@@ -638,7 +638,17 @@ if __name__ == "__main__":
 
     # Process each sample fully (pipeline → QC → report) before moving to the next
     for index, row in input_csv_df.iterrows():
-        sample_id = row["SAMPLE_ID"]
+        sample_id  = row["SAMPLE_ID"]
+        species_id = row["SPECIES_ID"]
+
+        # Point sub-processes at the species-level output directory so their
+        # per-sample log files land alongside the assembly outputs rather than
+        # at the root of output_dir.  Child processes inherit os.environ, so
+        # no script signature changes are required.
+        species_dir = os.path.join(output_dir, species_id)
+        os.makedirs(species_dir, exist_ok=True)
+        os.environ["EGAP_LOG_DIR"] = species_dir
+        log_print(f"NOTE:\tPer-sample log for {sample_id} → {species_dir}/{sample_id}_log.txt")
 
         # --- Main pipeline steps ---
         for proc in processes:

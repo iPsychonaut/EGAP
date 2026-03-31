@@ -543,8 +543,10 @@ def generate_log_file(log_file_path, use_numerical_suffix=False):
             counter += 1
             new_log_file_path = f"{base}_{counter}{ext}"
         log_file_path = new_log_file_path
-    else:
-        open(log_file_path, "w").close()
+    try:
+        open(log_file_path, "a").close()   # "a" = create if absent, never truncate existing
+    except Exception as exc:
+        print(f"UNLOGGED ERROR:\tCould not create log file {log_file_path!r}: {exc}")
     return log_file_path
 
 
@@ -607,6 +609,11 @@ def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     When sample_id is provided each sample gets its own log file; otherwise a single
     run-level log file is created named after the output directory.
 
+    The log directory can be overridden by the EGAP_LOG_DIR environment variable.
+    EGAP.py sets this variable to the species-specific output directory so that
+    per-sample log files land alongside the assembly outputs instead of at the
+    root of output_dir.
+
     Args:
         INPUT_FOLDER (str): Folder used to determine log file location.
         sample_id (str, optional): Sample identifier. When supplied the log file is
@@ -614,10 +621,19 @@ def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
             <folder_name>_log.txt.
     """
     global DEFAULT_LOG_FILE, ENVIRONMENT_TYPE
-    os.makedirs(INPUT_FOLDER, exist_ok=True)
-    print(INPUT_FOLDER)
-    log_name = f"{sample_id}_log.txt" if sample_id else f"{INPUT_FOLDER.split('/')[-1]}_log.txt"
-    input_file_path = f"{INPUT_FOLDER}/{log_name}"
+
+    # Allow the orchestrator (EGAP.py / EGAP_TUI.py) to redirect per-sample
+    # log files into the correct species-level output directory.
+    egap_log_dir = os.environ.get("EGAP_LOG_DIR", "").strip()
+    if egap_log_dir and sample_id:
+        log_dir = egap_log_dir
+    else:
+        log_dir = INPUT_FOLDER
+
+    os.makedirs(log_dir, exist_ok=True)
+    print(log_dir)
+    log_name = f"{sample_id}_log.txt" if sample_id else f"{os.path.basename(INPUT_FOLDER.rstrip('/\\'))}_log.txt"
+    input_file_path = os.path.join(log_dir, log_name)
     os_name = platform.system()
     if os_name == "Windows":
         print("UNLOGGED:\tWINDOWS ENVIRONMENT")

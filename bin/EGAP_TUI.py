@@ -677,15 +677,23 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                         
             samples: List[Tuple[str, str]] = []
             for _, r in input_df.iterrows():
-                sample_id = str(r["SAMPLE_ID"]).strip()
-                samples.append((sample_id))
-            
-            self.log_line(f"Loaded {len(samples)} sample(s) from CSV.")
-            self.init_step_plan(samples)
+                sample_id  = str(r["SAMPLE_ID"]).strip()
+                species_id = str(r["SPECIES_ID"]).strip()
+                samples.append((sample_id, species_id))
 
-            for sample_id in samples:
+            self.log_line(f"Loaded {len(samples)} sample(s) from CSV.")
+            self.init_step_plan([sid for sid, _ in samples])
+
+            for sample_id, species_id in samples:
                 if self.shutdown_requested:
                     return
+
+                # Direct sub-process log files into the species-level output
+                # directory so they land alongside the assembly outputs.
+                species_dir = os.path.join(output_dir, species_id)
+                os.makedirs(species_dir, exist_ok=True)
+                os.environ["EGAP_LOG_DIR"] = species_dir
+                self.log_line(f"NOTE:\tPer-sample log for {sample_id} → {species_dir}/{sample_id}_log.txt")
 
                 for proc_name in processes:
                     if self.shutdown_requested:
