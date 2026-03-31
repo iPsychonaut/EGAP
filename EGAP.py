@@ -610,32 +610,54 @@ if __name__ == "__main__":
     # Load the Sample Table and correct any ".fq" -> ".fastq"
     input_csv_df = preprocess_csv(input_csv)
 
-    # Loop through each process for each sample
+    # Verify QC and reporter scripts exist before starting any sample work
+    qc_script = bin_dir / "qc_assessment.py"
+    if not qc_script.exists():
+        raise FileNotFoundError(f"Missing QC script: {qc_script}")
+    reporter_script = bin_dir / "html_reporter.py"
+    if not reporter_script.exists():
+        raise FileNotFoundError(f"Missing Reporter script: {reporter_script}")
+
+    def _run_and_tee(cmd):
+        """Run cmd with stdout/stderr captured, streaming each line through log_print.
+
+        This tees subprocess output to both the terminal and the run-level log file
+        in real time (non-blocking line-by-line reads, flushed immediately by log_print).
+        Returns the subprocess exit code.
+        """
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+        for line in proc.stdout:
+            log_print(line.rstrip())
+        proc.wait()
+        return proc.returncode
+
+    # Process each sample fully (pipeline → QC → report) before moving to the next
     for index, row in input_csv_df.iterrows():
         sample_id = row["SAMPLE_ID"]
+
+        # --- Main pipeline steps ---
         for proc in processes:
             script = bin_dir / f"{proc}.py"
             if not script.exists():
                 raise FileNotFoundError(f"Missing script: {script}")
             current_cmd = [sys.executable,
-                   str(script),
-                   sample_id,
-                   input_csv,
-                   output_dir,
-                   str(cpu_threads),
-                   str(ram_gb)]
+                           str(script),
+                           sample_id,
+                           input_csv,
+                           output_dir,
+                           str(cpu_threads),
+                           str(ram_gb)]
             log_print(f"NOTE:\t→ Running {proc}: {' '.join(current_cmd)}")
-            current_process = subprocess.Popen(current_cmd)
-            current_return_code = current_process.wait()
-            if current_return_code != 0:
-                raise RuntimeError(f"{proc} failed with return code {current_return_code}")
+            rc = _run_and_tee(current_cmd)
+            if rc != 0:
+                raise RuntimeError(f"{proc} failed with return code {rc}")
 
-    # final QC
-    qc_script = bin_dir / "qc_assessment.py"
-    if not qc_script.exists():
-        raise FileNotFoundError(f"Missing QC script: {qc_script}")
-    for index, row in input_csv_df.iterrows():
-        sample_id = row["SAMPLE_ID"]
+        # --- Final QC assessment ---
         qc_cmd = [sys.executable,
                   str(qc_script),
                   "final",
@@ -645,17 +667,11 @@ if __name__ == "__main__":
                   str(cpu_threads),
                   str(ram_gb)]
         log_print(f"NOTE:\t→ Running qc_assessment: {' '.join(qc_cmd)}")
-        qc_process = subprocess.Popen(qc_cmd)
-        qc_return_code = qc_process.wait()
-        if qc_return_code != 0:
-            raise RuntimeError(f"qc_assessment failed with return code {qc_return_code}")
+        qc_rc = _run_and_tee(qc_cmd)
+        if qc_rc != 0:
+            raise RuntimeError(f"qc_assessment failed with return code {qc_rc}")
 
-    # Report Generation
-    reporter_script = bin_dir / "html_reporter.py"
-    if not reporter_script.exists():
-        raise FileNotFoundError(f"Missing Reporter script: {reporter_script}")
-    for index, row in input_csv_df.iterrows():
-        sample_id = row["SAMPLE_ID"]
+        # --- HTML report ---
         reporter_cmd = [sys.executable,
                         str(reporter_script),
                         sample_id,
@@ -664,9 +680,8 @@ if __name__ == "__main__":
                         str(cpu_threads),
                         str(ram_gb)]
         log_print(f"NOTE:\t→ Running html_reporter: {' '.join(reporter_cmd)}")
-        reporter_process = subprocess.Popen(reporter_cmd)
-        reporter_return_code = reporter_process.wait()
-        if reporter_return_code != 0:
-            raise RuntimeError(f"html_reporter failed with return code {reporter_return_code}")
-    
+        reporter_rc = _run_and_tee(reporter_cmd)
+        if reporter_rc != 0:
+            raise RuntimeError(f"html_reporter failed with return code {reporter_rc}")
+
     log_print("PASS:\tAll samples processed successfully.")
