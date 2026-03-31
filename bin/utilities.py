@@ -632,7 +632,8 @@ def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
 
     os.makedirs(log_dir, exist_ok=True)
     print(log_dir)
-    log_name = f"{sample_id}_log.txt" if sample_id else f"{os.path.basename(INPUT_FOLDER.rstrip('/\\'))}_log.txt"
+    folder_base = os.path.basename(INPUT_FOLDER.rstrip('/\\'))
+    log_name = f"{sample_id}_log.txt" if sample_id else f"{folder_base}_log.txt"
     input_file_path = os.path.join(log_dir, log_name)
     os_name = platform.system()
     if os_name == "Windows":
