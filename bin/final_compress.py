@@ -50,7 +50,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     output_dir = sys.argv[3]
-    initialize_logging_environment(output_dir)
+    initialize_logging_environment(output_dir, sys.argv[2])
 
     final_compress(sys.argv[1],       # input_csv
                    sys.argv[2],       # sample_id

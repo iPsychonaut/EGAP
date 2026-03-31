@@ -524,6 +524,6 @@ if __name__ == "__main__":
         sys.exit(1)
 
     output_dir = sys.argv[3]
-    initialize_logging_environment(output_dir)
+    initialize_logging_environment(output_dir, sys.argv[1])
 
     final_curated_assembly = curate_assembly(sys.argv[1], sys.argv[2], sys.argv[3], str(sys.argv[4]), str(sys.argv[5]))

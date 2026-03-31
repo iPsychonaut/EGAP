@@ -337,7 +337,7 @@ if __name__ == "__main__":
               file=sys.stderr)
         sys.exit(1)
 
-    initialize_logging_environment(sys.argv[3])
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     # Log raw sys.argv immediately
     log_print(f"DEBUG: Raw sys.argv = {sys.argv}")

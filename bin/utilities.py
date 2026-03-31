@@ -600,17 +600,24 @@ def log_print(input_message, log_file=None):
 # --------------------------------------------------------------
 # Set up logging environment
 # --------------------------------------------------------------
-def initialize_logging_environment(INPUT_FOLDER):
+def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     """Initialize the logging environment based on the input folder.
 
     Sets global logging variables and creates a log file based on the OS and input folder.
+    When sample_id is provided each sample gets its own log file; otherwise a single
+    run-level log file is created named after the output directory.
 
     Args:
         INPUT_FOLDER (str): Folder used to determine log file location.
+        sample_id (str, optional): Sample identifier. When supplied the log file is
+            named <sample_id>_log.txt inside INPUT_FOLDER instead of the default
+            <folder_name>_log.txt.
     """
     global DEFAULT_LOG_FILE, ENVIRONMENT_TYPE
+    os.makedirs(INPUT_FOLDER, exist_ok=True)
     print(INPUT_FOLDER)
-    input_file_path = f"{INPUT_FOLDER}/{INPUT_FOLDER.split('/')[-1]}_log.txt"
+    log_name = f"{sample_id}_log.txt" if sample_id else f"{INPUT_FOLDER.split('/')[-1]}_log.txt"
+    input_file_path = f"{INPUT_FOLDER}/{log_name}"
     os_name = platform.system()
     if os_name == "Windows":
         print("UNLOGGED:\tWINDOWS ENVIRONMENT")

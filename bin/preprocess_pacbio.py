@@ -217,7 +217,7 @@ if __name__ == "__main__":
         print("Usage: python3 preprocess_pacbio.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    initialize_logging_environment(sys.argv[3])
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     log_print(f"DEBUG: Raw sys.argv = {sys.argv}")
     log_print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")

@@ -1057,7 +1057,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     output_dir = sys.argv[3]
-    initialize_logging_environment(output_dir)
+    initialize_logging_environment(output_dir, sys.argv[1])
 
     _ = html_reporter(
         sys.argv[1],              # sample_id

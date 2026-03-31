@@ -1114,7 +1114,7 @@ if __name__ == "__main__":
               "<sample_id> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    initialize_logging_environment(sys.argv[4])
+    initialize_logging_environment(sys.argv[4], sys.argv[3])
 
     if sys.argv[1] == "final":
         labeled_assembly, final_stats_csv = final_assessment(sys.argv[1],       # assembly_type
