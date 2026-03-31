@@ -182,17 +182,19 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
 
 if __name__ == "__main__":
+    # Check argument count before any log_print calls
+    if len(sys.argv) != 6:
+        print(f"ERROR: Expected 5 arguments (plus script name), got {len(sys.argv)-1}: {sys.argv[1:]}",
+              file=sys.stderr)
+        print("Usage: python3 preprocess_refseq.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>",
+              file=sys.stderr)
+        sys.exit(1)
+
+    initialize_logging_environment(sys.argv[3])
+
     # Log raw sys.argv immediately
     log_print(f"DEBUG: Raw sys.argv = {sys.argv}")
     log_print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
-
-    # Check argument count
-    if len(sys.argv) != 6:
-        print(f"ERROR: Expected 5 arguments (plus script name), got {len(sys.argv)-1}: {sys.argv[1:]}", 
-              file=sys.stderr)
-        print("Usage: python3 preprocess_refseq.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", 
-              file=sys.stderr)
-        sys.exit(1)
 
     # Log each argument
     for i, arg in enumerate(sys.argv):
@@ -201,7 +203,6 @@ if __name__ == "__main__":
     sample_id   = sys.argv[1]
     input_csv   = sys.argv[2]
     output_dir  = sys.argv[3]
-    initialize_logging_environment(output_dir)
     cpu_threads = int(sys.argv[4])
     ram_gb      = int(sys.argv[5]) if sys.argv[5].strip() else 8
 
