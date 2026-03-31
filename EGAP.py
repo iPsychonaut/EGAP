@@ -33,7 +33,7 @@ from utilities import initialize_logging_environment, log_print
 # --------------------------------------------------------------
 # Establish Global Pipeline Settings (i.e. command variables)
 # --------------------------------------------------------------
-VERSION = "3.3.8"
+VERSION = "3.3.9"
 
 TRIMMOMATIC_SETTINGS = {
     "mode": "-PE",

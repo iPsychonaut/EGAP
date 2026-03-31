@@ -574,7 +574,7 @@ def log_print(input_message, log_file=None):
               "reset": "\033[0m"}
     if log_file is None:
         log_file = DEFAULT_LOG_FILE
-    now = datetime.now()
+    now = datetime.datetime.now()
     message = f"[{now:%Y-%m-%d %H:%M:%S}]\t{input_message}"
     message_type_dict = {"NOTE": "blue",
                          "CMD": "cyan",
