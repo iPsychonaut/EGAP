@@ -11,7 +11,7 @@ Updated on Wed Sept 3 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, subprocess, datetime, platform, shutil, math, hashlib, tempfile
+import os, subprocess, platform, shutil, math, hashlib, tempfile
 import pandas as pd
 from Bio import SeqIO
 from pathlib import Path
@@ -20,6 +20,7 @@ from typing import List
 DEFAULT_LOG_FILE = None
 ENVIRONMENT_TYPE = None
 
+from datetime import datetime
 
 # --------------------------------------------------------------
 # Catches and unzips compressed files for FASTQ
