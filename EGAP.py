@@ -579,10 +579,11 @@ if __name__ == "__main__":
         sleep_s=0.0,
     )
    
-    processes = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont", 
-                 "preprocess_pacbio", "assemble_masurca", "assemble_flye",
+    processes = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont",
+                 "preprocess_pacbio", "decontaminate_reads",
+                 "assemble_masurca", "assemble_flye",
                  "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-                 "polish_assembly", "curate_assembly"]
+                 "polish_assembly", "curate_assembly", "decontaminate_assembly"]
 
     # Determine project root and locate the bin/ directory there
     this_file   = Path(__file__).resolve()
