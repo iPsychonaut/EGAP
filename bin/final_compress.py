@@ -10,14 +10,14 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 import os, sys
 import pandas as pd
-from utilities import pigz_compress, get_current_row_data
+from utilities import pigz_compress, get_current_row_data, initialize_logging_environment, log_print
 
 
 def final_compress(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     """
     PEP 8 Documentation
     """
-    print(f"Compressing all FASTA and FASTQ files for {sample_id}...")
+    log_print(f"Compressing all FASTA and FASTQ files for {sample_id}...")
 
     # Read the CSV file and filter to the row corresponding to the sample of interest
     input_df = pd.read_csv(input_csv)
@@ -29,17 +29,17 @@ def final_compress(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_dir = os.path.join(output_dir, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
 
-    print(f"DEBUG - sample_dir - {sample_dir}")
+    log_print(f"DEBUG - sample_dir - {sample_dir}")
 
     # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
     for root, dirs, files in os.walk(sample_dir):
         for file in files:
             if file.endswith((".fasta", ".fastq")):
                 full_path = os.path.join(root, file)
-                print(f"Compressing: {full_path}")
+                log_print(f"Compressing: {full_path}")
                 _ = pigz_compress(full_path, cpu_threads)
 
-    print("PASS:\tAll FASTA and FASTQ successfully compressed!")
+    log_print("PASS:\tAll FASTA and FASTQ successfully compressed!")
             
             
 if __name__ == "__main__":
@@ -48,6 +48,9 @@ if __name__ == "__main__":
         print("Usage: python3 final_compress.py <input_csv> "
               "<sample_id> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    output_dir = sys.argv[3]
+    initialize_logging_environment(output_dir, sys.argv[2])
 
     final_compress(sys.argv[1],       # input_csv
                    sys.argv[2],       # sample_id

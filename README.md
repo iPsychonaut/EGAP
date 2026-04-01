@@ -75,16 +75,30 @@ Optimized for fungal genomes, EGAP is adaptable to other organisms by adjusting 
 ## Table of Contents
 
 1.  [Overview](#overview)
-2.  [Installation](#installation)
-3.  [Pipeline Flow](#pipeline-flow)
-4.  [Command-Line Usage](#command-line-usage)
-5.  [CSV Generation](#csv-generation)
-6.  [Example Data & Instructions](#example-data--instructions)
-7.  [Quality Control Output Review](#quality-control-output-review)
-8.  [Future Improvements](#future-improvements)
-9.  [References](#references)
-10. [Contribution](#contribution)
-11. [License](#license)
+2.  [Changelog](#changelog)
+3.  [Installation](#installation)
+4.  [Pipeline Flow](#pipeline-flow)
+5.  [Command-Line Usage](#command-line-usage)
+6.  [CSV Generation](#csv-generation)
+7.  [Example Data & Instructions](#example-data--instructions)
+8.  [Quality Control Output Review](#quality-control-output-review)
+9.  [Future Improvements](#future-improvements)
+10. [References](#references)
+11. [Contribution](#contribution)
+12. [License](#license)
+
+## Changelog
+
+### v3.3.9 *(2026-03-30)*
+- **Pipeline-wide logging system**: Every run now writes a timestamped log file to `<output_dir>/<output_dir_name>_log.txt`. All status, command, warning, pass, skip, and error messages from every pipeline stage are captured there in addition to being printed to the terminal with color coding.
+  - `utilities.py`: Added module-level `DEFAULT_LOG_FILE` and `ENVIRONMENT_TYPE` variables; `run_subprocess_cmd()` now routes all output through `log_print()`.
+  - `EGAP.py`: Calls `initialize_logging_environment(output_dir)` on startup; all operational progress messages routed through `log_print()`.
+  - All sub-pipeline scripts (`preprocess_*`, `assemble_*`, `compare_assemblies`, `polish_assembly`, `curate_assembly`, `qc_assessment`, `html_reporter`, `process_metadata`, `final_compress`): each initializes the logging environment independently on startup (required since they run as separate subprocesses) and routes all operational messages through `log_print()`.
+
+### v3.3.8 *(2026-02-25)*
+- Added `process_metadata.py` for SRA and assembly metadata TSV generation.
+- `html_reporter.py`: Improved template handling and robustness to missing QC artifacts.
+- `compare_assemblies.py` and `qc_assessment.py`: Stability and path-handling fixes.
 
 ## Installation
 
@@ -191,7 +205,7 @@ EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 1 -r 8
 
 ## CSV Generation
 
-It is necssary to provide a CSV file containing the necessary information for each sample.
+It is necessary to provide a CSV file containing the necessary information for each sample.
 
 ### CSV Format
 
@@ -260,8 +274,10 @@ If no sub-folder for sub-species is needed then place everything in the main spe
 ## Quality Control Output Review
 
 EGAP generates final assemblies along with:
+- **Run log**: `<output_dir>/<output_dir_name>_log.txt` — a full timestamped record of every command, status, warning, and result across all pipeline stages.
 - **QUAST** metrics (contig count, N50, L50, GC%, coverage)
 - **BUSCO/Compleasm** plots showing Single, Duplicated, Fragmented & Missing scores.
+- **HTML report** summarising all QC metrics and plots for each sample.
 - Final assembly classification: **AMAZING, GREAT, OK,** or **POOR**
 
 ### Statistics Thresholds
@@ -336,12 +352,11 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 
 ## Future Improvements
 
-- **Automated Quality Assessment Reports**: Generate comprehensive quality reports post-assembly for easier analysis.
-- **Improved Data Management**: Automated removal of excess files upon pipeline completion.
+- **Improved Data Management**: Automated removal of intermediate/excess files upon pipeline completion.
 - **Enhanced Support for Diverse Genomes**: Optimize pipeline parameters for non-fungal genomes to improve versatility.
-- **Improved Error Handling**: Develop robust error detection and user-friendly feedback.
-- **Integration with Additional Sequencing Platforms**:  
-  - Support for ONT input only and ONT input with Reference sequence.  
+- **Log Verbosity Control**: Add `--verbose` / `--quiet` flags to control how much detail is written to the log file and terminal.
+- **Integration with Additional Sequencing Platforms**:
+  - Support for ONT input only and ONT input with Reference sequence.
   
 ## References
 

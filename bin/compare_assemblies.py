@@ -20,7 +20,7 @@ import glob
 import pandas as pd
 from pathlib import Path
 from collections import Counter
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print
 from Bio import SeqIO
 from qc_assessment import run_lineage_eval
 
@@ -38,23 +38,23 @@ def validate_fasta(file_path):
         bool: True if valid, False otherwise.
     """
     if not os.path.exists(file_path):
-        print(f"ERROR:\tFASTA file not found: {file_path}")
+        log_print(f"ERROR:\tFASTA file not found: {file_path}")
         return False
     if os.path.getsize(file_path) < 100:
-        print(f"ERROR:\tFASTA file is suspiciously small: {file_path}")
+        log_print(f"ERROR:\tFASTA file is suspiciously small: {file_path}")
         return False
     try:
         with open(file_path, "r") as f:
             for record in SeqIO.parse(f, "fasta"):
                 if not record.seq:
-                    print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
+                    log_print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
                     return False
                 if not all(c.upper() in "ATCGN" for c in record.seq):
-                    print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
+                    log_print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
                     return False
                 return True
     except Exception as e:
-        print(f"ERROR:\tInvalid FASTA format in {file_path}: {str(e)}")
+        log_print(f"ERROR:\tInvalid FASTA format in {file_path}: {str(e)}")
         return False
     return False
 
@@ -118,20 +118,20 @@ def get_quast_stats(assembly, cpu_threads, sample_dir, assembler):
         tuple: (contig count, N50) as integers, or (None, None) if unsuccessful.
     """
     if not validate_fasta(assembly):
-        print(f"ERROR:\tInvalid assembly for Quast: {assembly}")
+        log_print(f"ERROR:\tInvalid assembly for Quast: {assembly}")
         return None, None
 
     out_dir = os.path.join(sample_dir, f"{assembler}_assembly", f"{os.path.basename(assembly)}_quast")
     os.makedirs(out_dir, exist_ok=True)
     report = os.path.join(out_dir, "report.tsv")
     if os.path.exists(report):
-        print(f"SKIP:\tQUAST Report already exists: {report}")
+        log_print(f"SKIP:\tQUAST Report already exists: {report}")
     else:
         quast_cmd = ["quast.py", "-o", out_dir, "-t", str(cpu_threads), assembly]
-        print(f"DEBUG - Running QUAST: {' '.join(quast_cmd)}")
+        log_print(f"DEBUG - Running QUAST: {' '.join(quast_cmd)}")
         result = run_subprocess_cmd(quast_cmd, shell_check=False)
         if result != 0:
-            print(f"WARN:\tQUAST failed for {assembly} with return code {result}")
+            log_print(f"WARN:\tQUAST failed for {assembly} with return code {result}")
             return None, None
 
     try:
@@ -145,7 +145,7 @@ def get_quast_stats(assembly, cpu_threads, sample_dir, assembler):
                     n50 = int(line.split()[1])
             return contig_count, n50
     except FileNotFoundError:
-        print(f"ERROR:\tQUAST report not found: {report}")
+        log_print(f"ERROR:\tQUAST report not found: {report}")
     return None, None
 
 
@@ -273,7 +273,7 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
     output_dir_abs = str(Path(output_dir).resolve())
-    print(f"DEBUG - output_dir_abs - {output_dir_abs}")
+    log_print(f"DEBUG - output_dir_abs - {output_dir_abs}")
 
     # build dirs from absolute base
     species_dir = os.path.join(output_dir_abs, species_id)
@@ -289,26 +289,26 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
-    print(f"DEBUG - illumina_sra - {illumina_sra}")
-    print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
-    print(f"DEBUG - illumina_r_raw_reads - {illumina_r_raw_reads}")
-    print(f"DEBUG - ont_sra - {ont_sra}")
-    print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
-    print(f"DEBUG - pacbio_sra - {pacbio_sra}")
-    print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
-    print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
-    print(f"DEBUG - ref_seq - {ref_seq}")
-    print(f"DEBUG - species_id - {species_id}")
-    print(f"DEBUG - species_dir - {species_dir}")
-    print(f"DEBUG - est_size - {est_size}")
-    print(f"DEBUG - busco_1 - {busco_1}")
-    print(f"DEBUG - busco_2 - {busco_2}")
+    log_print(f"DEBUG - illumina_sra - {illumina_sra}")
+    log_print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
+    log_print(f"DEBUG - illumina_r_raw_reads - {illumina_r_raw_reads}")
+    log_print(f"DEBUG - ont_sra - {ont_sra}")
+    log_print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
+    log_print(f"DEBUG - pacbio_sra - {pacbio_sra}")
+    log_print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
+    log_print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
+    log_print(f"DEBUG - ref_seq - {ref_seq}")
+    log_print(f"DEBUG - species_id - {species_id}")
+    log_print(f"DEBUG - species_dir - {species_dir}")
+    log_print(f"DEBUG - est_size - {est_size}")
+    log_print(f"DEBUG - busco_1 - {busco_1}")
+    log_print(f"DEBUG - busco_2 - {busco_2}")
 
     # Ensure working directory is sample_dir
     os.makedirs(sample_dir, exist_ok=True)
     os.chdir(sample_dir)
     sample_dir = os.getcwd()
-    print(f"DEBUG - Set working directory to: {sample_dir}")
+    log_print(f"DEBUG - Set working directory to: {sample_dir}")
 
     all_methods = ["MaSuRCA", "SPAdes", "Flye", "Hifiasm"]
     assemblies = {}
@@ -317,31 +317,31 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     spades_asm = discover_spades(sample_dir, sample_id)
     if spades_asm:
         assemblies["SPAdes"] = spades_asm
-        print(f"DEBUG - SPAdes assembly - {spades_asm}")
+        log_print(f"DEBUG - SPAdes assembly - {spades_asm}")
 
     masurca_asm = discover_masurca(sample_dir, sample_id)
     if masurca_asm:
         assemblies["MaSuRCA"] = masurca_asm
-        print(f"DEBUG - MaSuRCA assembly - {masurca_asm}")
+        log_print(f"DEBUG - MaSuRCA assembly - {masurca_asm}")
 
     flye_asm = discover_flye(sample_dir, sample_id)
     if flye_asm:
         assemblies["Flye"] = flye_asm
-        print(f"DEBUG - Flye assembly - {flye_asm}")
+        log_print(f"DEBUG - Flye assembly - {flye_asm}")
 
     hifiasm_asm = discover_hifiasm(sample_dir, sample_id)
     if hifiasm_asm:
         assemblies["Hifiasm"] = hifiasm_asm
-        print(f"DEBUG - Hifiasm assembly - {hifiasm_asm}")
+        log_print(f"DEBUG - Hifiasm assembly - {hifiasm_asm}")
 
-    print(f"DEBUG - len(assemblies) - {len(assemblies)}")
+    log_print(f"DEBUG - len(assemblies) - {len(assemblies)}")
     if len(assemblies) == 0:
-        print("ERROR:\tNo valid assemblies to compare")
-        print("HINT:\tI looked for:")
-        print(f"      - {os.path.join(sample_dir, 'spades_assembly')}/(scaffolds.fasta|contigs.fasta|{sample_id}_spades.fasta)")
-        print(f"      - {os.path.join(sample_dir, 'masurca_assembly')}/(CA*/9-terminator/genome.scf.fasta|primary.genome.scf.fasta|{sample_id}_masurca.fasta)")
-        print(f"      - {os.path.join(sample_dir, 'flye_assembly')}/(assembly.fasta|{sample_id}_flye.fasta)")
-        print(f"      - {os.path.join(sample_dir, 'hifiasm_assembly')}/(*.p_ctg.fa|{sample_id}_hifiasm.fasta)")
+        log_print("ERROR:\tNo valid assemblies to compare")
+        log_print("HINT:\tI looked for:")
+        log_print(f"      - {os.path.join(sample_dir, 'spades_assembly')}/(scaffolds.fasta|contigs.fasta|{sample_id}_spades.fasta)")
+        log_print(f"      - {os.path.join(sample_dir, 'masurca_assembly')}/(CA*/9-terminator/genome.scf.fasta|primary.genome.scf.fasta|{sample_id}_masurca.fasta)")
+        log_print(f"      - {os.path.join(sample_dir, 'flye_assembly')}/(assembly.fasta|{sample_id}_flye.fasta)")
+        log_print(f"      - {os.path.join(sample_dir, 'hifiasm_assembly')}/(*.p_ctg.fa|{sample_id}_hifiasm.fasta)")
         return None
 
     # Check if only reference is provided and skip
@@ -349,7 +349,7 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
        (pd.isna(illumina_r_raw_reads) and pd.isna(illumina_sra)) and \
        (pd.isna(ont_raw_reads) and pd.isna(ont_sra)) and \
        (pd.isna(pacbio_raw_reads) and pd.isna(pacbio_sra)):
-        print("SKIP:\tNo valid reads provided, required for assembly comparison.")
+        log_print("SKIP:\tNo valid reads provided, required for assembly comparison.")
         return None
 
     # Gather stats
@@ -386,7 +386,7 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             best = max(candidates, key=lambda x: x[0])[1]
         custom_stats.append(best)
 
-    print(f"DEBUG - len(assemblies) - {len(assemblies)}")
+    log_print(f"DEBUG - len(assemblies) - {len(assemblies)}")
 
     # Pick the overall winner
     if len(assemblies) == 1:
@@ -395,16 +395,16 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         counts = Counter(m for m in custom_stats if m != "Unknown")
         most_represented_method = counts.most_common(1)[0][0] if counts else "Unknown"
     else:
-        print("ERROR:\tNo valid assemblies to compare")
+        log_print("ERROR:\tNo valid assemblies to compare")
         return None
 
     if most_represented_method == "Unknown":
-        print("ERROR:\tNo valid assemblies to compare")
+        log_print("ERROR:\tNo valid assemblies to compare")
         return None
 
-    print(f"Best Initial Assembly: {most_represented_method}")
+    log_print(f"Best Initial Assembly: {most_represented_method}")
     for lbl, val in zip(labels, stats_dict[most_represented_method]):
-        print(f"{lbl}: {val}")
+        log_print(f"{lbl}: {val}")
 
     # Copy into sample_dir
     orig = assemblies[most_represented_method]
@@ -421,7 +421,10 @@ if __name__ == "__main__":
         print("Usage: python3 compare_assemblies.py <sample_id> <input_csv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
-        
+
+    output_dir = sys.argv[3]
+    initialize_logging_environment(output_dir, sys.argv[1])
+
     best_assembly = compare_assemblies(sys.argv[1],       # sample_id
                                       sys.argv[2],       # input_csv
                                       sys.argv[3],       # output_dir

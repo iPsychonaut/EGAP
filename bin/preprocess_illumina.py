@@ -15,7 +15,7 @@ Updated on Wed Sept 3 2025
 """
 import os, sys, shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, md5_check
+from utilities import run_subprocess_cmd, get_current_row_data, md5_check, initialize_logging_environment, log_print
 
 
 # --------------------------------------------------------------
@@ -33,7 +33,7 @@ def illumina_extract_and_check(folder_name, SAMPLE_ID):
     Returns:
         list or None: Paths to combined forward and reverse files, or None if failed.
     """
-    print(f"Running MD5 Checksum Analysis on Raw Illumina FASTQ files in {folder_name}...")
+    log_print(f"Running MD5 Checksum Analysis on Raw Illumina FASTQ files in {folder_name}...")
     illumina_df = pd.DataFrame(columns=["MD5", "Filename"])
     base_folder = SAMPLE_ID.split("-")[0]  # e.g., "Es_coli"
     illumina_dir = os.path.join(os.getcwd(), base_folder, "Illumina")  # Use current dir, not hardcoded EGAP_Test_Data
@@ -53,16 +53,16 @@ def illumina_extract_and_check(folder_name, SAMPLE_ID):
                 elif "_2.fastq" in filename:
                     raw_2_list.append(os.path.join(folder_name, filename))
             if not raw_1_list or not raw_2_list:
-                print(f"ERROR:\tNo paired Illumina files found in {folder_name}")
+                log_print(f"ERROR:\tNo paired Illumina files found in {folder_name}")
                 return None
             fwd_cat_cmd = f"cat {' '.join(raw_1_list)} > {combined_1_file}"
             _ = run_subprocess_cmd(fwd_cat_cmd, shell_check=True)
             rev_cat_cmd = f"cat {' '.join(raw_2_list)} > {combined_2_file}"
             _ = run_subprocess_cmd(rev_cat_cmd, shell_check=True)
         else:
-            print(f"SKIP:\tCombined FASTQ files already exist: {combined_list[0]}; {combined_list[1]}.")
+            log_print(f"SKIP:\tCombined FASTQ files already exist: {combined_list[0]}; {combined_list[1]}.")
     else:
-        print(f"SKIP:\tGzipped Combined FASTQ files already exist: {combined_list[0]}; {combined_list[1]}.")
+        log_print(f"SKIP:\tGzipped Combined FASTQ files already exist: {combined_list[0]}; {combined_list[1]}.")
 
     return combined_list if os.path.exists(combined_list[0]) and os.path.exists(combined_list[1]) else None
 
@@ -87,16 +87,16 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     """
     from pathlib import Path
 
-    print(f"Preprocessing Illumina reads for {sample_id.split('-')[0]}...")
+    log_print(f"Preprocessing Illumina reads for {sample_id.split('-')[0]}...")
 
     # Parse the CSV and retrieve relevant row data
     input_df = pd.read_csv(input_csv)
-    print(f"DEBUG - input_df - {input_df}")
+    log_print(f"DEBUG - input_df - {input_df}")
 
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]  # Convert to Series (single row)
 
-    print(f"DEBUG - current_series - {current_series}")
+    log_print(f"DEBUG - current_series - {current_series}")
 
     # Identify read paths/reference info from CSV
     illu_sra = current_series["ILLUMINA_SRA"]
@@ -105,14 +105,14 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     illu_raw_dir = current_series["ILLUMINA_RAW_DIR"]
     species_id = current_series["SPECIES_ID"]
 
-    print(f"DEBUG - illu_sra - {illu_sra}")
-    print(f"DEBUG - illu_raw_f_reads - {illu_raw_f_reads}")
-    print(f"DEBUG - illu_raw_r_reads - {illu_raw_r_reads}")
-    print(f"DEBUG - illu_raw_dir - {illu_raw_dir}")
+    log_print(f"DEBUG - illu_sra - {illu_sra}")
+    log_print(f"DEBUG - illu_raw_f_reads - {illu_raw_f_reads}")
+    log_print(f"DEBUG - illu_raw_r_reads - {illu_raw_r_reads}")
+    log_print(f"DEBUG - illu_raw_dir - {illu_raw_dir}")
 
     # Early skip if nothing Illumina-like is provided
     if pd.isna(illu_sra) and pd.isna(illu_raw_f_reads) and pd.isna(illu_raw_r_reads) and pd.isna(illu_raw_dir):
-        print(f"SKIP:\tSample does not include Illumina Reads: {sample_id}.")
+        log_print(f"SKIP:\tSample does not include Illumina Reads: {sample_id}.")
         return None, None
 
     # Prepare directories
@@ -127,7 +127,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         r2 = illumina_dir / f"{sra_id}_2.fastq"
 
         if not (r1.exists() and r2.exists()):
-            print(f"Downloading Illumina SRA: {sra_id}...")
+            log_print(f"Downloading Illumina SRA: {sra_id}...")
 
             # 1) prefetch directly into the Illumina directory (avoid cwd clutter)
             #    This writes SRR*/SRR*.sra under <Illumina/>.
@@ -157,7 +157,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
             # Fallback to fastq-dump if fasterq-dump failed or outputs missing
             if ret != 0 or not (r1.exists() and r2.exists()):
-                print("WARN:\tfasterq-dump failed or files not found; trying fastq-dump fallback...")
+                log_print("WARN:\tfasterq-dump failed or files not found; trying fastq-dump fallback...")
                 fq2_cmd = (
                     env_prefix +
                     "fastq-dump "
@@ -168,24 +168,24 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 ret2 = run_subprocess_cmd(fq2_cmd, True)
 
                 if ret2 != 0 or not (r1.exists() and r2.exists()):
-                    print(f"ERROR:\tFailed to produce FASTQ for {sra_id}.")
+                    log_print(f"ERROR:\tFailed to produce FASTQ for {sra_id}.")
                     return None, None
 
-            print(f"PASS:\tIllumina SRA processed: {r1}, {r2}")
+            log_print(f"PASS:\tIllumina SRA processed: {r1}, {r2}")
 
         illu_raw_f_reads = str(r1)
         illu_raw_r_reads = str(r2)
 
     # ---- CASE B: Raw directory provided; combine/verify there ----
     elif pd.notna(illu_raw_dir) and (pd.isna(illu_raw_f_reads) or pd.isna(illu_raw_r_reads)):
-        print(f"Process Illumina Raw Directory: {illu_raw_dir}...")
+        log_print(f"Process Illumina Raw Directory: {illu_raw_dir}...")
         combined_list = illumina_extract_and_check(str(illu_raw_dir), sample_id)
         if combined_list:
-            print("PASS:\tSuccessfully processed Illumina Raw Directory.")
+            log_print("PASS:\tSuccessfully processed Illumina Raw Directory.")
             illu_raw_f_reads, illu_raw_r_reads = combined_list[0], combined_list[1]
             # Update the 'SRA' field logically for downstream logging (won't rewrite CSV here)
         else:
-            print(f"ERROR:\tFailed to process Illumina Raw Directory for {sample_id}")
+            log_print(f"ERROR:\tFailed to process Illumina Raw Directory for {sample_id}")
             return None, None
 
     # If both explicit files provided in CSV, just trust them
@@ -198,9 +198,9 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # Final guard: we must have both R1 and R2 paths now
     if not illu_raw_f_reads or not illu_raw_r_reads or not os.path.exists(illu_raw_f_reads) or not os.path.exists(illu_raw_r_reads):
-        print("ERROR:\tIllumina paired-end files are missing after preprocessing:")
-        print(f"      R1: {illu_raw_f_reads}")
-        print(f"      R2: {illu_raw_r_reads}")
+        log_print("ERROR:\tIllumina paired-end files are missing after preprocessing:")
+        log_print(f"      R1: {illu_raw_f_reads}")
+        log_print(f"      R2: {illu_raw_r_reads}")
         return None, None
 
     # Output filenames
@@ -209,7 +209,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # Short-circuit if already done
     if os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads):
-        print(f"SKIP:\tIllumina preprocessing already completed: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
+        log_print(f"SKIP:\tIllumina preprocessing already completed: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
         return illu_dedup_f_reads, illu_dedup_r_reads
 
     # ---------- FastQC on raw ----------
@@ -239,7 +239,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     def _run_trimmomatic(t_threads, use_heap=False):
         truseq3_path = shutil.which("TruSeq3-PE.fa") or shutil.which("TruSeq3-PE")
         if not truseq3_path:
-            print("WARN:\tTruSeq3-PE adapters file not found on PATH; Trimmomatic may fail.")
+            log_print("WARN:\tTruSeq3-PE adapters file not found on PATH; Trimmomatic may fail.")
         base_cmd = [
             "trimmomatic", "PE",
             "-threads", str(t_threads),
@@ -264,14 +264,14 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             return run_subprocess_cmd(base_cmd, False)
 
     if os.path.exists(trimmo_f_pair) and os.path.exists(trimmo_r_pair) and _nonempty(trimmo_f_pair) and _nonempty(trimmo_r_pair):
-        print(f"SKIP:\tTrimmomatic files exist: {trimmo_f_pair} & {trimmo_r_pair}.")
+        log_print(f"SKIP:\tTrimmomatic files exist: {trimmo_f_pair} & {trimmo_r_pair}.")
     else:
         # 1st attempt: as-is
         rc = _run_trimmomatic(cpu_threads, use_heap=False)
 
         # Check success: return code + non-empty outputs
         if rc != 0 or not (_nonempty(trimmo_f_pair) and _nonempty(trimmo_r_pair)):
-            print("WARN:\tTrimmomatic failed or produced empty outputs; retrying with fewer threads and larger Java heap...")
+            log_print("WARN:\tTrimmomatic failed or produced empty outputs; retrying with fewer threads and larger Java heap...")
             # Clean any empty outputs to avoid confusion
             for p in [trimmo_f_pair, trimmo_r_pair, trimmo_f_unpair, trimmo_r_unpair]:
                 try:
@@ -297,7 +297,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     bbduk_r_map = str(Path(trimmo_r_pair).with_name(Path(trimmo_r_pair).name.replace("_reverse_paired", "_reverse_mapped")))
 
     if os.path.exists(bbduk_f_map) and os.path.exists(bbduk_r_map):
-        print(f"SKIP:\tbbduk mapped files exist: {bbduk_f_map} & {bbduk_r_map}.")
+        log_print(f"SKIP:\tbbduk mapped files exist: {bbduk_f_map} & {bbduk_r_map}.")
     else:
         run_subprocess_cmd([
             "bbduk.sh",
@@ -309,7 +309,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # ---------- Clumpify (dedupe) ----------
     if os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads):
-        print(f"SKIP:\tClumpify deduplicated files exist: {illu_dedup_f_reads} & {illu_dedup_r_reads}.")
+        log_print(f"SKIP:\tClumpify deduplicated files exist: {illu_dedup_f_reads} & {illu_dedup_r_reads}.")
     else:
         run_subprocess_cmd([
             "clumpify.sh",
@@ -318,7 +318,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             "dedupe"
         ], False)
 
-    print(f"PASS:\tPreprocessed Raw Illumina Reads for {species_id}: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
+    log_print(f"PASS:\tPreprocessed Raw Illumina Reads for {species_id}: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
 
     # ---------- FastQC on dedup ----------
     dedup_fastqc_results_dir = str(illumina_dir / "dedup_fastqc_results")
@@ -329,32 +329,34 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
 
 if __name__ == "__main__":
-    # Log raw sys.argv immediately
-    print(f"DEBUG: Raw sys.argv = {sys.argv}")
-    print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
-    
-    # Check argument count
+    # Check argument count before any log_print calls
     if len(sys.argv) != 6:
-        print(f"ERROR: Expected 5 arguments (plus script name), got {len(sys.argv)-1}: {sys.argv[1:]}", 
+        print(f"ERROR: Expected 5 arguments (plus script name), got {len(sys.argv)-1}: {sys.argv[1:]}",
               file=sys.stderr)
-        print("Usage: python3 preprocess_illumina.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", 
+        print("Usage: python3 preprocess_illumina.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>",
               file=sys.stderr)
         sys.exit(1)
-    
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
+
+    # Log raw sys.argv immediately
+    log_print(f"DEBUG: Raw sys.argv = {sys.argv}")
+    log_print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
+
     # Log each argument
     for i, arg in enumerate(sys.argv):
-        print(f"DEBUG: sys.argv[{i}] = '{arg}'")
-    
+        log_print(f"DEBUG: sys.argv[{i}] = '{arg}'")
+
     sample_id = sys.argv[1]
     input_csv = sys.argv[2]
     output_dir = sys.argv[3]
     cpu_threads = int(sys.argv[4])
     ram_gb = int(sys.argv[5]) if sys.argv[5] != " " else 8
     
-    print(f"DEBUG: Parsed sample_id = '{sample_id}' {type(sample_id)}")
-    print(f"DEBUG: Parsed input_csv = '{input_csv}' {type(input_csv)}")
-    print(f"DEBUG: Parsed output_dir = '{output_dir}' {type(output_dir)}")
-    print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' {sys.argv[4]} (converted to {cpu_threads}) {type(cpu_threads)}")
-    print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' {sys.argv[5]} (converted to {ram_gb}) {type(ram_gb)}")
+    log_print(f"DEBUG: Parsed sample_id = '{sample_id}' {type(sample_id)}")
+    log_print(f"DEBUG: Parsed input_csv = '{input_csv}' {type(input_csv)}")
+    log_print(f"DEBUG: Parsed output_dir = '{output_dir}' {type(output_dir)}")
+    log_print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' {sys.argv[4]} (converted to {cpu_threads}) {type(cpu_threads)}")
+    log_print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' {sys.argv[5]} (converted to {ram_gb}) {type(ram_gb)}")
     
     illu_dedup_f_reads, illu_dedup_r_reads = preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb)

@@ -16,6 +16,10 @@ import pandas as pd
 from Bio import SeqIO
 from pathlib import Path
 from typing import List
+
+DEFAULT_LOG_FILE = None
+ENVIRONMENT_TYPE = None
+
 from datetime import datetime
 
 # --------------------------------------------------------------
@@ -160,20 +164,20 @@ def run_subprocess_cmd(cmd_list, shell_check):
         int: The subprocess return code.
     """
     if isinstance(cmd_list, str):
-        print(f"CMD:\t{cmd_list}")
+        log_print(f"CMD:\t{cmd_list}")
         process = subprocess.Popen(cmd_list, shell=shell_check, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)
     else:
-        print(f"CMD:\t{' '.join(cmd_list)}")
+        log_print(f"CMD:\t{' '.join(cmd_list)}")
         process = subprocess.Popen(cmd_list, shell=shell_check, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)
     for line in process.stdout:
-        print(line, end="")
+        log_print(line.rstrip())
     process.wait()
     if process.returncode != 0:
-        print(f"NOTE:\tCommand failed with return code {process.returncode}")
+        log_print(f"NOTE:\tCommand failed with return code {process.returncode}")
     else:
-        print(f"PASS:\tSuccessfully processed command: {' '.join(cmd_list) if isinstance(cmd_list, list) else cmd_list}")
+        log_print(f"PASS:\tSuccessfully processed command: {' '.join(cmd_list) if isinstance(cmd_list, list) else cmd_list}")
     return process.returncode
 
 
@@ -540,8 +544,10 @@ def generate_log_file(log_file_path, use_numerical_suffix=False):
             counter += 1
             new_log_file_path = f"{base}_{counter}{ext}"
         log_file_path = new_log_file_path
-    else:
-        open(log_file_path, "w").close()
+    try:
+        open(log_file_path, "a").close()   # "a" = create if absent, never truncate existing
+    except Exception as exc:
+        print(f"UNLOGGED ERROR:\tCould not create log file {log_file_path!r}: {exc}")
     return log_file_path
 
 
@@ -571,7 +577,7 @@ def log_print(input_message, log_file=None):
               "reset": "\033[0m"}
     if log_file is None:
         log_file = DEFAULT_LOG_FILE
-    now = datetime.now()
+    now = datetime.datetime.now()
     message = f"[{now:%Y-%m-%d %H:%M:%S}]\t{input_message}"
     message_type_dict = {"NOTE": "blue",
                          "CMD": "cyan",
@@ -597,17 +603,39 @@ def log_print(input_message, log_file=None):
 # --------------------------------------------------------------
 # Set up logging environment
 # --------------------------------------------------------------
-def initialize_logging_environment(INPUT_FOLDER):
+def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     """Initialize the logging environment based on the input folder.
 
     Sets global logging variables and creates a log file based on the OS and input folder.
+    When sample_id is provided each sample gets its own log file; otherwise a single
+    run-level log file is created named after the output directory.
+
+    The log directory can be overridden by the EGAP_LOG_DIR environment variable.
+    EGAP.py sets this variable to the species-specific output directory so that
+    per-sample log files land alongside the assembly outputs instead of at the
+    root of output_dir.
 
     Args:
         INPUT_FOLDER (str): Folder used to determine log file location.
+        sample_id (str, optional): Sample identifier. When supplied the log file is
+            named <sample_id>_log.txt inside INPUT_FOLDER instead of the default
+            <folder_name>_log.txt.
     """
     global DEFAULT_LOG_FILE, ENVIRONMENT_TYPE
-    print(INPUT_FOLDER)
-    input_file_path = f"{INPUT_FOLDER}/{INPUT_FOLDER.split('/')[-1]}_log.txt"
+
+    # Allow the orchestrator (EGAP.py / EGAP_TUI.py) to redirect per-sample
+    # log files into the correct species-level output directory.
+    egap_log_dir = os.environ.get("EGAP_LOG_DIR", "").strip()
+    if egap_log_dir and sample_id:
+        log_dir = egap_log_dir
+    else:
+        log_dir = INPUT_FOLDER
+
+    os.makedirs(log_dir, exist_ok=True)
+    print(log_dir)
+    folder_base = os.path.basename(INPUT_FOLDER.rstrip('/\\'))
+    log_name = f"{sample_id}_log.txt" if sample_id else f"{folder_base}_log.txt"
+    input_file_path = os.path.join(log_dir, log_name)
     os_name = platform.system()
     if os_name == "Windows":
         print("UNLOGGED:\tWINDOWS ENVIRONMENT")

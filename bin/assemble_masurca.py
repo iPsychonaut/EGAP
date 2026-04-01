@@ -13,7 +13,7 @@ Updated on Wed Sept 3 2025
 """
 import os, sys, shutil, re, stat
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print
 from qc_assessment import qc_assessment
 from pathlib import Path
 
@@ -59,7 +59,7 @@ def parse_bbmerge_output(insert_size_histogram_txt):
     Raises:
         ValueError: If mean or standard deviation cannot be parsed.
     """
-    print(f"Processing insert size histogram: {insert_size_histogram_txt}...")
+    log_print(f"Processing insert size histogram: {insert_size_histogram_txt}...")
     avg_insert = None
     std_dev = None
     with open(insert_size_histogram_txt, "r") as file:
@@ -91,14 +91,14 @@ def bbmap_stats(input_folder, reads_list, cpu_threads):
     """
     bbmap_out_path = f"{input_folder}/bbmap_data.fq"
     insert_size_histogram_txt = f"{input_folder}/insert_size_histogram.txt"
-    print(f"DEBUG - bbmap_out_path - {bbmap_out_path}")
+    log_print(f"DEBUG - bbmap_out_path - {bbmap_out_path}")
     avg_insert = 251
     std_dev = 30
     if os.path.isfile(insert_size_histogram_txt):
-        print(f"SKIP:\tbbmap insert size histogram output already exists: {insert_size_histogram_txt}")
+        log_print(f"SKIP:\tbbmap insert size histogram output already exists: {insert_size_histogram_txt}")
         avg_insert, std_dev = parse_bbmerge_output(insert_size_histogram_txt)
     else:
-        print("Processing fastq files for bbmap stats...")
+        log_print("Processing fastq files for bbmap stats...")
         bbmerge_path = shutil.which("bbmerge.sh") or shutil.which("bbmerge")
         if not bbmerge_path:
             raise FileNotFoundError("bbmerge not found in PATH")
@@ -111,7 +111,7 @@ def bbmap_stats(input_folder, reads_list, cpu_threads):
         try:
             avg_insert, std_dev = parse_bbmerge_output(insert_size_histogram_txt)
         except:
-            print("NOTE:\tUnable to parse avg_insert or std_dev, using default values: 251 and 30 respectively.")
+            log_print("NOTE:\tUnable to parse avg_insert or std_dev, using default values: 251 and 30 respectively.")
             avg_insert = 251
             std_dev = 30
     return avg_insert, std_dev
@@ -186,7 +186,7 @@ def ensure_flye_vendor_shim():
         os.chmod(vendor_exe, 0o755)
         made = "wrapper"
 
-    print(f"INFO:\tInstalled Flye vendor {made} for MaSuRCA: {vendor_exe} -> {flye_bin}")
+    log_print(f"INFO:\tInstalled Flye vendor {made} for MaSuRCA: {vendor_exe} -> {flye_bin}")
 
 
 def patch_environment_flye(env_sh_path: str) -> str:
@@ -323,10 +323,10 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         str or None: Path to the MaSuRCA assembly FASTA, or None if assembly fails.
     """
     input_csv_abs = os.path.abspath(input_csv)
-    print(f"DEBUG - input_csv_abs - {input_csv_abs}")
+    log_print(f"DEBUG - input_csv_abs - {input_csv_abs}")
 
     output_dir_abs = str(Path(output_dir).resolve())
-    print(f"DEBUG - output_dir_abs - {output_dir_abs}")
+    log_print(f"DEBUG - output_dir_abs - {output_dir_abs}")
 
     input_df = pd.read_csv(input_csv_abs)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
@@ -353,7 +353,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # ---------- FAST SKIP if final output exists (re-run QC) ----------
     expected_final = masurca_out_dir / f"{sample_id}_masurca.fasta"
     if expected_final.exists() and expected_final.stat().st_size > 0:
-        print(f"SKIP:\tFinal MaSuRCA assembly already present: {expected_final}")
+        log_print(f"SKIP:\tFinal MaSuRCA assembly already present: {expected_final}")
         # Re-run QC on the existing assembly/output structure
         egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment(
             "masurca", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
@@ -390,27 +390,27 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         candidate = species_dir / "PacBio" / f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq"
         highest_mean_qual_long_reads = _abs(candidate if candidate.exists() else pacbio_raw_reads)
 
-    print(f"DEBUG - illumina_sra - {illumina_sra}")
-    print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
-    print(f"DEBUG - illumina_r_raw_reads - {illumina_r_raw_reads}")
-    print(f"DEBUG - ont_sra - {ont_sra}")
-    print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
-    print(f"DEBUG - pacbio_sra - {pacbio_sra}")
-    print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
-    print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
-    print(f"DEBUG - ref_seq - {ref_seq}")
-    print(f"DEBUG - species_id - {species_id}")
-    print(f"DEBUG - est_size - {est_size}")
-    print(f"DEBUG - masurca_out_dir - {masurca_out_dir}")
-    print(f"DEBUG - dedup_f - {dedup_f}")
-    print(f"DEBUG - dedup_r - {dedup_r}")
-    print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
+    log_print(f"DEBUG - illumina_sra - {illumina_sra}")
+    log_print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
+    log_print(f"DEBUG - illumina_r_raw_reads - {illumina_r_raw_reads}")
+    log_print(f"DEBUG - ont_sra - {ont_sra}")
+    log_print(f"DEBUG - ont_raw_reads - {ont_raw_reads}")
+    log_print(f"DEBUG - pacbio_sra - {pacbio_sra}")
+    log_print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
+    log_print(f"DEBUG - ref_seq_gca - {ref_seq_gca}")
+    log_print(f"DEBUG - ref_seq - {ref_seq}")
+    log_print(f"DEBUG - species_id - {species_id}")
+    log_print(f"DEBUG - est_size - {est_size}")
+    log_print(f"DEBUG - masurca_out_dir - {masurca_out_dir}")
+    log_print(f"DEBUG - dedup_f - {dedup_f}")
+    log_print(f"DEBUG - dedup_r - {dedup_r}")
+    log_print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
     # Require Illumina for MaSuRCA
     have_raw_illumina = (isinstance(illumina_f_raw_reads, str) and os.path.exists(illumina_f_raw_reads)) \
                         and (isinstance(illumina_r_raw_reads, str) and os.path.exists(illumina_r_raw_reads))
     if not (use_dedup or have_raw_illumina):
-        print("SKIP:\tNo Illumina paired-end reads provided, required for MaSuRCA assembly")
+        log_print("SKIP:\tNo Illumina paired-end reads provided, required for MaSuRCA assembly")
         return None
 
     # Insert size (prefer computing from available Illumina)
@@ -432,16 +432,16 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         multipliers = {'m': 10**6, 'g': 10**9}
         jf_size = int(float(est_size_numb) * multipliers.get(est_size_mult.lower(), 25_000_000))
     else:
-        print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
+        log_print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
         jf_size = 25_000_000
 
     # ---------- Build MaSuRCA config (absolute paths only) ----------
     config_lines = ["DATA\n"]
     if use_dedup:
-        print("INFO:\tUsing deduplicated Illumina reads for MaSuRCA PE.")
+        log_print("INFO:\tUsing deduplicated Illumina reads for MaSuRCA PE.")
         config_lines.append(f"PE= pe {int(avg_insert)} {int(std_dev)} {dedup_f} {dedup_r}\n")
     else:
-        print("INFO:\tUsing raw Illumina reads for MaSuRCA PE.")
+        log_print("INFO:\tUsing raw Illumina reads for MaSuRCA PE.")
         config_lines.append(f"PE= pe {int(avg_insert)} {int(std_dev)} {illumina_f_raw_reads} {illumina_r_raw_reads}\n")
 
     if highest_mean_qual_long_reads:
@@ -472,7 +472,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     config_path = masurca_out_dir / "masurca_config_file.txt"
     with open(config_path, "w") as fh:
         fh.writelines(config_lines)
-    print(f"DEBUG: Wrote config to {config_path}")
+    log_print(f"DEBUG: Wrote config to {config_path}")
 
     # Always run MaSuRCA from its output dir (run_subprocess_cmd has no cwd)
     prev_cwd = os.getcwd()
@@ -480,12 +480,12 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     try:
         rc = run_subprocess_cmd(["masurca", "masurca_config_file.txt"], False)
         if rc != 0:
-            print("ERROR:\tmasurca failed to generate assemble.sh")
+            log_print("ERROR:\tmasurca failed to generate assemble.sh")
             return None
 
         assemble_sh_path = masurca_out_dir / "assemble.sh"
         if not assemble_sh_path.exists():
-            print("ERROR:\tassemble.sh not found after masurca step")
+            log_print("ERROR:\tassemble.sh not found after masurca step")
             return None
         
         # Ensure MaSuRCA sees Flye regardless of install location
@@ -500,7 +500,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         
         # (Optional) print a one-liner sanity check
         real_flye = shutil.which("flye")
-        print(f"DEBUG - flye on PATH - {real_flye}")
+        log_print(f"DEBUG - flye on PATH - {real_flye}")
         
         # Run
         rc = run_subprocess_cmd(["bash", os.path.basename(modified_assemble)], False)
@@ -512,9 +512,9 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         
         if rc != 0:
             if terminator_genome_scf.exists() or primary_genome_scf.exists():
-                print("WARN:\tassemble.sh exited non-zero, but CA output exists; continuing.")
+                log_print("WARN:\tassemble.sh exited non-zero, but CA output exists; continuing.")
             else:
-                print("ERROR:\tAssembly run failed.")
+                log_print("ERROR:\tAssembly run failed.")
                 return None
 
         egap_masurca_assembly_path = masurca_out_dir / f"{sample_id}_masurca.fasta"
@@ -523,10 +523,10 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         elif primary_genome_scf.exists():
             shutil.copy(str(primary_genome_scf), str(egap_masurca_assembly_path))
         else:
-            print("ERROR:\tNo assembly file found in CA output.")
+            log_print("ERROR:\tNo assembly file found in CA output.")
             return None
 
-        print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path}")
+        log_print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path}")
         os.chdir(prev_cwd)
         egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment(
             "masurca", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
@@ -542,7 +542,10 @@ if __name__ == "__main__":
         print("Usage: python3 assemble_masurca.py <sample_id> <input_csv> "
             "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
-    
+
+    output_dir = sys.argv[3]
+    initialize_logging_environment(output_dir, sys.argv[1])
+
     egap_masurca_assembly_path = masurca_config_gen(sys.argv[1],       # sample_id
                                                     sys.argv[2],       # input_csv
                                                     sys.argv[3],       # output_dir

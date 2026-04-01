@@ -312,6 +312,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         self.net_last_t = None
 
         self.args = None
+        self._log_file_path: Optional[str] = None
 
         self.COL_SAMPLE = 0
         self.COL_STEP = 1
@@ -440,6 +441,13 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         clean = line.rstrip("\n")
         self.log_buffer.append(clean)
         self.log_widget.write(clean)
+        if hasattr(self, "_log_file_path") and self._log_file_path:
+            try:
+                with open(self._log_file_path, "a") as _lf:
+                    _lf.write(clean + "\n")
+                    _lf.flush()
+            except Exception:
+                pass
 
     def format_settings_block(self, title: str, items: Dict) -> Text:
         t = Text()
@@ -638,6 +646,15 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             cpu_threads = self.args.cpu_threads
             ram_gb = self.args.ram_gb
 
+            # Open per-run log file so every log_line() call is persisted to disk
+            os.makedirs(output_dir, exist_ok=True)
+            _ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self._log_file_path = os.path.join(output_dir, f"EGAP_{_ts}_log.txt")
+            try:
+                open(self._log_file_path, "w").close()  # create / truncate
+            except Exception:
+                self._log_file_path = None
+
             this_file = Path(egap.__file__).resolve()
             project_dir = this_file.parent
 
@@ -660,15 +677,23 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                         
             samples: List[Tuple[str, str]] = []
             for _, r in input_df.iterrows():
-                sample_id = str(r["SAMPLE_ID"]).strip()
-                samples.append((sample_id))
-            
-            self.log_line(f"Loaded {len(samples)} sample(s) from CSV.")
-            self.init_step_plan(samples)
+                sample_id  = str(r["SAMPLE_ID"]).strip()
+                species_id = str(r["SPECIES_ID"]).strip()
+                samples.append((sample_id, species_id))
 
-            for sample_id in samples:
+            self.log_line(f"Loaded {len(samples)} sample(s) from CSV.")
+            self.init_step_plan([sid for sid, _ in samples])
+
+            for sample_id, species_id in samples:
                 if self.shutdown_requested:
                     return
+
+                # Direct sub-process log files into the species-level output
+                # directory so they land alongside the assembly outputs.
+                species_dir = os.path.join(output_dir, species_id)
+                os.makedirs(species_dir, exist_ok=True)
+                os.environ["EGAP_LOG_DIR"] = species_dir
+                self.log_line(f"NOTE:\tPer-sample log for {sample_id} → {species_dir}/{sample_id}_log.txt")
 
                 for proc_name in processes:
                     if self.shutdown_requested:

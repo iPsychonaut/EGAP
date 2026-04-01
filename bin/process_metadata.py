@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
-from utilities import get_current_row_data, calculate_genome_coverage
+from utilities import get_current_row_data, calculate_genome_coverage, initialize_logging_environment, log_print
 
 
 # ignore only the Data Validation extension warning from openpyxl
@@ -61,9 +61,9 @@ def reverse_geocode(lat, lon, user_agent="reverse_geocoder"):
     state = address.get("state") or address.get("region"),
     county = address.get("county") or address.get("city_district"),
 
-    print(f"Country:\t{country}")
-    print(f"State:\t{state}")
-    print(f"County:\t{county}")
+    log_print(f"Country:\t{country}")
+    log_print(f"State:\t{state}")
+    log_print(f"County:\t{county}")
 
     return country, state[0], county[0]
 
@@ -122,7 +122,7 @@ def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, c
     Returns:
         str: Path to the generated assembly metadata TSV file.
     """
-    print(f"Generating Assembly Metadata TSV entry for {sample_id}...")
+    log_print(f"Generating Assembly Metadata TSV entry for {sample_id}...")
 
     # Load the input_csv into dataframe and collect current sample_id information
     input_df = pd.read_csv(input_csv)
@@ -160,7 +160,7 @@ def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, c
         all_reads.append(os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq"))    
     genome_coverage = str(calculate_genome_coverage(all_reads, assembly_path, cpu_threads)) + "x" 
 
-    print(f"DEBUG - genome_coverage - {genome_coverage}")
+    log_print(f"DEBUG - genome_coverage - {genome_coverage}")
     
     # Comma‐separated tech list
     techs = []
@@ -214,7 +214,7 @@ def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, c
     assembly_metadata_path = os.path.join(output_dir, output_filename)
     genome_df.to_csv(assembly_metadata_path, sep="\t", index=False)
     
-    print(f"PASS:\tSuccessfully generated the {sample_id} Assembly Metadata TSV entry into: {assembly_metadata_path}")
+    log_print(f"PASS:\tSuccessfully generated the {sample_id} Assembly Metadata TSV entry into: {assembly_metadata_path}")
 
     return assembly_metadata_path
 
@@ -236,7 +236,7 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
     Returns:
         str or None: Path to the generated SRA metadata TSV file, or None if required fields are missing.
     """
-    print("Generating SRA Metadata TSV entry...")
+    log_print("Generating SRA Metadata TSV entry...")
     
     # Load the input_csv into dataframe and collect current sample_id information
     input_df = pd.read_csv(input_csv)
@@ -259,9 +259,9 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
     species_dir = os.path.join(output_dir, species_id)
         
     if pd.isna(sample_tissue):
-        print("SKIP:\tNo SRA Metadata processing performed, missing SAMPLE_TISSUE: {sample_tissue}.")
+        log_print("SKIP:\tNo SRA Metadata processing performed, missing SAMPLE_TISSUE: {sample_tissue}.")
     elif pd.isna(library_strategy):
-        print("SKIP:\tNo SRA Metadata processing performed, missing SEQUENCING_METHODOLOGY: {library_strategy}.")
+        log_print("SKIP:\tNo SRA Metadata processing performed, missing SEQUENCING_METHODOLOGY: {library_strategy}.")
     else:        
         # Generate SRA Metadata Dataframe from either template or existing files
         existing_sra_metadata = os.path.join(os.path.dirname(input_csv), f"{os.path.basename(input_csv).replace('.csv','')}_EGAP_SRA_metadata.xlsx")
@@ -270,7 +270,7 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
         else:
             base_file_path = os.path.join(templates_dir, "SRA_metadata_acc.xlsx")
         sample_data = {}
-        print(f"DEBUG - base_file_path - {base_file_path}")
+        log_print(f"DEBUG - base_file_path - {base_file_path}")
         main_sra_df = pd.read_excel(base_file_path, sheet_name="SRA_data")
         sample_data[search_id] = main_sra_df.columns.tolist()
 
@@ -296,10 +296,10 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
             design_description = "Filtlong quality and length filtering"
             library_ids.append(f"{species_id}_EGAP_Filtered_PacBio")
 
-        print(f"DEBUG - reads - {reads}")    
-        print(f"DEBUG - library_ids - {library_ids}")
-        print(f"DEBUG - title - {title}")
-        print(f"DEBUG - design_description - {design_description}")
+        log_print(f"DEBUG - reads - {reads}")    
+        log_print(f"DEBUG - library_ids - {library_ids}")
+        log_print(f"DEBUG - title - {title}")
+        log_print(f"DEBUG - design_description - {design_description}")
 
         for index, filename in enumerate(reads):
             library_id = library_ids[index]
@@ -341,7 +341,7 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
         # Write single‐sheet TSV
         new_sra_df.to_csv(sra_metadata_path, sep="\t", index=False)
 
-        print(f"PASS:\tSuccessfully generated the SRA Metadata TSV entry into: {sra_metadata_path}")
+        log_print(f"PASS:\tSuccessfully generated the SRA Metadata TSV entry into: {sra_metadata_path}")
 
         return sra_metadata_path
 
@@ -360,26 +360,26 @@ def process_metadata(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     search_id = current_series["INATRUALIST_ID"]
     species_dir = os.path.join(output_dir, species_id)
 
-    print(f"DEBUG - species_id - {species_id}")
-    print(f"DEBUG - species_dir - {species_dir}")
-    print(f"DEBUG - search_id - {search_id}")
+    log_print(f"DEBUG - species_id - {species_id}")
+    log_print(f"DEBUG - species_dir - {species_dir}")
+    log_print(f"DEBUG - search_id - {search_id}")
 
     # Path to this script
     script_file = Path(__file__).resolve()
     bin_dir = script_file.parent
     resources_dir = bin_dir.parent / "resources"
     templates_dir = resources_dir / "templates"
-    print(f"DEBUG - templates_dir - {templates_dir}")
+    log_print(f"DEBUG - templates_dir - {templates_dir}")
 
     # Generate SRA metadata TSV
     sra_output_path = gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir)
 
-    print("PASS:\tSuccessfully generated NCBI SRA Metadata TSV: {sra_output_path}.")
+    log_print("PASS:\tSuccessfully generated NCBI SRA Metadata TSV: {sra_output_path}.")
     
     # Generate assembly metadata TSV
     assembly_metadata_path = gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, cpu_threads)
 
-    print("PASS:\tSuccessfully generated NCBI Assembly Metadata TSV: {assembly_metadata_path}.")
+    log_print("PASS:\tSuccessfully generated NCBI Assembly Metadata TSV: {assembly_metadata_path}.")
         
     return sra_output_path, assembly_metadata_path
 
@@ -389,7 +389,10 @@ if __name__ == "__main__":
         print("Usage: python3 process_metadata.py <sample_id> <input_csv> "
             "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
-        
+
+    output_dir = sys.argv[3]
+    initialize_logging_environment(output_dir, sys.argv[1])
+
     sra_output_path, assembly_metadata_path = process_metadata(sys.argv[1],       # sample_id
                                                                sys.argv[2],       # input_csv
                                                                sys.argv[3],       # output_dir
