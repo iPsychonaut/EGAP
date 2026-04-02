@@ -161,12 +161,20 @@ class CpuThreadsHistoryWidget(Widget):
 # ----------------------------
 # Import EGAP controller helpers
 # ----------------------------
+# EGAP_TUI.py lives in bin/; EGAP.py lives one level up in the project root.
+# Insert the project root into sys.path so `import EGAP` works regardless of
+# which directory the user runs this script from.
+_TUI_DIR     = Path(__file__).resolve().parent          # .../EGAP/bin
+_PROJECT_DIR = _TUI_DIR.parent                          # .../EGAP
+for _p in (str(_PROJECT_DIR), str(_TUI_DIR)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 try:
     import EGAP as egap
 except Exception as e:
     raise RuntimeError(
-        "Could not import EGAP.py as a module. Put EGAP_TUI.py in the same directory as EGAP.py "
-        "or ensure that directory is on PYTHONPATH.\n"
+        f"Could not import EGAP.py from {_PROJECT_DIR}.\n"
         f"Import error: {e}"
     )
 
@@ -638,8 +646,9 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             cpu_threads = self.args.cpu_threads
             ram_gb = self.args.ram_gb
 
-            this_file = Path(egap.__file__).resolve()
-            project_dir = this_file.parent
+            # _PROJECT_DIR and _TUI_DIR are resolved at module load time above.
+            # egap.__file__ points to EGAP.py in the project root.
+            project_dir = Path(egap.__file__).resolve().parent
 
             processes = [
                 "preprocess_refseq", "preprocess_illumina", "preprocess_ont",
@@ -654,6 +663,9 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 bin_dir = bin_dir_candidate
             elif (project_dir / "bin").is_dir():
                 bin_dir = project_dir / "bin"
+            elif _TUI_DIR.name == "bin" and all(((_TUI_DIR / f"{p}.py").exists()) for p in processes):
+                # EGAP_TUI.py is itself inside bin/ -- use that directory directly
+                bin_dir = _TUI_DIR
             else:
                 raise FileNotFoundError("Could not locate bin directory containing EGAP step scripts.")
 
