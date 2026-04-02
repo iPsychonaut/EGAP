@@ -309,7 +309,7 @@ def preprocess_csv(csv_file_path):
     df.replace(mapping, inplace=True)
 
     # (f) Overwrite the original CSV
-    df.to_csv(csv_file_path, index=False, na_rep="None")
+    df.to_csv(csv_file_path, index=False)
     
     return df
 

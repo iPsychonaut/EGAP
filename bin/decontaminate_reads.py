@@ -37,6 +37,7 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 
 import os
 import sys
+import shutil
 import pandas as pd
 from pathlib import Path
 from Bio import SeqIO
@@ -410,25 +411,36 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     log_print(f"NOTE:\tKraken2 read decontamination for sample: {sample_id}")
 
     # ----------------------------------------------------------
-    # Section 2: Resolve Kraken2 database
+    # Section 2: Check kraken2 binary is on PATH
+    # ----------------------------------------------------------
+    if shutil.which("kraken2") is None:
+        log_print(
+            "ERROR:\tkraken2 is not on PATH. Cannot run read decontamination. "
+            "Activate the conda environment that has kraken2 installed "
+            "(e.g. conda activate EGAP_env) and re-run."
+        )
+        sys.exit(1)
+
+    # ----------------------------------------------------------
+    # Section 3 (was 2): Resolve Kraken2 database
     # ----------------------------------------------------------
     kraken2_db = _get_kraken2_db(current_series)
     if kraken2_db is None:
         log_print("WARN:\tNo Kraken2 database found (set KRAKEN2_DB env var or "
                   "add a KRAKEN2_DB column to the CSV). Skipping read decontamination.")
-        return True  # non-fatal skip
+        return True  # non-fatal skip -- tool is present but DB is optional
 
     log_print(f"NOTE:\tKraken2 database: {kraken2_db}")
 
     # ----------------------------------------------------------
-    # Section 3: Resolve keep domains from kingdom
+    # Section 4 (was 3): Resolve keep domains from kingdom
     # ----------------------------------------------------------
     keep_domains = get_kraken_keep_domains(kingdom_id)
     log_print(f"[Kraken2] Decontamination profile for '{kingdom_id}' ({karyote_id}):")
     log_print(f"  KEEP domains: {', '.join(sorted(keep_domains))}")
 
     # ----------------------------------------------------------
-    # Section 4: Locate highest-quality long-read files
+    # Section 5 (was 4): Locate highest-quality long-read files
     # ----------------------------------------------------------
     # These are the canonical paths that assemblers look for.
     ont_hq   = os.path.join(ont_dir,    f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")

@@ -17,6 +17,24 @@ import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads
 from qc_assessment import nanoplot_qc_reads
 
+# String values written by older pipeline runs (na_rep="None") that must be
+# treated as missing/null rather than real file paths or accessions.
+_NULLS = {"", "none", "nan", "null", "na"}
+
+
+def _null(val):
+    """Return None if *val* is NaN or a null-sentinel string, else return *val*."""
+    if val is None:
+        return None
+    try:
+        if pd.isna(val):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(val, str) and val.strip().lower() in _NULLS:
+        return None
+    return val
+
 
 # --------------------------------------------------------------
 # Preprocess ONT sequencing reads
@@ -49,11 +67,11 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     current_series = current_row.iloc[0]  # Convert to Series (single row)
 
     # Identify read paths, reference, and BUSCO lineage info from CSV
-    ont_raw_reads = current_series["ONT_RAW_READS"]
-    ont_raw_dir = current_series["ONT_RAW_DIR"]
-    ont_sra = current_series["ONT_SRA"]
-    species_id = current_series["SPECIES_ID"]
-    est_size = current_series["EST_SIZE"]
+    ont_raw_reads = _null(current_series["ONT_RAW_READS"])
+    ont_raw_dir   = _null(current_series["ONT_RAW_DIR"])
+    ont_sra       = _null(current_series["ONT_SRA"])
+    species_id    = current_series["SPECIES_ID"]
+    est_size      = current_series["EST_SIZE"]
 
     # Recompute species_dir_abs now that species_id is known
     species_dir_abs = os.path.join(output_dir_abs, species_id)
@@ -61,7 +79,7 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     os.makedirs(ont_dir_abs, exist_ok=True)
 
     # Normalize ONT inputs BEFORE any chdir
-    if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
+    if ont_sra is not None and ont_raw_reads is None:
         # Expected dump location for SRA
         ont_raw_reads = os.path.join(ont_dir_abs, f"{ont_sra}.fastq")
     elif isinstance(ont_raw_reads, str) and not os.path.isabs(ont_raw_reads):
@@ -79,7 +97,7 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - illu_dedup_f_reads - {illu_dedup_f_reads}")
     print(f"DEBUG - illu_dedup_r_reads - {illu_dedup_r_reads}")
 
-    if pd.isna(ont_sra) and pd.isna(ont_raw_dir) and pd.isna(ont_raw_reads):
+    if ont_sra is None and ont_raw_dir is None and ont_raw_reads is None:
         print("SKIP:\tONT preprocessing; no reads provided")
         return None
 
@@ -89,7 +107,7 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     
     try:
         # Handle Raw Data Directory (concatenate .fastq files)
-        if isinstance(ont_raw_dir, str):
+        if ont_raw_dir is not None:
             print(f"NOTE:\tConcatenating ONT files from {ont_raw_dir}")
             ont_raw_dir_abs = ont_raw_dir if os.path.isabs(ont_raw_dir) else os.path.join(output_dir_abs, ont_raw_dir)
             ont_files = sorted(glob.glob(os.path.join(ont_raw_dir_abs, "*.fastq")))
@@ -103,7 +121,7 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                         shutil.copyfileobj(r, w)
     
         # SRA download to the ONT directory (no relative -O that repeats the path)
-        if isinstance(ont_sra, str):
+        if ont_sra is not None:
             if not ont_raw_reads or not os.path.exists(ont_raw_reads):
                 print(f"Downloading SRA {ont_sra} from GenBank...")
                 _ = run_subprocess_cmd(["prefetch", "--force", "yes", ont_sra], False)

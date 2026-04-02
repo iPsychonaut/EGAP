@@ -17,6 +17,24 @@ import os, sys, shutil
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, md5_check
 
+# String values written by older pipeline runs (na_rep="None") that must be
+# treated as missing/null rather than real file paths or accessions.
+_NULLS = {"", "none", "nan", "null", "na"}
+
+
+def _null(val):
+    """Return None if *val* is NaN or a null-sentinel string, else return *val*."""
+    if val is None:
+        return None
+    try:
+        if pd.isna(val):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(val, str) and val.strip().lower() in _NULLS:
+        return None
+    return val
+
 
 # --------------------------------------------------------------
 # Combine and verify Illumina reads
@@ -99,11 +117,11 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - current_series - {current_series}")
 
     # Identify read paths/reference info from CSV
-    illu_sra = current_series["ILLUMINA_SRA"]
-    illu_raw_f_reads = current_series["ILLUMINA_RAW_F_READS"]
-    illu_raw_r_reads = current_series["ILLUMINA_RAW_R_READS"]
-    illu_raw_dir = current_series["ILLUMINA_RAW_DIR"]
-    species_id = current_series["SPECIES_ID"]
+    illu_sra         = _null(current_series["ILLUMINA_SRA"])
+    illu_raw_f_reads = _null(current_series["ILLUMINA_RAW_F_READS"])
+    illu_raw_r_reads = _null(current_series["ILLUMINA_RAW_R_READS"])
+    illu_raw_dir     = _null(current_series["ILLUMINA_RAW_DIR"])
+    species_id       = current_series["SPECIES_ID"]
 
     print(f"DEBUG - illu_sra - {illu_sra}")
     print(f"DEBUG - illu_raw_f_reads - {illu_raw_f_reads}")
@@ -111,7 +129,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - illu_raw_dir - {illu_raw_dir}")
 
     # Early skip if nothing Illumina-like is provided
-    if pd.isna(illu_sra) and pd.isna(illu_raw_f_reads) and pd.isna(illu_raw_r_reads) and pd.isna(illu_raw_dir):
+    if illu_sra is None and illu_raw_f_reads is None and illu_raw_r_reads is None and illu_raw_dir is None:
         print(f"SKIP:\tSample does not include Illumina Reads: {sample_id}.")
         return None, None
 
@@ -121,7 +139,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     illumina_dir.mkdir(parents=True, exist_ok=True)
 
     # ---- CASE A: SRA accession provided; ensure R1/R2 exist or download ----
-    if pd.notna(illu_sra) and pd.isna(illu_raw_f_reads) and pd.isna(illu_raw_r_reads):
+    if illu_sra is not None and illu_raw_f_reads is None and illu_raw_r_reads is None:
         sra_id = str(illu_sra).strip()
         r1 = illumina_dir / f"{sra_id}_1.fastq"
         r2 = illumina_dir / f"{sra_id}_2.fastq"
@@ -177,7 +195,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         illu_raw_r_reads = str(r2)
 
     # ---- CASE B: Raw directory provided; combine/verify there ----
-    elif pd.notna(illu_raw_dir) and (pd.isna(illu_raw_f_reads) or pd.isna(illu_raw_r_reads)):
+    elif illu_raw_dir is not None and (illu_raw_f_reads is None or illu_raw_r_reads is None):
         print(f"Process Illumina Raw Directory: {illu_raw_dir}...")
         combined_list = illumina_extract_and_check(str(illu_raw_dir), sample_id)
         if combined_list:
@@ -190,11 +208,8 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # If both explicit files provided in CSV, just trust them
     else:
-        # Normalize strings if they exist
-        if pd.notna(illu_raw_f_reads):
-            illu_raw_f_reads = str(illu_raw_f_reads).strip()
-        if pd.notna(illu_raw_r_reads):
-            illu_raw_r_reads = str(illu_raw_r_reads).strip()
+        # Values already sanitised by _null() above; nothing extra needed here
+        pass
 
     # Final guard: we must have both R1 and R2 paths now
     if not illu_raw_f_reads or not illu_raw_r_reads or not os.path.exists(illu_raw_f_reads) or not os.path.exists(illu_raw_r_reads):

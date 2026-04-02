@@ -242,26 +242,16 @@ def decontaminate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb
     # ----------------------------------------------------------
     # Section 3: Check tiara is available on PATH
     # ----------------------------------------------------------
-    # tiara must be installed in the active conda environment.  If it is not
-    # found (e.g. the pipeline is launched from a base env that does not have
-    # tiara), skip decontamination with a WARN rather than aborting the run.
-    # The curated assembly is returned as-is so downstream QC can continue.
+    # tiara must be installed in the active conda environment.
+    # A missing binary is a hard failure -- the pipeline must not silently
+    # skip decontamination just because the wrong environment is active.
     if shutil.which("tiara") is None:
-        curated_fallback = os.path.join(
-            os.path.join(output_dir, species_id),
-            sample_id,
-            f"{sample_id}_final_curated.fasta",
-        )
-        polished_fallback = curated_fallback.replace("_final_curated.fasta",
-                                                     "_final_polish_assembly.fasta")
-        fallback = curated_fallback if os.path.exists(curated_fallback) else polished_fallback
         log_print(
-            "WARN:\ttiara is not on PATH. Assembly decontamination will be skipped. "
-            "Activate the conda environment that contains tiara "
-            "(e.g. conda activate EGAP_tiara_test) and re-run to decontaminate. "
-            f"Returning assembly as-is: {fallback}"
+            "ERROR:\ttiara is not on PATH. Cannot run assembly decontamination. "
+            "Activate the conda environment that has tiara installed "
+            "(e.g. conda activate EGAP_tiara_test) and re-run."
         )
-        return fallback if os.path.exists(fallback) else None
+        sys.exit(1)
 
     # ----------------------------------------------------------
     # Section 4: Check for existing done marker
