@@ -588,6 +588,16 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         # This assumes you replaced the params panel with a VerticalScroll + Static
         self.params_text.update(params_renderable)
 
+    # Lines containing any of these substrings are suppressed from the TUI log.
+    # They are non-fatal noise from numpy C-extension API version mismatches
+    # that occur when packages in the same env were compiled against different
+    # numpy minor versions (e.g. tiara requires numpy 1.23 while other packages
+    # were compiled against 1.24).  The mismatch is harmless in practice.
+    _NOISE_SUBSTRINGS = (
+        "module compiled against API version",
+        "RuntimeError: module compiled against",
+    )
+
     async def run_subprocess_stream(self, cmd: List[str], cwd: Optional[Path] = None) -> int:
         self.log_line(f"\n→ Running: {' '.join(cmd)}\n")
 
@@ -610,7 +620,10 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             line = await proc.stdout.readline()
             if not line:
                 break
-            self.log_line(line.decode(errors="replace").rstrip("\n"))
+            decoded = line.decode(errors="replace").rstrip("\n")
+            # Suppress known non-fatal numpy API mismatch noise
+            if not any(ns in decoded for ns in self._NOISE_SUBSTRINGS):
+                self.log_line(decoded)
 
         rc = await proc.wait()
         self.current_process = None
