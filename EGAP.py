@@ -146,6 +146,28 @@ QUAST_SETTINGS = {
     "settings": "default",
 }
 
+KRAKEN2_SETTINGS = {
+    "stage": "pre-assembly (reads)",
+    "targets": "ONT and PacBio highest-quality long reads",
+    "database": "resolved from KRAKEN2_DB env var or CSV column",
+    "keep (bacteria)": "bacteria, unclassified",
+    "keep (archaea)": "archaea, unclassified",
+    "keep (flora/funga/fauna)": "eukarya, unclassified",
+    "always kept": "unclassified",
+    "missing db behaviour": "WARN and skip (non-fatal)",
+}
+
+TIARA_SETTINGS = {
+    "stage": "post-assembly (contigs)",
+    "targets": "final curated assembly",
+    "keep (bacteria)": "bacteria, prokarya, unknown",
+    "keep (archaea)": "archaea, prokarya, unknown",
+    "keep (flora/funga/fauna)": "eukarya, organelle, unknown",
+    "organelle note": "kept for eukaryotes (own mitochondria/plastid); removed for prokaryotes",
+    "always kept": "unknown",
+    "missing tiara behaviour": "WARN and skip (non-fatal)",
+}
+
 
 def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, output_dir):
     """Return all pipeline settings as a structured dict for reuse (TUI, logs, etc.)."""
@@ -177,6 +199,8 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, output
         "busco settings": BUSCO_SETTINGS,
         "compleasm settings": COMPLEASM_SETTINGS,
         "quast settings": QUAST_SETTINGS,
+        "kraken2 settings": KRAKEN2_SETTINGS,
+        "tiara settings": TIARA_SETTINGS,
     }
 
 
