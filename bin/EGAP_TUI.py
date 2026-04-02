@@ -643,9 +643,10 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
 
             processes = [
                 "preprocess_refseq", "preprocess_illumina", "preprocess_ont",
-                "preprocess_pacbio", "assemble_masurca", "assemble_flye",
+                "preprocess_pacbio", "decontaminate_reads",
+                "assemble_masurca", "assemble_flye",
                 "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-                "polish_assembly", "curate_assembly",
+                "polish_assembly", "curate_assembly", "decontaminate_assembly",
             ]
 
             bin_dir_candidate = egap.locate_bin_dir(processes, project_dir)
