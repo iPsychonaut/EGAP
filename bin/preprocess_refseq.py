@@ -52,15 +52,17 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
 
-    # Pull fields (normalize NaNs → None)
+    # Pull fields (normalize NaNs and literal "None"/"nan" strings → None)
+    _NULLS = {"", "none", "nan", "null", "na"}
+
     ref_seq_gca = None
     tmp = current_series.get("REF_SEQ_GCA")
-    if pd.notna(tmp):
+    if pd.notna(tmp) and str(tmp).strip().lower() not in _NULLS:
         ref_seq_gca = str(tmp).strip()
 
     ref_seq = None
     tmp = current_series.get("REF_SEQ")
-    if pd.notna(tmp):
+    if pd.notna(tmp) and str(tmp).strip().lower() not in _NULLS:
         ref_seq = str(tmp).strip()
 
     species_id = str(current_series["SPECIES_ID"]).strip()
@@ -71,9 +73,9 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     refseq_dir.mkdir(parents=True, exist_ok=True)
 
     # Compute target filename
-    if ref_seq_gca and ref_seq_gca.lower() != "nan":
+    if ref_seq_gca:
         if "." not in ref_seq_gca:
-            print(f"ERROR:\tReference Sequence GCA requires version number: {ref_seq_gca} has no '.#'")
+            print(f"WARN:\tReference Sequence GCA has no version number: {ref_seq_gca}")
         target_fasta = refseq_dir / f"{species_id}_{ref_seq_gca}_RefSeq.fasta"
     else:
         target_fasta = refseq_dir / f"{species_id}_RefSeq.fasta"
@@ -83,12 +85,12 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - target_fasta - {target_fasta}")
 
     # If neither provided, nothing to do
-    if (not ref_seq_gca or ref_seq_gca.lower() == "nan") and (not ref_seq or ref_seq.lower() == "nan"):
+    if not ref_seq_gca and not ref_seq:
         print(f"SKIP:\tSample does not include Reference Sequence: {sample_id}.")
         return None
 
     # Case A: REF_SEQ path provided — normalize into place
-    if ref_seq and ref_seq.lower() != "nan":
+    if ref_seq:
         # Anchor relative REF_SEQ paths under the project output directory
         src = Path(ref_seq)
         if not src.is_absolute():
@@ -118,7 +120,7 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             print(f"ERROR:\tProvided REF_SEQ does not exist on disk: {src}. Will try GCA if available.")
 
     # Case B: Need (or fall back) to download via REF_SEQ_GCA
-    if ref_seq_gca and ref_seq_gca.lower() != "nan":
+    if ref_seq_gca:
         if target_fasta.exists():
             print(f"SKIP:\tREF_SEQ GCA already exists: {target_fasta.resolve()}")
             return str(target_fasta.resolve())
