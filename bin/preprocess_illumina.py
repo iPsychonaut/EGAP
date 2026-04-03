@@ -13,7 +13,7 @@ Updated on Wed Sept 3 2025
 
 @author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
 """
-import os, sys, shutil
+import os, sys, shutil, glob
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, md5_check
 
@@ -34,6 +34,53 @@ def _null(val):
     if isinstance(val, str) and val.strip().lower() in _NULLS:
         return None
     return val
+
+
+def _find_truseq3_adapter():
+    """Locate TruSeq3-PE.fa in the active Trimmomatic installation.
+
+    Strategy:
+      1. Find the trimmomatic binary via shutil.which and look for adapters
+         in the sibling share/ directory (standard conda layout).
+      2. Search a set of common conda/mamba root directories.
+
+    Returns:
+        str: Absolute path to TruSeq3-PE.fa.
+
+    Raises:
+        FileNotFoundError: If the adapter file cannot be found anywhere.
+    """
+    # --- 1. Search relative to the trimmomatic binary -----------------
+    trimmomatic_bin = shutil.which("trimmomatic")
+    if trimmomatic_bin:
+        # conda layout: <env>/bin/trimmomatic -> <env>/share/trimmomatic*/adapters/
+        env_dir = os.path.dirname(os.path.dirname(os.path.realpath(trimmomatic_bin)))
+        hits = glob.glob(os.path.join(env_dir, "share", "trimmomatic*",
+                                      "adapters", "TruSeq3-PE.fa"))
+        if hits:
+            return hits[0]
+
+    # --- 2. Search common conda root directories ----------------------
+    search_roots = [
+        "/opt/conda",
+        os.path.expanduser("~/miniconda3"),
+        os.path.expanduser("~/miniconda"),
+        os.path.expanduser("~/anaconda3"),
+        os.path.expanduser("~/anaconda"),
+        os.path.expanduser("~/mambaforge"),
+    ]
+    for root in search_roots:
+        hits = glob.glob(os.path.join(root, "**", "trimmomatic*",
+                                      "adapters", "TruSeq3-PE.fa"),
+                         recursive=True)
+        if hits:
+            return hits[0]
+
+    raise FileNotFoundError(
+        "TruSeq3-PE.fa not found. "
+        "Ensure trimmomatic is installed in the active conda environment "
+        "(conda install -c bioconda trimmomatic)."
+    )
 
 
 # --------------------------------------------------------------
@@ -252,9 +299,12 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
 
     def _run_trimmomatic(t_threads, use_heap=False):
-        truseq3_path = shutil.which("TruSeq3-PE.fa") or shutil.which("TruSeq3-PE")
-        if not truseq3_path:
-            print("WARN:\tTruSeq3-PE adapters file not found on PATH; Trimmomatic may fail.")
+        try:
+            truseq3_path = _find_truseq3_adapter()
+            print(f"NOTE:\tUsing Trimmomatic adapter file: {truseq3_path}")
+        except FileNotFoundError as exc:
+            print(f"ERROR:\t{exc}")
+            sys.exit(1)
         base_cmd = [
             "trimmomatic", "PE",
             "-threads", str(t_threads),
