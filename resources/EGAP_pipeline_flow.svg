@@ -1,321 +1,385 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 760" width="900" height="760"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1750" width="900" height="1750"
      font-family="Arial, Helvetica, sans-serif">
 
   <defs>
-    <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <polygon points="0 0,8 3,0 6" fill="#1A1A1A"/>
+    <marker id="arr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0,9 3.5,0 7" fill="#1A1A1A"/>
     </marker>
-    <marker id="arr-gray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <polygon points="0 0,8 3,0 6" fill="#888888"/>
-    </marker>
-    <marker id="arr-w" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-      <polygon points="0 0,8 3,0 6" fill="#1A1A1A"/>
+    <marker id="arr-g" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+      <polygon points="0 0,9 3.5,0 7" fill="#888888"/>
     </marker>
   </defs>
 
-  <!-- ══ Background ══════════════════════════════════════════════════════ -->
-  <rect width="900" height="760" fill="#FFFFFF"/>
+  <!-- ── Canvas ─────────────────────────────────────────────────────────── -->
+  <rect width="900" height="1750" fill="#FFFFFF"/>
 
-  <!-- ══ Title ═══════════════════════════════════════════════════════════ -->
-  <text x="440" y="23" text-anchor="middle" font-size="17" font-weight="bold" fill="#1A1A1A">Entheome Genome Assembly Pipeline (EGAP)</text>
+  <!-- ── Title ─────────────────────────────────────────────────────────── -->
+  <text x="440" y="38" text-anchor="middle" font-size="20" font-weight="bold" fill="#1A1A1A">
+    Entheome Genome Assembly Pipeline (EGAP)
+  </text>
 
-  <!-- ══ Section background bands ════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       SECTION BANDS  (content x=0–820, label x=820–900)
+       Layout:
+         Title bar          y=0–55
+         Preprocessing      y=55–640   (585 px)
+         Assembly           y=640–810  (170 px)
+         Initial Assessment y=810–980  (170 px)
+         Best Assembly row  y=980–1150 (170 px)
+         Polishing          y=1150–1360 (210 px)
+         Curation           y=1360–1520 (160 px)
+         Final Assessment   y=1520–1690 (170 px)
+         Footnotes          y=1690–1750
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- Reads Pre-Processing  y=30–308 -->
-  <rect x="0"   y="30"  width="820" height="278" fill="#F5F5F5" stroke="#CCCCCC" stroke-width="1"/>
-  <rect x="820" y="30"  width="80"  height="278" fill="#E2E2E2" stroke="#CCCCCC" stroke-width="1"/>
-  <text transform="rotate(-90,860,169)" x="860" y="169" text-anchor="middle" font-size="11" font-weight="bold" fill="#333">Reads Pre-Processing</text>
+  <!-- Reads Pre-Processing  y=55–640 -->
+  <rect x="0"   y="55"  width="820" height="585" fill="#F5F5F5" stroke="#CCCCCC" stroke-width="1"/>
+  <rect x="820" y="55"  width="80"  height="585" fill="#E2E2E2" stroke="#CCCCCC" stroke-width="1"/>
+  <text transform="rotate(-90,860,347)" x="860" y="347" text-anchor="middle"
+        font-size="12" font-weight="bold" fill="#333">Reads Pre-Processing</text>
 
-  <!-- Assembly  y=308–388 -->
-  <rect x="0"   y="308" width="820" height="80"  fill="#EBEBEB" stroke="#CCCCCC" stroke-width="1"/>
-  <rect x="820" y="308" width="80"  height="80"  fill="#D8D8D8" stroke="#CCCCCC" stroke-width="1"/>
-  <text transform="rotate(-90,860,348)" x="860" y="348" text-anchor="middle" font-size="11" font-weight="bold" fill="#333">Assembly</text>
+  <!-- Assembly  y=640–810 -->
+  <rect x="0"   y="640" width="820" height="170" fill="#EBEBEB" stroke="#CCCCCC" stroke-width="1"/>
+  <rect x="820" y="640" width="80"  height="170" fill="#D8D8D8" stroke="#CCCCCC" stroke-width="1"/>
+  <text transform="rotate(-90,860,725)" x="860" y="725" text-anchor="middle"
+        font-size="12" font-weight="bold" fill="#333">Assembly</text>
 
-  <!-- Initial Assembly Assessment  y=388–462 -->
-  <rect x="0"   y="388" width="820" height="74"  fill="#F5F5F5" stroke="#CCCCCC" stroke-width="1"/>
-  <rect x="820" y="388" width="80"  height="74"  fill="#E2E2E2" stroke="#CCCCCC" stroke-width="1"/>
-  <text transform="rotate(-90,860,425)" x="860" y="425" text-anchor="middle" font-size="10" font-weight="bold" fill="#333">Initial Assembly Assessment</text>
+  <!-- Initial Assembly Assessment  y=810–980 -->
+  <rect x="0"   y="810" width="820" height="170" fill="#F5F5F5" stroke="#CCCCCC" stroke-width="1"/>
+  <rect x="820" y="810" width="80"  height="170" fill="#E2E2E2" stroke="#CCCCCC" stroke-width="1"/>
+  <text transform="rotate(-90,860,895)" x="860" y="895" text-anchor="middle"
+        font-size="11" font-weight="bold" fill="#333">Initial Assembly Assessment</text>
 
-  <!-- connector row  y=462–524 -->
-  <rect x="0"   y="462" width="820" height="62"  fill="#FAFAFA" stroke="#CCCCCC" stroke-width="1"/>
-  <rect x="820" y="462" width="80"  height="62"  fill="#EBEBEB" stroke="#CCCCCC" stroke-width="1"/>
+  <!-- Best Assembly connector row  y=980–1150  (unlabeled) -->
+  <rect x="0"   y="980" width="820" height="170" fill="#FAFAFA" stroke="#CCCCCC" stroke-width="1"/>
+  <rect x="820" y="980" width="80"  height="170" fill="#EBEBEB" stroke="#CCCCCC" stroke-width="1"/>
 
-  <!-- Assembly Polishing  y=524–596 -->
-  <rect x="0"   y="524" width="820" height="72"  fill="#EBEBEB" stroke="#CCCCCC" stroke-width="1"/>
-  <rect x="820" y="524" width="80"  height="72"  fill="#D8D8D8" stroke="#CCCCCC" stroke-width="1"/>
-  <text transform="rotate(-90,860,560)" x="860" y="560" text-anchor="middle" font-size="11" font-weight="bold" fill="#333">Assembly Polishing</text>
+  <!-- Assembly Polishing  y=1150–1360 -->
+  <rect x="0"   y="1150" width="820" height="210" fill="#EBEBEB" stroke="#CCCCCC" stroke-width="1"/>
+  <rect x="820" y="1150" width="80"  height="210" fill="#D8D8D8" stroke="#CCCCCC" stroke-width="1"/>
+  <text transform="rotate(-90,860,1255)" x="860" y="1255" text-anchor="middle"
+        font-size="12" font-weight="bold" fill="#333">Assembly Polishing</text>
 
-  <!-- Assembly Curation  y=596–652 -->
-  <rect x="0"   y="596" width="820" height="56"  fill="#F5F5F5" stroke="#CCCCCC" stroke-width="1"/>
-  <rect x="820" y="596" width="80"  height="56"  fill="#E2E2E2" stroke="#CCCCCC" stroke-width="1"/>
-  <text transform="rotate(-90,860,624)" x="860" y="624" text-anchor="middle" font-size="11" font-weight="bold" fill="#333">Assembly Curation</text>
+  <!-- Assembly Curation  y=1360–1520 -->
+  <rect x="0"   y="1360" width="820" height="160" fill="#F5F5F5" stroke="#CCCCCC" stroke-width="1"/>
+  <rect x="820" y="1360" width="80"  height="160" fill="#E2E2E2" stroke="#CCCCCC" stroke-width="1"/>
+  <text transform="rotate(-90,860,1440)" x="860" y="1440" text-anchor="middle"
+        font-size="12" font-weight="bold" fill="#333">Assembly Curation</text>
 
-  <!-- Final Assembly Assessment  y=652–725 -->
-  <rect x="0"   y="652" width="820" height="73"  fill="#EBEBEB" stroke="#CCCCCC" stroke-width="1"/>
-  <rect x="820" y="652" width="80"  height="73"  fill="#D8D8D8" stroke="#CCCCCC" stroke-width="1"/>
-  <text transform="rotate(-90,860,688)" x="860" y="688" text-anchor="middle" font-size="10" font-weight="bold" fill="#333">Final Assembly Assessment</text>
+  <!-- Final Assembly Assessment  y=1520–1690 -->
+  <rect x="0"   y="1520" width="820" height="170" fill="#EBEBEB" stroke="#CCCCCC" stroke-width="1"/>
+  <rect x="820" y="1520" width="80"  height="170" fill="#D8D8D8" stroke="#CCCCCC" stroke-width="1"/>
+  <text transform="rotate(-90,860,1605)" x="860" y="1605" text-anchor="middle"
+        font-size="11" font-weight="bold" fill="#333">Final Assembly Assessment</text>
 
-  <!-- ══ INPUT OVALS ═══════════════════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PREPROCESSING — INPUT OVALS  (cy ≈ 120–130)
+       ══════════════════════════════════════════════════════════════════════ -->
 
   <!-- HiFi PacBio Reads (yellow) -->
-  <ellipse cx="88"  cy="76" rx="76" ry="31" fill="#F5A624" stroke="#C88010" stroke-width="2.5"/>
-  <text x="88"  y="71" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">HiFi</text>
-  <text x="88"  y="85" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">PacBio Reads</text>
+  <ellipse cx="88"  cy="130" rx="76" ry="34" fill="#F5A624" stroke="#C88010" stroke-width="2.5"/>
+  <text x="88"  y="124" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">HiFi</text>
+  <text x="88"  y="140" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">PacBio Reads</text>
 
   <!-- Raw ONT Reads (dark) -->
-  <ellipse cx="272" cy="67" rx="68"  ry="28" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
-  <text x="272" y="62" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Raw ONT</text>
-  <text x="272" y="76" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Reads</text>
+  <ellipse cx="268" cy="118" rx="68" ry="32" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
+  <text x="268" y="112" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Raw ONT</text>
+  <text x="268" y="128" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Reads</text>
 
   <!-- Raw Illumina Reads (orange) -->
-  <ellipse cx="706" cy="67" rx="86"  ry="28" fill="#E8701A" stroke="#B85412" stroke-width="2.5"/>
-  <text x="706" y="62" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Raw Illumina</text>
-  <text x="706" y="76" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Reads</text>
+  <ellipse cx="718" cy="118" rx="86" ry="32" fill="#E8701A" stroke="#B85412" stroke-width="2.5"/>
+  <text x="718" y="112" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Raw Illumina</text>
+  <text x="718" y="128" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Reads</text>
 
-  <!-- ══ PREPROCESSING TOOL BOXES ══════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PREPROCESSING — TOOL BOXES  (y ≈ 178–246)
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- Filtlong — PacBio (dark) -->
-  <rect x="33"  y="122" width="112" height="40" rx="4" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
-  <text x="89"  y="138" text-anchor="middle" font-size="10"   fill="#FFFFFF">Filtering</text>
-  <text x="89"  y="153" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#FFFFFF">Filtlong</text>
+  <!-- Filtlong – PacBio (dark) — cx=88 -->
+  <rect x="34"  y="190" width="108" height="54" rx="4" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
+  <text x="88"  y="210" text-anchor="middle" font-size="10" fill="#FFFFFF">Filtering</text>
+  <text x="88"  y="230" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">Filtlong</text>
 
-  <!-- Filtlong — ONT (dark) -->
-  <rect x="210" y="112" width="124" height="40" rx="4" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
-  <text x="272" y="128" text-anchor="middle" font-size="10"   fill="#FFFFFF">Filtering</text>
-  <text x="272" y="143" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#FFFFFF">Filtlong</text>
+  <!-- Filtlong – ONT (dark) — cx=268 -->
+  <rect x="208" y="180" width="120" height="54" rx="4" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
+  <text x="268" y="200" text-anchor="middle" font-size="10" fill="#FFFFFF">Filtering</text>
+  <text x="268" y="220" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">Filtlong</text>
 
-  <!-- Ratatosk — Error Correction (dark) -->
-  <rect x="346" y="122" width="142" height="44" rx="4" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
-  <text x="417" y="139" text-anchor="middle" font-size="10"   fill="#FFFFFF">Error Correction</text>
-  <text x="417" y="156" text-anchor="middle" font-size="12"   font-weight="bold" fill="#FFFFFF">Ratatosk</text>
+  <!-- Ratatosk – Error Correction (dark) — cx=416 -->
+  <rect x="344" y="190" width="144" height="58" rx="4" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
+  <text x="416" y="212" text-anchor="middle" font-size="10" fill="#FFFFFF">Error Correction</text>
+  <text x="416" y="234" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">Ratatosk</text>
 
-  <!-- BBMap — Deduplication (dark) -->
-  <rect x="498" y="112" width="132" height="40" rx="4" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
-  <text x="564" y="128" text-anchor="middle" font-size="10"   fill="#FFFFFF">Deduplication</text>
-  <text x="564" y="143" text-anchor="middle" font-size="11.5" font-weight="bold" fill="#FFFFFF">BBMap</text>
+  <!-- BBMap – Deduplication (dark) — cx=564 -->
+  <rect x="500" y="180" width="128" height="54" rx="4" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
+  <text x="564" y="200" text-anchor="middle" font-size="10" fill="#FFFFFF">Deduplication</text>
+  <text x="564" y="220" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">BBMap</text>
 
-  <!-- Trimmomatic — Adapter Removal (orange) -->
-  <rect x="642" y="112" width="154" height="40" rx="4" fill="#E8701A" stroke="#B85412" stroke-width="2"/>
-  <text x="719" y="128" text-anchor="middle" font-size="10"   fill="#FFFFFF">Adapter Removal</text>
-  <text x="719" y="143" text-anchor="middle" font-size="12"   font-weight="bold" fill="#FFFFFF">Trimmomatic</text>
+  <!-- Trimmomatic – Adapter Removal (orange) — cx=717 -->
+  <rect x="640" y="180" width="154" height="54" rx="4" fill="#E8701A" stroke="#B85412" stroke-width="2"/>
+  <text x="717" y="200" text-anchor="middle" font-size="10" fill="#FFFFFF">Adapter Removal</text>
+  <text x="717" y="220" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">Trimmomatic</text>
 
-  <!-- ══ INTERMEDIATE DATA OVALS ══════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PREPROCESSING — ARROWS: input ovals → tool boxes
+       ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- HiFi ↓ Filtlong/PacBio -->
+  <line x1="88"  y1="164" x2="88"  y2="188" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- ONT ↓ Filtlong/ONT -->
+  <line x1="268" y1="150" x2="268" y2="178" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- Illumina ↓ Trimmomatic -->
+  <line x1="718" y1="150" x2="718" y2="178" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- Filtlong/ONT → Ratatosk (right edge of ONT box → left edge of Ratatosk) -->
+  <polyline points="328,207 338,207 338,219 342,219"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- Trimmomatic → BBMap (Illumina dedup output feeds error-correction) -->
+  <line x1="640" y1="207" x2="630" y2="207" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- BBMap → Ratatosk (deduped Illumina feeds ONT error correction) -->
+  <line x1="500" y1="207" x2="490" y2="207" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PREPROCESSING — INTERMEDIATE DATA OVALS  (cy ≈ 445–468)
+       ══════════════════════════════════════════════════════════════════════ -->
 
   <!-- Filtered PacBio (yellow) -->
-  <ellipse cx="88"  cy="238" rx="76" ry="31" fill="#F5A624" stroke="#C88010" stroke-width="2.5"/>
-  <text x="88"  y="233" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">Filtered</text>
-  <text x="88"  y="247" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">PacBio</text>
+  <ellipse cx="88"  cy="448" rx="76" ry="34" fill="#F5A624" stroke="#C88010" stroke-width="2.5"/>
+  <text x="88"  y="442" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">Filtered</text>
+  <text x="88"  y="458" text-anchor="middle" font-size="11" font-weight="bold" fill="#1A1A1A">PacBio</text>
 
   <!-- Corrected ONT (dark) -->
-  <ellipse cx="272" cy="248" rx="76" ry="31" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
-  <text x="272" y="243" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Corrected</text>
-  <text x="272" y="257" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">ONT</text>
+  <ellipse cx="268" cy="462" rx="76" ry="34" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
+  <text x="268" y="456" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Corrected</text>
+  <text x="268" y="472" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">ONT</text>
 
   <!-- Clumped Illumina (orange) -->
-  <ellipse cx="558" cy="258" rx="85"  ry="33" fill="#E8701A" stroke="#B85412" stroke-width="2.5"/>
-  <text x="558" y="253" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Clumped</text>
-  <text x="558" y="267" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Illumina</text>
+  <ellipse cx="558" cy="470" rx="86" ry="36" fill="#E8701A" stroke="#B85412" stroke-width="2.5"/>
+  <text x="558" y="464" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Clumped</text>
+  <text x="558" y="480" text-anchor="middle" font-size="11" font-weight="bold" fill="#FFFFFF">Illumina</text>
 
-  <!-- ══ ASSEMBLY BOXES ════════════════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PREPROCESSING — ARROWS: tool boxes → intermediate ovals
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- hifiasm (large yellow) -->
-  <rect x="16"  y="316" width="152" height="58" rx="5" fill="#F5A624" stroke="#C88010" stroke-width="2.5"/>
-  <text x="92"  y="350" text-anchor="middle" font-size="20" font-weight="bold" fill="#1A1A1A">hifiasm</text>
+  <!-- Filtlong/PacBio ↓ Filtered PacBio -->
+  <line x1="88"  y1="244" x2="88"  y2="413" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- Ratatosk ↓→ Corrected ONT (down then left) -->
+  <polyline points="416,248 416,362 268,362 268,427"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- BBMap ↓→ Clumped Illumina -->
+  <polyline points="564,234 564,374 558,374 558,433"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       ASSEMBLY BOXES  (y ≈ 660–740)
+       ══════════════════════════════════════════════════════════════════════ -->
+
+  <!-- hifiasm (large, yellow) -->
+  <rect x="16"  y="660" width="152" height="80" rx="5" fill="#F5A624" stroke="#C88010" stroke-width="2.5"/>
+  <text x="92"  y="707" text-anchor="middle" font-size="22" font-weight="bold" fill="#1A1A1A">hifiasm</text>
 
   <!-- Flye (dark) -->
-  <rect x="194" y="320" width="118" height="50" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
-  <text x="253" y="349" text-anchor="middle" font-size="16" font-weight="bold" fill="#FFFFFF">Flye</text>
+  <rect x="192" y="665" width="118" height="70" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
+  <text x="251" y="706" text-anchor="middle" font-size="18" font-weight="bold" fill="#FFFFFF">Flye</text>
 
   <!-- SPAdes (dark) -->
-  <rect x="324" y="320" width="118" height="50" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
-  <text x="383" y="349" text-anchor="middle" font-size="16" font-weight="bold" fill="#FFFFFF">SPAdes</text>
+  <rect x="322" y="665" width="118" height="70" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2"/>
+  <text x="381" y="706" text-anchor="middle" font-size="18" font-weight="bold" fill="#FFFFFF">SPAdes</text>
 
   <!-- MaSuRCA* (orange) -->
-  <rect x="454" y="320" width="132" height="50" rx="5" fill="#E8701A" stroke="#B85412" stroke-width="2"/>
-  <text x="520" y="349" text-anchor="middle" font-size="16" font-weight="bold" fill="#FFFFFF">MaSuRCA*</text>
+  <rect x="452" y="665" width="134" height="70" rx="5" fill="#E8701A" stroke="#B85412" stroke-width="2"/>
+  <text x="519" y="706" text-anchor="middle" font-size="18" font-weight="bold" fill="#FFFFFF">MaSuRCA*</text>
 
-  <!-- Dashed border around Flye/SPAdes/MaSuRCA -->
-  <rect x="188" y="312" width="406" height="66" rx="6" fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4"/>
+  <!-- Dashed border around Flye / SPAdes / MaSuRCA -->
+  <rect x="184" y="652" width="410" height="95" rx="6"
+        fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="7,4"/>
 
-  <!-- ══ INITIAL ASSESSMENT BOXES ══════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       PREPROCESSING → ASSEMBLY  arrows
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- QUAST* (dark, large bold) -->
-  <rect x="186" y="394" width="168" height="52" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
-  <text x="270" y="425" text-anchor="middle" font-size="19" font-weight="bold" fill="#FFFFFF">QUAST*</text>
+  <!-- Filtered PacBio ↓ hifiasm -->
+  <line x1="88"  y1="482" x2="88"  y2="658" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- BUSCO (dark, large bold) -->
-  <rect x="392" y="394" width="168" height="52" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
-  <text x="476" y="425" text-anchor="middle" font-size="19" font-weight="bold" fill="#FFFFFF">BUSCO</text>
+  <!-- Corrected ONT → Flye / SPAdes / MaSuRCA (fan) -->
+  <line x1="268" y1="496" x2="268" y2="622" stroke="#1A1A1A" stroke-width="2"/>
+  <polyline points="268,622 251,622 251,663"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <polyline points="268,622 381,622 381,663"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <polyline points="268,622 519,622 519,663"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- ══ BEST INITIAL ASSEMBLY ══════════════════════════════════════════════ -->
-  <ellipse cx="476" cy="490" rx="118" ry="36" fill="#FFFFFF" stroke="#1D3D5C" stroke-width="2.5"/>
-  <text x="476" y="482" text-anchor="middle" font-size="12" font-weight="bold" fill="#1A1A1A">Best Initial</text>
-  <text x="476" y="496" text-anchor="middle" font-size="12" font-weight="bold" fill="#1A1A1A">Assembly</text>
-  <!-- small criteria text -->
-  <text x="476" y="465" text-anchor="middle" font-size="8" fill="#666666">Based on:</text>
-  <text x="476" y="508" text-anchor="middle" font-size="7.5" fill="#666666">Highest BUSCO Completion · Largest N50 · Fewest Total Contigs</text>
+  <!-- Clumped Illumina dashed → all four assemblers (via trunk at y=640) -->
+  <line x1="558" y1="506" x2="558" y2="640"
+        stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4"/>
+  <polyline points="558,640 92,640 92,658"
+            fill="none" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
+  <line x1="251" y1="640" x2="251" y2="663"
+        stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
+  <line x1="381" y1="640" x2="381" y2="663"
+        stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
+  <line x1="519" y1="640" x2="519" y2="663"
+        stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
 
-  <!-- ══ POLISHING BOXES ════════════════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       INITIAL ASSESSMENT BOXES  (y=830–902)
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- minimap2 / Racon pass 1 (green) -->
-  <rect x="162" y="530" width="158" height="54" rx="5" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
-  <text x="241" y="550" text-anchor="middle" font-size="10.5" fill="#FFFFFF">minimap2</text>
-  <text x="241" y="565" text-anchor="middle" font-size="12"   font-weight="bold" fill="#FFFFFF">Racon</text>
+  <rect x="186" y="830" width="168" height="72" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
+  <text x="270" y="872" text-anchor="middle" font-size="22" font-weight="bold" fill="#FFFFFF">QUAST*</text>
 
-  <!-- minimap2 / Racon pass 2 (green) -->
-  <rect x="330" y="530" width="158" height="54" rx="5" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
-  <text x="409" y="550" text-anchor="middle" font-size="10.5" fill="#FFFFFF">minimap2</text>
-  <text x="409" y="565" text-anchor="middle" font-size="12"   font-weight="bold" fill="#FFFFFF">Racon</text>
+  <rect x="394" y="830" width="168" height="72" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
+  <text x="478" y="872" text-anchor="middle" font-size="22" font-weight="bold" fill="#FFFFFF">BUSCO</text>
 
-  <!-- bwa / samtools / Pilon (yellow) -->
-  <rect x="498" y="524" width="174" height="62" rx="5" fill="#F5A624" stroke="#C88010" stroke-width="2"/>
-  <text x="585" y="542" text-anchor="middle" font-size="10"   fill="#1A1A1A">bwa  ·  samtools</text>
-  <text x="585" y="556" text-anchor="middle" font-size="10"   fill="#1A1A1A">bamtools</text>
-  <text x="585" y="572" text-anchor="middle" font-size="13"   font-weight="bold" fill="#1A1A1A">Pilon</text>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       ASSEMBLY → INITIAL ASSESSMENT  arrows
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- ══ CURATION BOXES ════════════════════════════════════════════════════ -->
+  <!-- Flye / SPAdes / MaSuRCA → QUAST (collect at y=810, then drop) -->
+  <line x1="251" y1="735" x2="251" y2="810" stroke="#1A1A1A" stroke-width="2"/>
+  <polyline points="251,810 270,810 270,828"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="381" y1="735" x2="381" y2="810" stroke="#1A1A1A" stroke-width="2"/>
+  <polyline points="381,810 270,810" fill="none" stroke="#1A1A1A" stroke-width="2"/>
+  <line x1="519" y1="735" x2="519" y2="810" stroke="#1A1A1A" stroke-width="2"/>
+  <polyline points="519,810 270,810" fill="none" stroke="#1A1A1A" stroke-width="2"/>
 
-  <!-- purge_dups -->
-  <rect x="20"  y="601" width="98"  height="36" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
-  <text x="69"  y="623" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#FFFFFF">purge_dups</text>
+  <!-- hifiasm dashed → BUSCO -->
+  <polyline points="92,740 92,810 478,810 478,828"
+            fill="none" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
 
-  <!-- RagTag** (1) -->
-  <rect x="122" y="601" width="90"  height="36" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
-  <text x="167" y="623" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#FFFFFF">RagTag**</text>
+  <!-- QUAST → BUSCO -->
+  <line x1="354" y1="866" x2="392" y2="866" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- TGS-GapCloser -->
-  <rect x="216" y="601" width="122" height="36" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
-  <text x="277" y="623" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#FFFFFF">TGS-GapCloser</text>
+  <!-- BUSCO ↓ Best Initial Assembly oval -->
+  <line x1="478" y1="902" x2="478" y2="1015" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- RagTag** (2) -->
-  <rect x="342" y="601" width="90"  height="36" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
-  <text x="387" y="623" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#FFFFFF">RagTag**</text>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       BEST INITIAL ASSEMBLY OVAL  (cy=1065)
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- Abyss-Sealer -->
-  <rect x="436" y="601" width="118" height="36" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
-  <text x="495" y="623" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#FFFFFF">Abyss-Sealer</text>
+  <ellipse cx="478" cy="1065" rx="132" ry="50" fill="#FFFFFF" stroke="#1D3D5C" stroke-width="2.5"/>
+  <text x="478" y="1050" text-anchor="middle" font-size="9" fill="#666666">Based on:</text>
+  <text x="478" y="1065" text-anchor="middle" font-size="14" font-weight="bold" fill="#1A1A1A">Best Initial</text>
+  <text x="478" y="1081" text-anchor="middle" font-size="14" font-weight="bold" fill="#1A1A1A">Assembly</text>
+  <text x="478" y="1102" text-anchor="middle" font-size="8" fill="#666666">Highest BUSCO  ·  Largest N50  ·  Fewest Contigs</text>
 
-  <!-- ══ FINAL ASSESSMENT BOXES ════════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       POLISHING BOXES  (y ≈ 1178–1268)
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- QUAST* final (dark) -->
-  <rect x="186" y="660" width="168" height="52" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
-  <text x="270" y="691" text-anchor="middle" font-size="19" font-weight="bold" fill="#FFFFFF">QUAST*</text>
+  <!-- minimap2 / Racon pass 1 (green) — cx=214 -->
+  <rect x="130" y="1178" width="168" height="82" rx="5" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
+  <text x="214" y="1208" text-anchor="middle" font-size="11" fill="#FFFFFF">minimap2</text>
+  <text x="214" y="1229" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">Racon</text>
 
-  <!-- BUSCO final (dark) -->
-  <rect x="392" y="660" width="168" height="52" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
-  <text x="476" y="691" text-anchor="middle" font-size="19" font-weight="bold" fill="#FFFFFF">BUSCO</text>
+  <!-- minimap2 / Racon pass 2 (green) — cx=400 -->
+  <rect x="316" y="1178" width="168" height="82" rx="5" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
+  <text x="400" y="1208" text-anchor="middle" font-size="11" fill="#FFFFFF">minimap2</text>
+  <text x="400" y="1229" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">Racon</text>
 
-  <!-- ══ ARROWS — PREPROCESSING ═══════════════════════════════════════════ -->
+  <!-- bwa / samtools / Pilon (yellow) — cx=585 -->
+  <rect x="498" y="1168" width="174" height="92" rx="5" fill="#F5A624" stroke="#C88010" stroke-width="2"/>
+  <text x="585" y="1198" text-anchor="middle" font-size="10.5" fill="#1A1A1A">bwa  ·  samtools</text>
+  <text x="585" y="1215" text-anchor="middle" font-size="10.5" fill="#1A1A1A">bamtools</text>
+  <text x="585" y="1237" text-anchor="middle" font-size="15" font-weight="bold" fill="#1A1A1A">Pilon</text>
 
-  <!-- HiFi PacBio → Filtlong/PacBio -->
-  <line x1="88"  y1="107" x2="88"  y2="120" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       BEST ASSEMBLY → POLISHING  gray dashed arrows
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- Filtlong/PacBio → Filtered PacBio -->
-  <line x1="88"  y1="162" x2="88"  y2="205" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- → Racon 1 (from left of oval, left and down) -->
+  <polyline points="346,1065 280,1065 280,1176 214,1176"
+            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-g)"/>
 
-  <!-- Raw ONT → Filtlong/ONT -->
-  <line x1="272" y1="95"  x2="272" y2="110" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- → Racon 2 (from bottom of oval, down) -->
+  <polyline points="478,1115 478,1176 400,1176 400,1178"
+            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-g)"/>
 
-  <!-- Filtlong/ONT right → Ratatosk left  (angled connector) -->
-  <polyline points="334,132 340,132 340,144 346,144" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- → Pilon (from right of oval, right then down into Pilon top) -->
+  <polyline points="610,1065 658,1065 658,1166 585,1166"
+            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-g)"/>
 
-  <!-- Raw Illumina → Trimmomatic -->
-  <line x1="706" y1="95"  x2="706" y2="110" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       LONG GRAY DASHED  re-use arrows: Corrected ONT → Racon, Illumina → Pilon
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- Trimmomatic → BBMap  (arrow going LEFT) -->
-  <line x1="642" y1="132" x2="632" y2="132" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- Corrected ONT (left edge=192) → Racon 1 left edge (x=130) — routes down far-left margin -->
+  <polyline points="192,462 114,462 114,1219 128,1219"
+            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-g)"/>
 
-  <!-- BBMap → Ratatosk  (arrow going LEFT) -->
-  <line x1="498" y1="138" x2="490" y2="142" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- Clumped Illumina (right edge=644) → Pilon right edge (x=672) — routes down far-right margin -->
+  <polyline points="644,470 726,470 726,1214 674,1214"
+            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-g)"/>
 
-  <!-- BBMap → Clumped Illumina -->
-  <polyline points="564,152 564,168 558,168 558,224" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       POLISHING CHAIN  solid arrows
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- Ratatosk → Corrected ONT  (L-shape down-left) -->
-  <polyline points="417,166 417,195 272,195 272,217" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-
-  <!-- ══ Filtered PacBio → hifiasm ══════════════════════════════════════ -->
-  <line x1="88" y1="269" x2="88" y2="314" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-
-  <!-- ══ Corrected ONT → assemblers ═════════════════════════════════════ -->
-  <!-- Corrected ONT bottom → down to assembly row, then branches -->
-  <polyline points="272,279 272,308" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-  <!-- ONT → Flye (already covered above, ONT is at x=272 ≈ Flye center x=253) -->
-  <!-- Branch left from 272 to Flye -->
-  <polyline points="272,296 253,296 253,318" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-  <!-- Branch to SPAdes (x=383) -->
-  <polyline points="272,296 383,296 383,318" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-  <!-- Branch to MaSuRCA (x=520) -->
-  <polyline points="272,296 520,296 520,318" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-
-  <!-- ══ Clumped Illumina → assemblers (DASHED) ═══════════════════════════ -->
-  <!-- Dashed trunk going up from Clumped Illumina to y=310 -->
-  <polyline points="558,225 558,308" fill="none" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
-  <!-- Dashed to hifiasm -->
-  <polyline points="558,296 92,296 92,314" fill="none" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
-  <!-- (Flye/SPAdes/MaSuRCA already get Illumina via the trunk above at y=308 near their tops) -->
-
-  <!-- ══ Assemblers → QUAST (initial) ══════════════════════════════════ -->
-  <!-- Flye bottom → QUAST -->
-  <polyline points="253,370 253,386 270,386 270,392" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-  <!-- SPAdes bottom → QUAST -->
-  <polyline points="383,370 383,386 270,386" fill="none" stroke="#1A1A1A" stroke-width="2"/>
-  <!-- MaSuRCA bottom → QUAST -->
-  <polyline points="520,370 520,386 270,386" fill="none" stroke="#1A1A1A" stroke-width="2"/>
-  <!-- hifiasm (dashed) → BUSCO -->
-  <polyline points="92,374 92,386 476,386 476,392" fill="none" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
-
-  <!-- ══ QUAST → BUSCO ══════════════════════════════════════════════════ -->
-  <line x1="354" y1="420" x2="390" y2="420" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-
-  <!-- ══ BUSCO → Best Initial Assembly ════════════════════════════════ -->
-  <line x1="476" y1="446" x2="476" y2="454" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-
-  <!-- ══ Best Initial Assembly → Polishing (gray dashed) ══════════════ -->
-  <!-- Best Assembly left → racon 1 (gray dashed arc going left) -->
-  <polyline points="358,490 320,490 320,524 241,524 241,528"
-            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-gray)"/>
-  <!-- Best Assembly → racon 2 (gray dashed) -->
-  <polyline points="476,526 476,524 409,524 409,528"
-            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-gray)"/>
-  <!-- Best Assembly right → Pilon (gray dashed) -->
-  <polyline points="594,490 650,490 650,524 585,524 585,528"
-            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-gray)"/>
-
-  <!-- Corrected ONT (gray dashed) feeds polishing -->
-  <polyline points="196,248 150,248 150,540 160,540"
-            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-gray)"/>
-
-  <!-- Clumped Illumina → Pilon (gray dashed) -->
-  <polyline points="558,291 558,504 585,504 585,524"
-            fill="none" stroke="#888888" stroke-width="1.5" stroke-dasharray="6,4" marker-end="url(#arr-gray)"/>
-
-  <!-- ══ Polishing chain ════════════════════════════════════════════════ -->
   <!-- Racon 1 → Racon 2 -->
-  <line x1="320" y1="557" x2="328" y2="557" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="298" y1="1219" x2="314" y2="1219" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
   <!-- Racon 2 → Pilon -->
-  <line x1="488" y1="557" x2="496" y2="557" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="484" y1="1219" x2="496" y2="1219" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- ══ Pilon → purge_dups ═════════════════════════════════════════════ -->
-  <polyline points="585,586 585,594 69,594 69,599" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- ══════════════════════════════════════════════════════════════════════
+       CURATION BOXES  (y=1388–1440)
+       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- ══ Curation chain ════════════════════════════════════════════════ -->
-  <line x1="118" y1="619" x2="120"  y2="619" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-  <line x1="212" y1="619" x2="214"  y2="619" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-  <line x1="338" y1="619" x2="340"  y2="619" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-  <line x1="432" y1="619" x2="434"  y2="619" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="14"  y="1390" width="110" height="52" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
+  <text x="69"  y="1421" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">purge_dups</text>
 
-  <!-- ══ Curation → Final Assessment ══════════════════════════════════ -->
-  <!-- From Abyss-Sealer down to QUAST/BUSCO final -->
-  <polyline points="495,637 495,648 270,648 270,658" fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
-  <!-- Also to BUSCO final (dashed — hifiasm/MaSuRCA path) -->
-  <polyline points="495,648 476,648 476,658" fill="none" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
+  <rect x="134" y="1390" width="100" height="52" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
+  <text x="184" y="1421" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">RagTag**</text>
 
-  <!-- QUAST final → BUSCO final -->
-  <line x1="354" y1="686" x2="390" y2="686" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="244" y="1390" width="132" height="52" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
+  <text x="310" y="1421" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">TGS-GapCloser</text>
 
-  <!-- ══ Footnotes ══════════════════════════════════════════════════════ -->
-  <text x="14" y="735" font-size="10" fill="#444444">*Uses Reference Assembly if provided</text>
-  <text x="14" y="750" font-size="10" fill="#444444">**Will be Skipped if Reference Assembly is NOT provided</text>
+  <rect x="386" y="1390" width="100" height="52" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
+  <text x="436" y="1421" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">RagTag**</text>
+
+  <rect x="496" y="1390" width="124" height="52" rx="4" fill="#3E7534" stroke="#2C5726" stroke-width="2"/>
+  <text x="558" y="1421" text-anchor="middle" font-size="12" font-weight="bold" fill="#FFFFFF">Abyss-Sealer</text>
+
+  <!-- Pilon ↓ → purge_dups (route down, collect left, drop into purge_dups) -->
+  <polyline points="585,1260 585,1374 69,1374 69,1388"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- Curation chain arrows -->
+  <line x1="124" y1="1416" x2="132"  y2="1416" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="234" y1="1416" x2="242"  y2="1416" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="376" y1="1416" x2="384"  y2="1416" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="486" y1="1416" x2="494"  y2="1416" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       FINAL ASSESSMENT BOXES  (y=1542–1614)
+       ══════════════════════════════════════════════════════════════════════ -->
+
+  <rect x="186" y="1542" width="168" height="72" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
+  <text x="270" y="1584" text-anchor="middle" font-size="22" font-weight="bold" fill="#FFFFFF">QUAST*</text>
+
+  <rect x="394" y="1542" width="168" height="72" rx="5" fill="#1D3D5C" stroke="#122638" stroke-width="2.5"/>
+  <text x="478" y="1584" text-anchor="middle" font-size="22" font-weight="bold" fill="#FFFFFF">BUSCO</text>
+
+  <!-- Curation (Abyss-Sealer at cx=558) → Final Assessment -->
+  <polyline points="558,1442 558,1526 270,1526 270,1540"
+            fill="none" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- dashed branch → BUSCO -->
+  <polyline points="558,1526 478,1526 478,1540"
+            fill="none" stroke="#1A1A1A" stroke-width="1.5" stroke-dasharray="7,4" marker-end="url(#arr)"/>
+
+  <!-- QUAST (final) → BUSCO (final) -->
+  <line x1="354" y1="1578" x2="392" y2="1578" stroke="#1A1A1A" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ══════════════════════════════════════════════════════════════════════
+       FOOTNOTES
+       ══════════════════════════════════════════════════════════════════════ -->
+  <text x="14" y="1714" font-size="11" fill="#444444">*Uses Reference Assembly if provided</text>
+  <text x="14" y="1732" font-size="11" fill="#444444">**Will be Skipped if Reference Assembly is NOT provided</text>
 
 </svg>
