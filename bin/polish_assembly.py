@@ -18,7 +18,8 @@ import sys
 import shutil
 import pandas as pd
 from pathlib import Path  # <<< NEW
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
+from file_manager import remove_file, remove_dir, remove_glob, remove_bwa_indices
 
 
 # --------------------------------------------------------------
@@ -103,6 +104,9 @@ def pilon_prep(input_assembly, illu_f_dedup, illu_r_dedup, assembly_out_dir, cpu
             print(f"WARN:\tsamtools view failed. Skipping Pilon prep.")
             return None
 
+    # The SAM file can be 10+ GB — free it now that sorted BAM exists.
+    remove_file(output_sam)
+
     if not os.path.exists(pilon_bam):
         bamsort_cmd = ["bamtools", "sort", "-in", sorted_bam, "-out", pilon_bam]
         print(f"DEBUG - Running bamtools sort: {' '.join(bamsort_cmd)}")
@@ -121,6 +125,10 @@ def pilon_prep(input_assembly, illu_f_dedup, illu_r_dedup, assembly_out_dir, cpu
     if os.path.exists(pilon_bam) and os.path.getsize(pilon_bam) < 1000:
         print(f"WARN:\tSorted BAM file is suspiciously small: {pilon_bam}")
         return None
+
+    # Final BAM is confirmed and indexed — the intermediate sorted BAM is redundant.
+    if os.path.exists(pilon_bam) and os.path.exists(pilon_bam + ".bai"):
+        remove_file(sorted_bam)
 
     return pilon_bam
 
@@ -378,6 +386,17 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 return None
 
     print(f"PASS:\tPolishing complete for {best_assembly} -> {final_polished_assembly}")
+
+    # --- Cleanup intermediate files now that final polished assembly is confirmed ---
+    if os.path.exists(final_polished_assembly) and os.path.getsize(final_polished_assembly) > 0:
+        # Large minimap2 PAF alignments used by Racon
+        remove_glob(os.path.join(racon_work_dir, "*.paf"))
+        # Per-round Racon FASTA outputs (final is kept as racon_final)
+        remove_file(os.path.join(racon_work_dir, f"{sample_id}_racon_polish_1.fasta"))
+        remove_file(os.path.join(racon_work_dir, f"{sample_id}_racon_polish_2.fasta"))
+        # BWA-mem2 index sidecars created alongside racon_final during Pilon prep
+        remove_bwa_indices(racon_final)
+
     return final_polished_assembly
 
 
@@ -386,6 +405,8 @@ if __name__ == "__main__":
         print("Usage: python3 polish_assembly.py <sample_id> <input_csv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     final_polished_assembly = polish_assembly(
         sys.argv[1],       # sample_id

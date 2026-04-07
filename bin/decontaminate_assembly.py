@@ -37,7 +37,7 @@ import shutil
 import pandas as pd
 from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print, pigz_compress
 
 
 # --------------------------------------------------------------
@@ -100,7 +100,7 @@ def get_decontamination_classes(kingdom_id, karyote_id):
 # --------------------------------------------------------------
 # Write a completion marker for skip-detection on re-runs
 # --------------------------------------------------------------
-def _write_done_marker(marker_path, input_assembly, kept_count, removed_count,
+def write_done_marker(marker_path, input_assembly, kept_count, removed_count,
                        kingdom=None, karyote=None,
                        keep_classes=None, remove_classes=None):
     """Write a plain-text done marker so subsequent runs can skip this step.
@@ -132,7 +132,7 @@ def _write_done_marker(marker_path, input_assembly, kept_count, removed_count,
 # --------------------------------------------------------------
 # Run Tiara and return path to its classification output file
 # --------------------------------------------------------------
-def _run_tiara(input_assembly, decontam_dir, cpu_threads):
+def run_tiara(input_assembly, decontam_dir, cpu_threads):
     """Run Tiara on *input_assembly* and return the path to the output TSV.
 
     Args:
@@ -164,7 +164,7 @@ def _run_tiara(input_assembly, decontam_dir, cpu_threads):
 # --------------------------------------------------------------
 # Parse Tiara TSV into {sequence_id: class_label}
 # --------------------------------------------------------------
-def _parse_tiara(tiara_out):
+def parse_tiara(tiara_out):
     """Parse a Tiara output file into a sequence-to-class mapping.
 
     Tiara writes tab-separated lines: sequence_id <TAB> class <TAB> ...
@@ -296,7 +296,7 @@ def decontaminate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb
     # ----------------------------------------------------------
     # Section 6: Run Tiara
     # ----------------------------------------------------------
-    tiara_out = _run_tiara(curated_assembly, decontam_dir, cpu_threads)
+    tiara_out = run_tiara(curated_assembly, decontam_dir, cpu_threads)
     if tiara_out is None:
         log_print("ERROR:\tTiara classification failed. Aborting decontamination.")
         return None
@@ -304,7 +304,7 @@ def decontaminate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb
     # ----------------------------------------------------------
     # Section 7: Parse Tiara output
     # ----------------------------------------------------------
-    classifications = _parse_tiara(tiara_out)
+    classifications = parse_tiara(tiara_out)
     if not classifications:
         log_print("ERROR:\tTiara output parsed as empty. Aborting decontamination.")
         return None
@@ -375,8 +375,9 @@ def decontaminate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb
 
     # ----------------------------------------------------------
     # Section 12: Copy decontaminated assembly to final path
+    # Copy happens BEFORE compression so decontam_fasta is still plain text.
+    # final_out is left uncompressed — downstream tools expect plain FASTA.
     # ----------------------------------------------------------
-    import shutil
     if os.path.exists(final_out):
         log_print(f"SKIP:\tFinal decontaminated assembly already exists: {final_out}. Overwriting.")
         os.remove(final_out)
@@ -388,10 +389,16 @@ def decontaminate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb
 
     log_print(f"PASS:\tDecontaminated assembly written to: {final_out}")
 
+    # Compress working FASTAs now that final_out has been written.
+    # This keeps all Tiara output but reclaims space for the redundant copies.
+    log_print(f"NOTE:\tCompressing Tiara working FASTAs...")
+    pigz_compress(removed_fasta, cpu_threads)
+    pigz_compress(decontam_fasta, cpu_threads)
+
     # ----------------------------------------------------------
     # Section 13: Write done marker
     # ----------------------------------------------------------
-    _write_done_marker(
+    write_done_marker(
         done_marker,
         input_assembly=curated_assembly,
         kept_count=len(kept_records),
@@ -417,7 +424,7 @@ if __name__ == "__main__":
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    initialize_logging_environment(sys.argv[3])
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     result = decontaminate_assembly(
         sys.argv[1],   # sample_id

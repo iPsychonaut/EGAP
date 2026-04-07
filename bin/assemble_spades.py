@@ -11,10 +11,13 @@ Updated on Wed Sept 3 2025
 
 @author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
 """
-import os, sys, shutil
+import os
+import sys
+import shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, log_print, initialize_logging_environment
 from qc_assessment import qc_assessment
+from file_manager import remove_file, remove_dir
 
 
 # --------------------------------------------------------------
@@ -23,10 +26,36 @@ from qc_assessment import qc_assessment
 def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     """Assemble genomic data using SPAdes with Illumina and optional ONT reads.
 
-    Executes SPAdes assembly, processes input reads from a CSV, and performs
-    quality control on the resulting assembly.
+    Reads metadata from *input_csv*, resolves read paths, runs SPAdes in
+    ``--isolate`` mode (with optional ``--nanopore`` supplemental reads),
+    and performs quality control via ``qc_assessment``.  Skips the assembly
+    step if the final output file already exists.
 
-    Args are identical to your original docstring.
+    Parameters
+    ----------
+    sample_id : str
+        Sample identifier used to look up the row in *input_csv*.
+    input_csv : str
+        Path to the metadata CSV file.
+    output_dir : str
+        Root output directory; per-species subdirectories are created here.
+    cpu_threads : int or str
+        Number of CPU threads to pass to SPAdes.
+    ram_gb : int or str
+        Maximum RAM in GB to pass to SPAdes (``-m`` flag).
+
+    Returns
+    -------
+    str or None
+        Absolute path to the final SPAdes assembly FASTA, or ``None``
+        if the assembly could not be completed or no suitable reads are
+        available.
+
+    Raises
+    ------
+    SystemExit
+        Propagated from ``run_subprocess_cmd`` if the SPAdes binary is not
+        found on ``PATH``.
     """
     # Keep absolute paths so later code never loses them
     input_csv_abs  = os.path.abspath(input_csv)
@@ -90,7 +119,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # ---------- FAST SKIP if final output exists (re-run QC) ----------
     if os.path.exists(egap_spades_assembly_path) and os.path.getsize(egap_spades_assembly_path) > 0:
-        print(f"SKIP:\tSPAdes assembly already present: {egap_spades_assembly_path}")
+        log_print(f"SKIP:\tSPAdes assembly already present: {egap_spades_assembly_path}")
         egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
             "spades", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
         )
@@ -99,35 +128,36 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # Set long-read paths (ONT only for SPAdes), prefer prefiltered, fallback to raw
     highest_mean_qual_long_reads = None
     if pd.notna(ont_raw_reads):
-        print("DEBUG - ONT RAW READS EXIST!")
+        log_print("DEBUG - ONT RAW READS EXIST!")
         candidate = os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")
         highest_mean_qual_long_reads = candidate if os.path.exists(candidate) else ont_raw_reads
     elif pd.notna(pacbio_raw_reads):
-        print("SKIP:\tSPAdes cannot be used to assemble PacBio reads...")
+        log_print("SKIP:\tSPAdes cannot be used to assemble PacBio reads...")
         return None
 
     print(f"DEBUG - highest_mean_qual_long_reads    - {highest_mean_qual_long_reads}")
 
     # If no usable reads at all, bail
     if pd.isna(ont_raw_reads) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads) and pd.isna(pacbio_raw_reads):
-        print("SKIP:\tNo reads available for processing")
+        log_print("SKIP:\tNo reads available for processing")
         return None
 
     # -------- Resolve EVERYTHING to absolute paths (no chdir, no double nesting) --------
     start_dir = os.getcwd()
 
-    def _abs_safe(p):
-        if p is None or (isinstance(p, float) and pd.isna(p)):
-            return p
+    def abs_safe(p):
+        if p is None or pd.isna(p):
+            return None
+        p = str(p)
         return p if os.path.isabs(p) else os.path.realpath(os.path.join(start_dir, p))
 
     # Make all potentially used files absolute
-    illu_dedup_f_reads = _abs_safe(illu_dedup_f_reads)
-    illu_dedup_r_reads = _abs_safe(illu_dedup_r_reads)
-    ref_seq = _abs_safe(ref_seq)
-    highest_mean_qual_long_reads = _abs_safe(highest_mean_qual_long_reads)
-    illumina_f_raw_reads = _abs_safe(illumina_f_raw_reads)
-    illumina_r_raw_reads = _abs_safe(illumina_r_raw_reads)
+    illu_dedup_f_reads = abs_safe(illu_dedup_f_reads)
+    illu_dedup_r_reads = abs_safe(illu_dedup_r_reads)
+    ref_seq = abs_safe(ref_seq)
+    highest_mean_qual_long_reads = abs_safe(highest_mean_qual_long_reads)
+    illumina_f_raw_reads = abs_safe(illumina_f_raw_reads)
+    illumina_r_raw_reads = abs_safe(illumina_r_raw_reads)
 
     # Only use dedup FASTQs if they truly exist and are non-empty; otherwise fall back to raw
     use_dedup = all([
@@ -169,7 +199,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     _ = run_subprocess_cmd(spades_cmd, shell_check=False)
 
     if not os.path.exists(spades_path):
-        print("ERROR:\tSPAdes finished but scaffolds.fasta not found; check spades.log and params.txt.")
+        log_print("ERROR:\tSPAdes finished but scaffolds.fasta not found; check spades.log and params.txt.")
         return None
 
     shutil.move(spades_path, egap_spades_assembly_path)
@@ -178,6 +208,19 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
         "spades", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
     )
+
+    # --- Cleanup SPAdes intermediates once final assembly is confirmed ---
+    if egap_spades_assembly_path and os.path.exists(str(egap_spades_assembly_path)):
+        # Per-kmer working directories (K21 … K99)
+        for _kmer in ["K21", "K33", "K55", "K77", "K99"]:
+            remove_dir(os.path.join(spades_out_dir, _kmer))
+        # Intermediate FASTA outputs superseded by the final scaffold
+        remove_file(os.path.join(spades_out_dir, "contigs.fasta"))
+        remove_file(os.path.join(spades_out_dir, "before_rr.fasta"))
+        # Scratch directories
+        remove_dir(os.path.join(spades_out_dir, "misc"))
+        remove_dir(os.path.join(spades_out_dir, "tmp"))
+
     return egap_spades_assembly_path
 
 
@@ -186,6 +229,8 @@ if __name__ == "__main__":
         print("Usage: python3 assemble_spades.py <sample_id> <input_csv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     egap_spades_assembly_path = assemble_spades(
         sys.argv[1],       # sample_id

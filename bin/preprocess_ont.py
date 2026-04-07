@@ -14,7 +14,7 @@ Updated on Wed Sept 3 2025
 """
 import os, shutil, sys, subprocess, glob, re
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads
+from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads, initialize_logging_environment
 from qc_assessment import nanoplot_qc_reads
 
 # String values written by older pipeline runs (na_rep="None") that must be
@@ -22,7 +22,7 @@ from qc_assessment import nanoplot_qc_reads
 _NULLS = {"", "none", "nan", "null", "na"}
 
 
-def _null(val):
+def null(val):
     """Return None if *val* is NaN or a null-sentinel string, else return *val*."""
     if val is None:
         return None
@@ -67,9 +67,9 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     current_series = current_row.iloc[0]  # Convert to Series (single row)
 
     # Identify read paths, reference, and BUSCO lineage info from CSV
-    ont_raw_reads = _null(current_series["ONT_RAW_READS"])
-    ont_raw_dir   = _null(current_series["ONT_RAW_DIR"])
-    ont_sra       = _null(current_series["ONT_SRA"])
+    ont_raw_reads = null(current_series["ONT_RAW_READS"])
+    ont_raw_dir   = null(current_series["ONT_RAW_DIR"])
+    ont_sra       = null(current_series["ONT_SRA"])
     species_id    = current_series["SPECIES_ID"]
     est_size      = current_series["EST_SIZE"]
 
@@ -236,7 +236,9 @@ if __name__ == "__main__":
         print("Usage: python3 preprocess_ont.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", 
               file=sys.stderr)
         sys.exit(1)
-    
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
+
     # Log each argument
     for i, arg in enumerate(sys.argv):
         print(f"DEBUG: sys.argv[{i}] = '{arg}'")

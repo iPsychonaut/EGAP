@@ -21,7 +21,8 @@ import pandas as pd
 from Bio import SeqIO
 from collections import Counter
 import matplotlib.pyplot as plt
-from utilities import run_subprocess_cmd, pigz_compress, pigz_decompress, get_current_row_data, analyze_nanostats
+from utilities import run_subprocess_cmd, pigz_compress, pigz_decompress, get_current_row_data, analyze_nanostats, initialize_logging_environment, log_print
+from file_manager import clean_lineage_downloads
 
 
 # === Global BUSCO/Compleasm toggle ===
@@ -32,14 +33,14 @@ USE_COMPLEASM = True
 # or produces no metrics (recommended so downstream code always has data).
 FALLBACK_TO_BUSCO_ON_FAIL = True
 
-def _lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
+def lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
     """
     Return a lineage directory name guaranteed to end with _odbNN, without doubling
     the suffix if it's already present.
     """
     return busco_odb if re.search(r"_odb\d+$", str(busco_odb)) else f"{busco_odb}_{db_version}"
 
-def _normalize_busco_keycase(sample_stats_dict: dict, busco_count: str) -> None:
+def normalize_busco_keycase(sample_stats_dict: dict, busco_count: str) -> None:
     """
     Ensure keys are in the UPPERCASE style expected elsewhere, e.g.:
     FIRST_BUSCO_S, FIRST_BUSCO_D, FIRST_BUSCO_F, FIRST_BUSCO_M, FIRST_BUSCO_C
@@ -69,7 +70,7 @@ def run_lineage_eval(assembly_path: str,
         try:
             compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
                                busco_count, busco_odb, assembly_type, cpu_threads)
-            _normalize_busco_keycase(sample_stats_dict, busco_count)
+            normalize_busco_keycase(sample_stats_dict, busco_count)
 
             # Did we actually get metrics? Accept C or (S and D)
             up = busco_count.upper()
@@ -289,7 +290,7 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
         suffix = "compleasm" if busco_type == "compleasm" else "busco"
         output_tag = f"{sample_id}_{assembly_type}_{busco_odb}_{suffix}"
 
-    def _save_no_data():
+    def save_no_data():
         plt.figure(figsize=(12, 8))
         plt.text(0.5, 0.5, "No valid BUSCO data to plot", fontsize=14, ha='center', va='center')
         plt.xticks([]); plt.yticks([])
@@ -338,20 +339,20 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
                 else:
                     chosen = text
 
-                def _get_count(label, blob):
+                def get_count(label, blob):
                     m = re.search(rf"(?m)^{label}\s*:\s*[\d\.]+%\s*,\s*(\d+)", blob)
                     if m: return int(m.group(1))
                     m2 = re.search(rf"(?m)^{label}\s*:\s*(\d+)", blob)
                     return int(m2.group(1)) if m2 else 0
 
-                s_cnt = _get_count("S", chosen)
-                d_cnt = _get_count("D", chosen)
-                f_cnt = _get_count("F", chosen)
-                i_cnt = _get_count("I", chosen)
+                s_cnt = get_count("S", chosen)
+                d_cnt = get_count("D", chosen)
+                f_cnt = get_count("F", chosen)
+                i_cnt = get_count("I", chosen)
                 total = s_cnt + d_cnt + f_cnt + i_cnt
                 if total == 0:
                     print("WARNING: Compleasm summary has zero S/D/F/I.")
-                    _save_no_data(); return
+                    save_no_data(); return
 
                 asm_name = os.path.splitext(os.path.basename(input_fasta or "assembly"))[0] or "assembly"
                 rows = (
@@ -367,7 +368,7 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
 
     if df.empty:
         print("WARNING: BUSCO input is empty.")
-        _save_no_data(); return
+        save_no_data(); return
 
     # --- Plot ---
     busco_genes = len(df)
@@ -385,7 +386,7 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
     filtered = status_counts.loc[non_dup_sum > 0]
     if filtered.empty:
         print("WARNING: No valid BUSCO rows to plot.")
-        _save_no_data(); return
+        save_no_data(); return
 
     filtered = filtered.loc[filtered.sum(axis=1).sort_values(ascending=False).index]
 
@@ -460,7 +461,7 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
         return assembly_path
     
     # Normalize lineage dir name to avoid double _odb12
-    lineage = _lineage_dirname(busco_odb)
+    lineage = lineage_dirname(busco_odb)
     
     busco_summary = os.path.join(
         busco_dir,
@@ -576,9 +577,12 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
             print(f"WARN:\tCompleasm failed with return code {result}. Skipping Compleasm metrics.")
             return assembly_path
     
+    # Clean up downloaded lineage archives now that extraction is confirmed
+    clean_lineage_downloads(os.path.join(sample_dir, "mb_downloads"))
+
     # Generate a BUSCO-like plot if not already present (NOTE: _c)
     comp_busco_svg = os.path.join(sample_dir, f"{compleasm_tag}.svg")
-    lineage = _lineage_dirname(busco_odb)
+    lineage = lineage_dirname(busco_odb)
     compleasm_tsv = os.path.join(compleasm_dir, lineage, "full_table_busco_format.tsv")
     if not os.path.exists(comp_busco_svg):
         plot_busco(sample_id, "compleasm", busco_odb, compleasm_tsv, assembly_path, assembly_type,
@@ -892,7 +896,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     print(f"DEBUG - Set working directory to: {os.getcwd()}")
     
     # ---- NEW: use the final (homogeneous) filename BEFORE any QC ----
-    def _promote_to_final(src_path: str, dst_path: str, copy_only: bool) -> str:
+    def promote_to_final(src_path: str, dst_path: str, copy_only: bool) -> str:
         """Ensure QC runs on the final-labeled path (rename or copy)."""
         if src_path == dst_path and os.path.exists(dst_path):
             return dst_path
@@ -920,38 +924,48 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
             print(f"ERROR:\tReference path not found: {ref_seq}")
             return None, None
         if not os.path.exists(labeled_assembly):
-            assembly_path = _promote_to_final(ref_seq, labeled_assembly, copy_only=True)
+            assembly_path = promote_to_final(ref_seq, labeled_assembly, copy_only=True)
         else:
             assembly_path = labeled_assembly
     else:
-        # True final mode: rename curated (or polished) to the final EGAP name
-        # Prefer curated; if missing, NEW: look for already-final EGAP assembly; then polished.
-        cand = assembly_path  # start with curated
+        # True final mode: rename the best available assembly to the final EGAP name.
+        # Priority (highest first):
+        #   1. Tiara-decontaminated assembly  (*_decontaminated.fasta)
+        #   2. Curated assembly               (*_final_curated.fasta)
+        #   3. Already-final EGAP assembly    (*_final_EGAP_assembly.fasta)
+        #   4. Polished assembly              (*_final_polish_assembly.fasta)
+        cand = assembly_path  # start with curated path as default
 
-        # Try curated (plain or .gz)
-        if not os.path.exists(cand):
+        # 1) Prefer Tiara-decontaminated assembly if it exists and is valid
+        decontaminated_assembly = os.path.join(sample_dir, f"{sample_id}_decontaminated.fasta")
+        if os.path.exists(decontaminated_assembly) and validate_fasta(decontaminated_assembly):
+            cand = decontaminated_assembly
+            print(f"NOTE:\tUsing Tiara-decontaminated assembly as final: {cand}")
+
+        # 2) Try curated (plain or .gz)
+        elif not os.path.exists(cand):
             if os.path.exists(cand + ".gz"):
                 cand = pigz_decompress(cand + ".gz", cpu_threads)
 
-        # If curated still missing, NEW: try already-final EGAP assembly (plain or .gz)
+        # 3) If curated still missing, try already-final EGAP assembly (plain or .gz)
         if not os.path.exists(cand):
             if os.path.exists(labeled_assembly):
                 cand = labeled_assembly
             elif os.path.exists(labeled_assembly + ".gz"):
                 cand = pigz_decompress(labeled_assembly + ".gz", cpu_threads)
 
-        # If still missing, try polished fallback before giving up
+        # 4) If still missing, try polished fallback before giving up
         if not os.path.exists(cand):
             polished_assembly = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta")
             if os.path.exists(polished_assembly) and validate_fasta(polished_assembly):
                 cand = polished_assembly
             else:
                 print(f"ERROR:\tAssembly path not found: {assembly_path} "
-                      f"(also tried {labeled_assembly} and polished).")
+                      f"(also tried {labeled_assembly}, decontaminated, and polished).")
                 return None, None
 
         # Promote (rename/copy) the chosen candidate to the final EGAP name
-        assembly_path = _promote_to_final(cand, labeled_assembly, copy_only=False)
+        assembly_path = promote_to_final(cand, labeled_assembly, copy_only=False)
 
     
     # Validate final-named assembly
@@ -1076,7 +1090,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
 
     stats_filepath = os.path.join(sample_dir, f"{os.path.basename(labeled_assembly).replace('.fasta', '')}_stats.txt")
 
-    if not os.path.exists(ref_seq) and pd.isna(est_size):
+    if pd.notna(ref_seq) and not os.path.exists(ref_seq) and pd.isna(est_size):
         shutil.copy(labeled_assembly, ref_seq)
 
     # Save a plain text stats file
@@ -1113,6 +1127,8 @@ if __name__ == "__main__":
         print("Usage: python3 qc_assessment.py <assembly_type> <input_csv> "
               "<sample_id> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    initialize_logging_environment(sys.argv[4], sys.argv[3])
 
     if sys.argv[1] == "final":
         labeled_assembly, final_stats_csv = final_assessment(sys.argv[1],       # assembly_type

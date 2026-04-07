@@ -11,7 +11,13 @@ Updated on Wed Sept 3 2025
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, subprocess, platform, shutil, math, hashlib, tempfile
+import os
+import subprocess
+import platform
+import shutil
+import math
+import hashlib
+import tempfile
 import pandas as pd
 from Bio import SeqIO
 from pathlib import Path
@@ -21,7 +27,7 @@ from datetime import datetime
 # --------------------------------------------------------------
 # Catches and unzips compressed files for FASTQ
 # --------------------------------------------------------------
-def _sum_fastq_bases_with_pigz_safe(fq_path: Path, cpu_threads: int) -> int:
+def sum_fastq_bases_with_pigz_safe(fq_path: Path, cpu_threads: int) -> int:
     """
     Safely sum read lengths from a FASTQ that may be .gz by:
     - copying the .gz to a temp dir,
@@ -49,7 +55,7 @@ def _sum_fastq_bases_with_pigz_safe(fq_path: Path, cpu_threads: int) -> int:
 # --------------------------------------------------------------
 # Catches and unzips compressed files for FASTA
 # --------------------------------------------------------------
-def _sum_fasta_bases_with_pigz_safe(fa_path: Path, cpu_threads: int) -> int:
+def sum_fasta_bases_with_pigz_safe(fa_path: Path, cpu_threads: int) -> int:
     """
     Same safety pattern for FASTA/FA files that may be .gz.
     """
@@ -81,9 +87,9 @@ def calculate_genome_coverage(read_fastqs: List[str], assembly_fasta: str, cpu_t
     total_bases = 0
     for fq in read_fastqs:
         fq_path = Path(fq)
-        total_bases += _sum_fastq_bases_with_pigz_safe(fq_path, cpu_threads)
+        total_bases += sum_fastq_bases_with_pigz_safe(fq_path, cpu_threads)
 
-    assembly_bases = _sum_fasta_bases_with_pigz_safe(Path(assembly_fasta), cpu_threads)
+    assembly_bases = sum_fasta_bases_with_pigz_safe(Path(assembly_fasta), cpu_threads)
     if assembly_bases == 0:
         raise ValueError(f"No contigs found in {assembly_fasta}")
 
@@ -96,11 +102,15 @@ def calculate_genome_coverage(read_fastqs: List[str], assembly_fasta: str, cpu_t
 def md5_check(folder_name, illumina_df):
     """Verify MD5 checksums for Illumina files in the specified folder.
 
-    Compares computed MD5 checksums against those listed in MD5.txt.
+    Compares computed MD5 checksums against those listed in ``MD5.txt``.
+    Prints a PASS or ERROR message for each file.
 
-    Args:
-        folder_name (str): Directory containing Illumina files and MD5.txt.
-        illumina_df (pandas.DataFrame): DataFrame to store MD5 and filename data.
+    Parameters
+    ----------
+    folder_name : str
+        Directory containing Illumina FASTQ files and ``MD5.txt``.
+    illumina_df : pandas.DataFrame
+        DataFrame used to accumulate MD5 and filename entries.
     """
     md5_file = os.path.join(folder_name, "MD5.txt")
     if not os.path.exists(md5_file):
@@ -130,13 +140,19 @@ def md5_check(folder_name, illumina_df):
 def get_resource_values(percent_resources, total_cpu, total_ram):
     """Calculate CPU threads and RAM based on a percentage of total resources.
 
-    Args:
-        percent_resources (float): Percentage of resources to allocate (0.0 to 1.0).
-        total_cpu (int): Total available CPU threads.
-        total_ram (int): Total available RAM in GB.
+    Parameters
+    ----------
+    percent_resources : float
+        Fraction of total resources to allocate (0.0–1.0).
+    total_cpu : int
+        Total available CPU threads.
+    total_ram : int
+        Total available RAM in GB.
 
-    Returns:
-        tuple: (number of CPU threads, RAM in GB).
+    Returns
+    -------
+    tuple of (int, int)
+        ``(cpu_threads, ram_gb)`` — number of threads and RAM in GB.
     """
     cpu_threads = int(math.floor(total_cpu * percent_resources))
     ram_gb = int(total_ram * percent_resources)
@@ -147,17 +163,25 @@ def get_resource_values(percent_resources, total_cpu, total_ram):
 # Execute a subprocess command and log its output
 # --------------------------------------------------------------
 def run_subprocess_cmd(cmd_list, shell_check):
-    """Execute a subprocess command and log its execution.
+    """Execute a subprocess command and stream its output to stdout.
 
-    Runs the command (as a string or list) using subprocess.Popen, captures and streams
-    its output in real-time, and logs success or failure.
+    Runs the command using ``subprocess.Popen``, captures combined
+    stdout/stderr, and streams each line in real time.  Returns the
+    process exit code.
 
-    Args:
-        cmd_list (str or list): Command to execute, as a string or list of arguments.
-        shell_check (bool): If True, execute the command through the shell.
+    Parameters
+    ----------
+    cmd_list : str or list of str
+        Command to execute, either as a shell string or as an argument list.
+    shell_check : bool
+        If ``True``, execute the command through the shell (required when
+        *cmd_list* is a string with shell operators).
 
-    Returns:
-        int: The subprocess return code.
+    Returns
+    -------
+    int
+        The subprocess return code (0 on success, 127 if the executable
+        was not found).
     """
     cmd_display = cmd_list if isinstance(cmd_list, str) else ' '.join(cmd_list)
     print(f"CMD:\t{cmd_display}")
@@ -190,13 +214,19 @@ def run_subprocess_cmd(cmd_list, shell_check):
 def gen_sample_stats_dict(row):
     """Generate a sample statistics dictionary from a metadata row.
 
-    Extracts key fields from a pandas Series and initializes placeholders for metrics.
+    Extracts key fields from a pandas Series and initializes placeholder
+    values for all downstream quality metrics.
 
-    Args:
-        row (pandas.Series): Metadata row containing sample information.
+    Parameters
+    ----------
+    row : pandas.Series
+        Single metadata row containing sample information columns.
 
-    Returns:
-        dict: Dictionary with initialized sample statistics.
+    Returns
+    -------
+    dict
+        Dictionary with all pipeline statistics fields initialized to
+        ``None`` (except those extracted from *row*).
     """
     sample_stats_dict = {"SAMPLE_ID": row["SAMPLE_ID"],
                          "SPECIES_ID": row["SPECIES_ID"],
@@ -279,12 +309,17 @@ def gen_sample_stats_dict(row):
 def pigz_compress(input_file, cpu_threads):
     """Compress a file using pigz with multiple threads.
 
-    Args:
-        input_file (str): Path to the file to compress.
-        cpu_threads (int): Number of threads for compression.
+    Parameters
+    ----------
+    input_file : str
+        Path to the file to compress.
+    cpu_threads : int
+        Number of threads to use for compression.
 
-    Returns:
-        str: Path to the compressed .gz file.
+    Returns
+    -------
+    str
+        Path to the compressed ``.gz`` file.
     """
     pigz_cmd = f"pigz -p {cpu_threads} {input_file}"
     _ = run_subprocess_cmd(pigz_cmd, shell_check = True)
@@ -298,12 +333,17 @@ def pigz_compress(input_file, cpu_threads):
 def pigz_decompress(input_file, cpu_threads):
     """Decompress a file using pigz with multiple threads.
 
-    Args:
-        input_file (str): Path to the .gz file to decompress.
-        cpu_threads (int): Number of threads for decompression.
+    Parameters
+    ----------
+    input_file : str
+        Path to the ``.gz`` file to decompress.
+    cpu_threads : int
+        Number of threads to use for decompression.
 
-    Returns:
-        str: Path to the decompressed file.
+    Returns
+    -------
+    str
+        Path to the decompressed file (with ``.gz`` extension removed).
     """
     pigz_cmd = f"pigz -p {cpu_threads} -d -f {input_file}"
     _ = run_subprocess_cmd(pigz_cmd, shell_check = True)
@@ -315,22 +355,38 @@ def pigz_decompress(input_file, cpu_threads):
 # Extract and process sample metadata
 # --------------------------------------------------------------
 def get_current_row_data(input_df, sample_id):
-    """Extract row data for a sample ID and generate a stats dictionary.
+    """Extract row data for a sample ID and generate a statistics dictionary.
 
-    Filters a DataFrame for a specific sample ID and creates a statistics dictionary.
+    Filters *input_df* to the row matching *sample_id*, replaces any
+    literal ``"None"`` strings with ``pd.NA`` so that downstream
+    ``pd.isna()`` / ``pd.notna()`` guards work correctly, and builds
+    the initial sample statistics dictionary.
 
-    Args:
-        input_df (pandas.DataFrame): DataFrame with sample metadata.
-        sample_id (str): Sample identifier to filter.
+    Parameters
+    ----------
+    input_df : pandas.DataFrame
+        Full metadata DataFrame loaded from the input CSV.
+    sample_id : str
+        Sample identifier to filter on the ``SAMPLE_ID`` column.
 
-    Returns:
-        tuple: (filtered DataFrame row, row index list, sample statistics dictionary).
+    Returns
+    -------
+    tuple of (pandas.DataFrame, list, dict)
+        ``(current_row, current_index, sample_stats_dict)`` — the filtered
+        single-row DataFrame, its integer index list, and the initialized
+        statistics dictionary.
     """
     # Filter the DataFrame for rows where the "SAMPLE_ID" column equals the provided sample_id
-    current_row = input_df[input_df["SAMPLE_ID"] == sample_id]
+    current_row = input_df[input_df["SAMPLE_ID"] == sample_id].copy()
+
+    # Replace literal string "None" with actual NaN so downstream pd.isna()
+    # checks work correctly (some CSV editors write "None" instead of leaving
+    # cells empty).
+    current_row = current_row.replace(to_replace="None", value=pd.NA)
+
     sample_stats_dict = gen_sample_stats_dict(current_row)
     current_index = current_row.index.tolist()
-    
+
     return current_row, current_index, sample_stats_dict
 
 
@@ -340,15 +396,22 @@ def get_current_row_data(input_df, sample_id):
 def analyze_nanostats(READS_ORIGIN, nanoplot_out_file, sample_stats_dict):
     """Parse NanoPlot statistics and update the sample statistics dictionary.
 
-    Reads NanoPlot output and extracts metrics based on read origin (e.g., raw ONT).
+    Reads NanoPlot output and extracts metrics based on read origin.
 
-    Args:
-        READS_ORIGIN (str): Type and stage of reads (e.g., 'Raw_ONT', 'Filt_PacBio').
-        nanoplot_out_file (str): Path to NanoPlot statistics file.
-        sample_stats_dict (dict): Dictionary to update with statistics.
+    Parameters
+    ----------
+    READS_ORIGIN : str
+        Type and stage of reads (e.g., ``'Raw_ONT'``, ``'Filt_PacBio'``).
+        Used to determine which keys in *sample_stats_dict* to populate.
+    nanoplot_out_file : str
+        Path to the NanoPlot ``NanoStats.txt`` output file.
+    sample_stats_dict : dict
+        Statistics dictionary to update in-place.
 
-    Returns:
-        dict: Updated sample statistics dictionary.
+    Returns
+    -------
+    dict
+        The updated *sample_stats_dict* with NanoPlot metrics filled in.
     """
     with open(nanoplot_out_file, "r") as nanostats:
         if "raw" in READS_ORIGIN.lower() and "ont" in READS_ORIGIN.lower():
@@ -410,12 +473,18 @@ def analyze_nanostats(READS_ORIGIN, nanoplot_out_file, sample_stats_dict):
 def move_file_up(input_file, up_count):
     """Move a file up the directory hierarchy by a specified number of levels.
 
-    Args:
-        input_file (str): Path to the file to move.
-        up_count (int): Number of directory levels to move up.
+    Parameters
+    ----------
+    input_file : str
+        Path to the file to move.
+    up_count : int
+        Number of directory levels to ascend.
 
-    Returns:
-        str: New path to the moved file, or original path if file doesn't exist.
+    Returns
+    -------
+    str
+        New path to the moved file, or the original *input_file* path if
+        the file does not exist.
     """
     if os.path.exists(input_file):
         move_dir = "/".join(os.path.dirname(input_file).split("/")[:-int(up_count)])
@@ -432,19 +501,28 @@ def move_file_up(input_file, up_count):
 # Select highest quality long reads
 # --------------------------------------------------------------
 def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
-    """Select the highest quality long reads from ONT or PacBio data.
+    """Select the highest-mean-quality long reads from ONT or PacBio data.
 
-    Processes metadata to identify, filter, and select the best long reads based on
-    mean quality.
+    Parses NanoPlot statistics to compare quality across raw, filtered, and
+    corrected read sets, then copies the best set to a canonical
+    ``*_highest_mean_qual_long_reads.fastq`` path.
 
-    Args:
-        output_dir (str): Directory for output files.
-        input_csv (str): Path to metadata CSV file.
-        sample_id (str): Sample identifier.
-        cpu_threads (int): Number of threads for compression tasks.
+    Parameters
+    ----------
+    output_dir : str
+        Root output directory containing per-species subdirectories.
+    input_csv : str
+        Path to the metadata CSV file.
+    sample_id : str
+        Sample identifier used to look up the row in *input_csv*.
+    cpu_threads : int
+        Number of threads available for compression tasks.
 
-    Returns:
-        str or None: Path to the selected high-quality reads file, or None if not found.
+    Returns
+    -------
+    str or None
+        Absolute path to the selected highest-quality reads file, or
+        ``None`` if no suitable file can be found.
     """
     input_df = pd.read_csv(input_csv)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
@@ -532,12 +610,18 @@ def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
 def generate_log_file(log_file_path, use_numerical_suffix=False):
     """Generate a log file, optionally with a numerical suffix if it exists.
 
-    Args:
-        log_file_path (str): Desired path for the log file.
-        use_numerical_suffix (bool): If True, append a numerical suffix to avoid overwriting.
+    Parameters
+    ----------
+    log_file_path : str
+        Desired path for the log file.
+    use_numerical_suffix : bool
+        If ``True``, append an incrementing integer suffix rather than
+        overwriting an existing file.
 
-    Returns:
-        str: Path to the created or selected log file.
+    Returns
+    -------
+    str
+        Path to the created or selected log file.
     """
     if os.path.exists(log_file_path) and use_numerical_suffix:
         counter = 1
@@ -556,14 +640,19 @@ def generate_log_file(log_file_path, use_numerical_suffix=False):
 # Log and print messages with color
 # --------------------------------------------------------------
 def log_print(input_message, log_file=None):
-    """Log a message to a file and print it with colored output.
+    """Log a message to a file and print it with ANSI-colored output.
 
-    Timestamps the message, writes it to a log file, and prints it in a color based
-    on message type.
+    Prepends a timestamp, writes the message to the log file, and prints
+    it in a color determined by the message prefix (e.g. ``ERROR`` →
+    red, ``PASS`` → green).
 
-    Args:
-        input_message (str): Message to log and print.
-        log_file (str, optional): Path to the log file. Defaults to DEFAULT_LOG_FILE.
+    Parameters
+    ----------
+    input_message : str
+        Message text to log and print.
+    log_file : str, optional
+        Path to the log file.  Defaults to the module-level
+        ``DEFAULT_LOG_FILE`` set by ``initialize_logging_environment``.
     """
     global DEFAULT_LOG_FILE
     COLORS = {"grey": "\033[90m",
@@ -604,17 +693,30 @@ def log_print(input_message, log_file=None):
 # --------------------------------------------------------------
 # Set up logging environment
 # --------------------------------------------------------------
-def initialize_logging_environment(INPUT_FOLDER):
+def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     """Initialize the logging environment based on the input folder.
 
-    Sets global logging variables and creates a log file based on the OS and input folder.
+    Sets the module-level ``DEFAULT_LOG_FILE`` and ``ENVIRONMENT_TYPE``
+    globals and creates the log file.  The log file path is adjusted for
+    WSL/Linux (``/mnt/<drive>/...``) when running on a non-Windows OS.
 
-    Args:
-        INPUT_FOLDER (str): Folder used to determine log file location.
+    Parameters
+    ----------
+    INPUT_FOLDER : str
+        Output folder path used to determine the log file location.
+        When *sample_id* is ``None``, the log file is written as
+        ``<INPUT_FOLDER>/<basename>_log.txt``.
+    sample_id : str, optional
+        When provided, the log file is written per-sample as
+        ``<INPUT_FOLDER>/<sample_id>_log.txt`` so that each sample in
+        a multi-sample CSV run gets its own log file.
     """
     global DEFAULT_LOG_FILE, ENVIRONMENT_TYPE
     print(INPUT_FOLDER)
-    input_file_path = f"{INPUT_FOLDER}/{INPUT_FOLDER.split('/')[-1]}_log.txt"
+    if sample_id:
+        input_file_path = f"{INPUT_FOLDER}/{sample_id}_log.txt"
+    else:
+        input_file_path = f"{INPUT_FOLDER}/{INPUT_FOLDER.split('/')[-1]}_log.txt"
     os_name = platform.system()
     if os_name == "Windows":
         print("UNLOGGED:\tWINDOWS ENVIRONMENT")

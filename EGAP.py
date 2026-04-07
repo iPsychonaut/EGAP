@@ -27,9 +27,64 @@ from datetime import datetime
 
 
 # --------------------------------------------------------------
+# Tee: mirror stdout to a log file in real time
+# --------------------------------------------------------------
+class _Tee:
+    """Write to *primary* stream and strip-ANSI copy to *secondary* (log file)."""
+    _ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*[mK]')
+
+    def __init__(self, primary, secondary):
+        self._primary = primary
+        self._secondary = secondary
+
+    def write(self, data):
+        self._primary.write(data)
+        clean = self._ANSI_ESCAPE.sub('', data)
+        self._secondary.write(clean)
+        self._secondary.flush()
+
+    def flush(self):
+        self._primary.flush()
+        self._secondary.flush()
+
+    def fileno(self):
+        return self._primary.fileno()
+
+
+# Lines containing any of these substrings are suppressed from console output.
+# They are non-fatal noise from numpy C-extension API version mismatches that
+# occur when packages in the same env were compiled against different numpy
+# minor versions (e.g. numpy=1.19.5 in EGAP_env vs a package built on 1.20+).
+_NOISE_SUBSTRINGS = (
+    "module compiled against API version",
+    "RuntimeError: module compiled against",
+)
+
+
+def run_filtered(cmd: list) -> int:
+    """Run *cmd* as a subprocess, stream output to stdout in real time,
+    and silently drop lines matching _NOISE_SUBSTRINGS.
+
+    Returns the subprocess exit code.
+    """
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    for line in proc.stdout:
+        stripped = line.rstrip("\n")
+        if not any(ns in stripped for ns in _NOISE_SUBSTRINGS):
+            print(stripped, flush=True)
+    proc.wait()
+    return proc.returncode
+
+
+# --------------------------------------------------------------
 # Establish Global Pipeline Settings (i.e. command variables)
 # --------------------------------------------------------------
-VERSION = "3.3.8"
+VERSION = "3.4.0"
 
 TRIMMOMATIC_SETTINGS = {
     "mode": "-PE",
@@ -379,13 +434,37 @@ if __name__ == "__main__":
                         type=int,
                         default=8,
                         help="Amount of RAM in GB to allocate (default: 8)")
+    parser.add_argument("--dry_run", action="store_true", default=False,
+                        help="Log file-management actions (removals/compressions) "
+                             "without executing them. Equivalent to EGAP_DRY_RUN=1.")
+    parser.add_argument("--tui", action="store_true", default=False,
+                        help="Run the pipeline through the interactive TUI instead of "
+                             "plain terminal output.")
 
     args = parser.parse_args()
     input_csv   = args.input_csv
     output_dir  = args.output_dir
     cpu_threads = args.cpu_threads
     ram_gb      = args.ram_gb
+
+    if args.dry_run:
+        os.environ["EGAP_DRY_RUN"] = "1"
+    dry_run = args.dry_run
     current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # ---- TUI mode: hand off to EGAP_TUI and exit ----
+    if args.tui:
+        _bin_dir = Path(__file__).resolve().parent / "bin"
+        if str(_bin_dir) not in sys.path:
+            sys.path.insert(0, str(_bin_dir))
+        from EGAP_TUI import ENTHEOME_GENOME_ASSEMBLY_PIPELINE  # noqa: PLC0415
+        _tui_app = ENTHEOME_GENOME_ASSEMBLY_PIPELINE()
+        # Pass the already-parsed namespace so the TUI skips its own argparse.
+        _tui_app._preloaded_args = args
+        _tui_app.run()
+        sys.exit(0)
 
     # Print Banner & Parameters
     print(f"""
@@ -423,6 +502,7 @@ if __name__ == "__main__":
         \033[94mcontainer                        \033[0m: N/A (running python version)
         \033[94mRAM GB                           \033[0m: {ram_gb}
         \033[94mCPU threads                      \033[0m: {cpu_threads}
+        \033[94mdry run                          \033[0m: {dry_run}
         \033[94minput csv                        \033[0m: {input_csv}
         \033[94moutput to                        \033[0m: {output_dir}
 
@@ -552,14 +632,36 @@ if __name__ == "__main__":
     \033[92mbusco settings
        \033[94mmode                              \033[0m: genome
        \033[94mforce overwrite                   \033[0m: -f
-    
-    \033[0m*\033[92mcompleasm settings
+
+    \033[92mcompleasm settings
        \033[0mdefault settings
-    
+
     \033[92mquast settings
        \033[0mdefault settings
 
-    \033[0m*: Currently disabled since version 3.0.0
+    \033[96m-----------------------------------------------------------------------\033[0m
+    """)
+    time.sleep(0.25)
+    print("""
+    \033[92mkraken2 settings\033[0m  (decontaminate_reads — pre-assembly)
+       \033[94mstage                             \033[0m: pre-assembly (reads)
+       \033[94mtargets                           \033[0m: ONT and PacBio highest-quality long reads
+       \033[94mdatabase                          \033[0m: resolved from KRAKEN2_DB env var or CSV column
+       \033[94mkeep (bacteria)                   \033[0m: bacteria, unclassified
+       \033[94mkeep (archaea)                    \033[0m: archaea, unclassified
+       \033[94mkeep (flora/funga/fauna)          \033[0m: eukarya, unclassified
+       \033[94malways kept                       \033[0m: unclassified
+       \033[94mmissing db behaviour              \033[0m: WARN and skip (non-fatal)
+
+    \033[92mtiara settings\033[0m  (decontaminate_assembly — post-assembly)
+       \033[94mstage                             \033[0m: post-assembly (contigs)
+       \033[94mtargets                           \033[0m: final curated assembly
+       \033[94mkeep (bacteria)                   \033[0m: bacteria, prokarya, unknown
+       \033[94mkeep (archaea)                    \033[0m: archaea, prokarya, unknown
+       \033[94mkeep (flora/funga/fauna)          \033[0m: eukarya, organelle, unknown
+       \033[94morganelle note                    \033[0m: kept for eukaryotes; removed for prokaryotes
+       \033[94malways kept                       \033[0m: unknown
+       \033[94mmissing tiara behaviour           \033[0m: WARN and skip (non-fatal)
 
 \033[91m================================================================================\033[0m
     """)
@@ -629,32 +731,59 @@ if __name__ == "__main__":
     # Load the Sample Table and correct any ".fq" -> ".fastq"
     input_csv_df = preprocess_csv(input_csv)
 
-    # Loop through each process for each sample
-    for index, row in input_csv_df.iterrows():
-        sample_id = row["SAMPLE_ID"]
-        for proc in processes:
-            script = bin_dir / f"{proc}.py"
-            if not script.exists():
-                raise FileNotFoundError(f"Missing script: {script}")
-            current_cmd = [sys.executable,
-                   str(script),
-                   sample_id,
-                   input_csv,
-                   output_dir,
-                   str(cpu_threads),
-                   str(ram_gb)]
-            print(f"\n→ Running {proc}: {' '.join(current_cmd)}\n")
-            current_process = subprocess.Popen(current_cmd)
-            current_return_code = current_process.wait()
-            if current_return_code != 0:
-                raise RuntimeError(f"{proc} failed with return code {current_return_code}")
-
-    # final QC
+    # Resolve QC and reporter scripts once (outside the sample loop)
     qc_script = bin_dir / "qc_assessment.py"
     if not qc_script.exists():
         raise FileNotFoundError(f"Missing QC script: {qc_script}")
+    reporter_script = bin_dir / "html_reporter.py"
+    if not reporter_script.exists():
+        raise FileNotFoundError(f"Missing Reporter script: {reporter_script}")
+
+    # Process each sample fully — pipeline steps, then QC, then HTML — before
+    # moving on to the next sample.
+    failed_samples = []
+    _real_stdout = sys.stdout
     for index, row in input_csv_df.iterrows():
         sample_id = row["SAMPLE_ID"]
+
+        # Open a per-sample log file and tee stdout into it for this sample's run.
+        _sample_log_path = os.path.join(output_dir, f"{sample_id}_log.txt")
+        _sample_log_fh = open(_sample_log_path, "a", buffering=1)
+        sys.stdout = _Tee(_real_stdout, _sample_log_fh)
+
+        print(f"\n{'='*70}")
+        print(f"NOTE:\tBeginning pipeline for sample: {sample_id}")
+        print(f"NOTE:\tSample log: {_sample_log_path}")
+        print(f"{'='*70}\n")
+
+        sample_step_failed = False
+
+        # ---- Pipeline steps ----
+        for proc in processes:
+            script = bin_dir / f"{proc}.py"
+            if not script.exists():
+                print(f"\nERROR:\tMissing script: {script}")
+                sample_step_failed = True
+                break
+            current_cmd = [sys.executable,
+                           str(script),
+                           sample_id,
+                           input_csv,
+                           output_dir,
+                           str(cpu_threads),
+                           str(ram_gb)]
+            print(f"\n→ Running {proc}: {' '.join(current_cmd)}\n")
+            current_return_code = run_filtered(current_cmd)
+            if current_return_code != 0:
+                print(f"\nERROR:\t{proc} failed for {sample_id} (rc={current_return_code})")
+                sample_step_failed = True
+                break
+
+        if sample_step_failed:
+            print(f"\nWARN:\tOne or more steps failed for {sample_id}; "
+                  f"still running final QC and HTML report.")
+
+        # ---- Final QC assessment (always runs per sample) ----
         qc_cmd = [sys.executable,
                   str(qc_script),
                   "final",
@@ -664,17 +793,12 @@ if __name__ == "__main__":
                   str(cpu_threads),
                   str(ram_gb)]
         print(f"\n→ Running qc_assessment: {' '.join(qc_cmd)}\n")
-        qc_process = subprocess.Popen(qc_cmd)
-        qc_return_code = qc_process.wait()
+        qc_return_code = run_filtered(qc_cmd)
         if qc_return_code != 0:
-            raise RuntimeError(f"qc_assessment failed with return code {qc_return_code}")
+            print(f"\nWARN:\tqc_assessment returned non-zero for {sample_id} (rc={qc_return_code})")
+            sample_step_failed = True
 
-    # Report Generation
-    reporter_script = bin_dir / "html_reporter.py"
-    if not reporter_script.exists():
-        raise FileNotFoundError(f"Missing Reporter script: {reporter_script}")
-    for index, row in input_csv_df.iterrows():
-        sample_id = row["SAMPLE_ID"]
+        # ---- HTML report (always runs per sample) ----
         reporter_cmd = [sys.executable,
                         str(reporter_script),
                         sample_id,
@@ -683,9 +807,22 @@ if __name__ == "__main__":
                         str(cpu_threads),
                         str(ram_gb)]
         print(f"\n→ Running html_reporter: {' '.join(reporter_cmd)}\n")
-        reporter_process = subprocess.Popen(reporter_cmd)
-        reporter_return_code = reporter_process.wait()
+        reporter_return_code = run_filtered(reporter_cmd)
         if reporter_return_code != 0:
-            raise RuntimeError(f"html_reporter failed with return code {reporter_return_code}")
-    
-    print("\nPASS:\tAll samples processed successfully.")
+            print(f"\nWARN:\thtml_reporter returned non-zero for {sample_id} (rc={reporter_return_code})")
+            sample_step_failed = True
+
+        if sample_step_failed:
+            print(f"\nFAIL:\tSample {sample_id} completed with errors. Continuing to next sample.")
+            failed_samples.append(sample_id)
+        else:
+            print(f"\nPASS:\tSample {sample_id} completed successfully.")
+
+        # Close this sample's log and restore stdout before moving to the next sample.
+        sys.stdout = _real_stdout
+        _sample_log_fh.close()
+
+    if failed_samples:
+        print(f"\nWARN:\tAll samples processed. The following had errors: {', '.join(failed_samples)}")
+    else:
+        print("\nPASS:\tAll samples processed successfully.")

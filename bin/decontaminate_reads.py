@@ -12,13 +12,17 @@ only reads whose domain matches the target organism's kingdom:
 
     Kingdom            Domains kept
     -----------------  ----------------------------------
-    bacteria           bacteria, unclassified
-    archaea            archaea,  unclassified
-    flora/funga/fauna  eukarya,  unclassified
-    (unrecognised)     eukarya,  unclassified  (with WARN)
+    bacteria           bacteria, unclassified, other
+    archaea            archaea,  unclassified, other
+    flora/funga/fauna  eukarya,  unclassified, other
+    (unrecognised)     eukarya,  unclassified, other  (with WARN)
 
 'unclassified' reads are always kept because they may represent genuine
 target sequence that is simply absent from the Kraken2 database.
+
+'other' reads (taxa that cannot be traced to a domain-level entry in the
+Kraken2 report) are always kept because they are typically genuine
+target-organism reads whose taxonomy doesn't resolve cleanly.
 
 The Kraken2 database path is resolved in this order:
   1. KRAKEN2_DB environment variable
@@ -41,7 +45,7 @@ import shutil
 import pandas as pd
 from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print, pigz_compress
 
 
 # --------------------------------------------------------------
@@ -65,47 +69,64 @@ _DOMAIN_TAXIDS = {
 def get_kraken_keep_domains(kingdom_id):
     """Return the set of Kraken2 domain labels to KEEP for *kingdom_id*.
 
-    Args:
-        kingdom_id (str or None): Value of ORGANISM_KINGDOM from the CSV.
-            Case-insensitive.
+    'other' reads (taxa that Kraken2 classifies but cannot be traced back
+    to a domain-level entry in the report) are always kept because they
+    are typically genuine target-organism reads whose taxonomy simply
+    doesn't resolve cleanly to a domain in the kreport hierarchy.
 
-    Returns:
-        set[str]: Domain labels (subset of ALL_KRAKEN_DOMAINS) whose reads
-            should be retained.  Always includes 'unclassified'.
+    'unclassified' reads are always kept because they may represent
+    genuine target sequence absent from the Kraken2 database.
+
+    Parameters
+    ----------
+    kingdom_id : str or None
+        Value of the ``ORGANISM_KINGDOM`` column from the metadata CSV.
+        Comparison is case-insensitive.
+
+    Returns
+    -------
+    set of str
+        Domain labels (subset of ``ALL_KRAKEN_DOMAINS``) whose reads should
+        be retained.  Always includes ``'unclassified'`` and ``'other'``.
     """
     if not isinstance(kingdom_id, str) or not kingdom_id.strip():
         log_print(f"WARN:\tMissing or blank kingdom_id. "
                   f"Falling back to eukaryote Kraken2 keep-domain profile.")
-        return {"eukarya", "unclassified"}
+        return {"eukarya", "unclassified", "other"}
 
     normalised = kingdom_id.strip().lower()
     if normalised == "bacteria":
-        return {"bacteria", "unclassified"}
+        return {"bacteria", "unclassified", "other"}
     if normalised == "archaea":
-        return {"archaea", "unclassified"}
+        return {"archaea", "unclassified", "other"}
     if normalised in ("flora", "funga", "fauna"):
-        return {"eukarya", "unclassified"}
+        return {"eukarya", "unclassified", "other"}
 
     log_print(f"WARN:\tUnrecognised kingdom_id '{kingdom_id}'. "
               f"Falling back to eukaryote Kraken2 keep-domain profile.")
-    return {"eukarya", "unclassified"}
+    return {"eukarya", "unclassified", "other"}
 
 
 # --------------------------------------------------------------
 # Locate the Kraken2 database
 # --------------------------------------------------------------
-def _get_kraken2_db(current_series):
+def get_kraken2_db(current_series):
     """Return the Kraken2 database path or None if not configured.
 
     Checks (in order):
       1. KRAKEN2_DB environment variable
       2. 'KRAKEN2_DB' column in the CSV row (if it exists)
 
-    Args:
-        current_series (pandas.Series): One row from the metadata CSV.
+    Parameters
+    ----------
+    current_series : pandas.Series
+        One row from the metadata CSV.
 
-    Returns:
-        str or None: Absolute path to the Kraken2 database directory.
+    Returns
+    -------
+    str or None
+        Absolute path to the Kraken2 database directory, or ``None`` when
+        no database path is configured.
     """
     db = os.environ.get("KRAKEN2_DB", "").strip()
     if not db and "KRAKEN2_DB" in current_series.index:
@@ -123,7 +144,7 @@ def _get_kraken2_db(current_series):
 # --------------------------------------------------------------
 # Build a taxid -> domain label map from a Kraken2 report file
 # --------------------------------------------------------------
-def _build_taxid_domain_map(report_path):
+def build_taxid_domain_map(report_path):
     """Parse a kreport2 file and return a {taxid: domain_label} dict.
 
     The kreport2 format is a tab-separated file:
@@ -132,11 +153,15 @@ def _build_taxid_domain_map(report_path):
     The 'name' column is indented with two spaces per taxonomic level.
     This function tracks the current domain label as it descends the tree.
 
-    Args:
-        report_path (str): Path to the Kraken2 --report output file.
+    Parameters
+    ----------
+    report_path : str
+        Path to the Kraken2 ``--report`` output file.
 
-    Returns:
-        dict[int, str]: taxid -> domain label string.
+    Returns
+    -------
+    dict of {int: str}
+        Mapping of taxon ID to domain label string.
     """
     taxid_domain = {0: "unclassified"}
     domain_stack = []   # list of (indent_depth, domain_label)
@@ -185,17 +210,21 @@ def _build_taxid_domain_map(report_path):
 # --------------------------------------------------------------
 # Parse Kraken2 per-read output -> {read_id: taxid}
 # --------------------------------------------------------------
-def _parse_kraken_reads(kraken_output_path):
+def parse_kraken_reads(kraken_output_path):
     """Parse a Kraken2 per-read output file into a read-ID-to-taxid dict.
 
     Kraken2 --output format (one line per read):
         C/U  read_id  taxid  length  kmer_mapping
 
-    Args:
-        kraken_output_path (str): Path to the Kraken2 --output file.
+    Parameters
+    ----------
+    kraken_output_path : str
+        Path to the Kraken2 ``--output`` file.
 
-    Returns:
-        dict[str, int]: read_id -> taxid (0 for unclassified).
+    Returns
+    -------
+    dict of {str: int}
+        Mapping of read ID to taxon ID (0 for unclassified reads).
     """
     read_taxid = {}
     with open(kraken_output_path, "r") as fh:
@@ -218,19 +247,27 @@ def _parse_kraken_reads(kraken_output_path):
 # --------------------------------------------------------------
 # Run Kraken2 on a FASTQ file
 # --------------------------------------------------------------
-def _run_kraken2(input_reads, kraken_dir, kraken2_db, cpu_threads, label):
+def run_kraken2(input_reads, kraken_dir, kraken2_db, cpu_threads, label):
     """Run Kraken2 classification on *input_reads*.
 
-    Args:
-        input_reads (str): Path to input FASTQ (may be .gz).
-        kraken_dir (str): Working directory for Kraken2 output files.
-        kraken2_db (str): Path to the Kraken2 database directory.
-        cpu_threads (int): Number of threads.
-        label (str): Short label used in output filenames (e.g. "ONT").
+    Parameters
+    ----------
+    input_reads : str
+        Path to the input FASTQ file (may be ``.gz``).
+    kraken_dir : str
+        Working directory for Kraken2 output files.
+    kraken2_db : str
+        Path to the Kraken2 database directory.
+    cpu_threads : int
+        Number of threads to pass to Kraken2.
+    label : str
+        Short label used in output file names (e.g. ``"ONT"``).
 
-    Returns:
-        tuple[str, str] or (None, None): (kraken_output_path, kraken_report_path)
-            or (None, None) on failure.
+    Returns
+    -------
+    tuple of (str, str) or (None, None)
+        ``(kraken_output_path, kraken_report_path)`` on success, or
+        ``(None, None)`` on failure.
     """
     os.makedirs(kraken_dir, exist_ok=True)
     kraken_out    = os.path.join(kraken_dir, f"{label}_kraken2.out")
@@ -260,16 +297,22 @@ def _run_kraken2(input_reads, kraken_dir, kraken2_db, cpu_threads, label):
 # --------------------------------------------------------------
 # Filter a FASTQ by a set of read IDs to keep
 # --------------------------------------------------------------
-def _filter_fastq(input_fastq, keep_read_ids, output_fastq):
+def filter_fastq(input_fastq, keep_read_ids, output_fastq):
     """Write records from *input_fastq* whose ID is in *keep_read_ids*.
 
-    Args:
-        input_fastq (str): Path to input FASTQ (plain or .gz).
-        keep_read_ids (set[str]): Read IDs to retain.
-        output_fastq (str): Path to write filtered FASTQ.
+    Parameters
+    ----------
+    input_fastq : str
+        Path to the input FASTQ file (plain text or ``.gz``).
+    keep_read_ids : set of str
+        Read IDs to retain.
+    output_fastq : str
+        Path to write the filtered FASTQ output.
 
-    Returns:
-        int: Number of records written.
+    Returns
+    -------
+    int
+        Number of records written to *output_fastq*.
     """
     fmt = "fastq"
     kept = 0
@@ -287,38 +330,47 @@ def _filter_fastq(input_fastq, keep_read_ids, output_fastq):
 # --------------------------------------------------------------
 # Decontaminate one long-read FASTQ using Kraken2
 # --------------------------------------------------------------
-def _decontaminate_one(reads_path, reads_type, kraken_dir, kraken2_db,
+def decontaminate_one(reads_path, reads_type, kraken_dir, kraken2_db,
                        keep_domains, cpu_threads):
     """Run Kraken2 on *reads_path* and return the filtered FASTQ path.
 
     Keeps reads whose Kraken2-assigned domain is in *keep_domains*.
     Saves the original reads as *_pre_decontam.fastq before overwriting.
 
-    Args:
-        reads_path (str): Path to the input FASTQ to decontaminate.
-        reads_type (str): 'ONT' or 'PacBio' (used in filenames and logs).
-        kraken_dir (str): Directory for Kraken2 intermediates.
-        kraken2_db (str): Kraken2 database path.
-        keep_domains (set[str]): Domain labels to keep.
-        cpu_threads (int): Thread count.
+    Parameters
+    ----------
+    reads_path : str
+        Path to the input FASTQ to decontaminate.
+    reads_type : str
+        ``'ONT'`` or ``'PacBio'``; used in file names and log messages.
+    kraken_dir : str
+        Directory for Kraken2 intermediate files.
+    kraken2_db : str
+        Path to the Kraken2 database directory.
+    keep_domains : set of str
+        Domain labels (from ``ALL_KRAKEN_DOMAINS``) to retain.
+    cpu_threads : int
+        Number of threads to pass to Kraken2.
 
-    Returns:
-        str or None: Path to the decontaminated FASTQ, or None on failure.
+    Returns
+    -------
+    str or None
+        Path to the decontaminated FASTQ file, or ``None`` on failure.
     """
     label = reads_type
 
     # Run Kraken2
-    kraken_out, kraken_report = _run_kraken2(
+    kraken_out, kraken_report = run_kraken2(
         reads_path, kraken_dir, kraken2_db, cpu_threads, label
     )
     if kraken_out is None:
         return None
 
     # Build taxid -> domain map from the report
-    taxid_domain = _build_taxid_domain_map(kraken_report)
+    taxid_domain = build_taxid_domain_map(kraken_report)
 
     # Parse per-read classifications
-    read_taxid = _parse_kraken_reads(kraken_out)
+    read_taxid = parse_kraken_reads(kraken_out)
 
     # Determine which read IDs to keep
     keep_read_ids = set()
@@ -344,22 +396,42 @@ def _decontaminate_one(reads_path, reads_type, kraken_dir, kraken2_db,
         log_print(f"WARN:\tFewer than 50% of {reads_type} reads were kept "
                   f"({pct_kept:.1f}%). Check kingdom assignment and Kraken2 database.")
 
-    # Back up the original reads then write decontaminated file in its place
+    # Back up the original reads then write decontaminated file in its place.
+    # os.rename is an atomic move — avoids duplicating multi-GB files.
     pre_decontam = reads_path.replace(".fastq", "_pre_decontam.fastq")
     if not os.path.exists(pre_decontam):
-        import shutil
-        shutil.copy(reads_path, pre_decontam)
+        os.rename(reads_path, pre_decontam)
         log_print(f"NOTE:\tOriginal reads preserved as: {pre_decontam}")
 
     decontam_path = reads_path  # overwrite the file the assemblers expect
-    kept_count = _filter_fastq(pre_decontam, keep_read_ids, decontam_path)
+    kept_count = filter_fastq(pre_decontam, keep_read_ids, decontam_path)
 
     if kept_count == 0:
         log_print(f"ERROR:\tKraken2 decontamination removed ALL {reads_type} reads. "
                   f"Restoring original.")
-        import shutil
         shutil.copy(pre_decontam, reads_path)
         return reads_path  # return original so pipeline can continue
+
+    # Write the removed (contaminant) reads so nothing is silently discarded.
+    # They live in kraken_dir alongside the Kraken2 report.
+    removed_fastq = os.path.join(kraken_dir, f"{label}_removed_reads.fastq")
+    if not os.path.exists(removed_fastq) and not os.path.exists(removed_fastq + ".gz"):
+        remove_read_ids = set(read_taxid.keys()) - keep_read_ids
+        removed_count = filter_fastq(pre_decontam, remove_read_ids, removed_fastq)
+        log_print(f"NOTE:\t{reads_type} removed reads preserved: "
+                  f"{removed_count} reads -> {removed_fastq}")
+    else:
+        log_print(f"SKIP:\t{reads_type} removed reads file already exists.")
+
+    # Compress retained artefacts to reclaim space; downstream tools use the
+    # decontaminated file at reads_path (uncompressed) so it is left as-is.
+    if os.path.exists(pre_decontam):
+        log_print(f"NOTE:\tCompressing pre-decontam backup: {pre_decontam}")
+        pigz_compress(pre_decontam, cpu_threads)
+
+    if os.path.exists(removed_fastq):
+        log_print(f"NOTE:\tCompressing removed reads: {removed_fastq}")
+        pigz_compress(removed_fastq, cpu_threads)
 
     log_print(f"PASS:\t{reads_type} decontamination complete: "
               f"{kept_count} reads kept -> {decontam_path}")
@@ -376,16 +448,24 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     Decontaminated reads overwrite the *_highest_mean_qual_long_reads.fastq
     files that the assemblers look for, so no assembler changes are needed.
 
-    Args:
-        sample_id (str): Sample identifier.
-        input_csv (str): Path to metadata CSV.
-        output_dir (str): Root output directory.
-        cpu_threads (int): CPU threads available.
-        ram_gb (int): RAM in GB (reserved for future use).
+    Parameters
+    ----------
+    sample_id : str
+        Sample identifier used to look up the row in *input_csv*.
+    input_csv : str
+        Path to the metadata CSV file.
+    output_dir : str
+        Root output directory; per-species subdirectories are read from here.
+    cpu_threads : int
+        Number of CPU threads to pass to Kraken2.
+    ram_gb : int
+        RAM in GB (reserved for future use; not currently consumed).
 
-    Returns:
-        bool: True if at least one read set was processed or skipped cleanly,
-              False on unrecoverable failure.
+    Returns
+    -------
+    bool
+        ``True`` if at least one read set was processed or skipped cleanly;
+        ``False`` on unrecoverable failure.
     """
     cpu_threads = int(cpu_threads)
 
@@ -424,7 +504,7 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # ----------------------------------------------------------
     # Section 3 (was 2): Resolve Kraken2 database
     # ----------------------------------------------------------
-    kraken2_db = _get_kraken2_db(current_series)
+    kraken2_db = get_kraken2_db(current_series)
     if kraken2_db is None:
         log_print("WARN:\tNo Kraken2 database found (set KRAKEN2_DB env var or "
                   "add a KRAKEN2_DB column to the CSV). Skipping read decontamination.")
@@ -470,7 +550,7 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # ----------------------------------------------------------
     if has_ont:
         log_print(f"NOTE:\tDecontaminating ONT reads: {ont_hq}")
-        result = _decontaminate_one(
+        result = decontaminate_one(
             ont_hq, "ONT", kraken_dir, kraken2_db, keep_domains, cpu_threads
         )
         if result is None:
@@ -484,7 +564,7 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # ----------------------------------------------------------
     if has_pacbio:
         log_print(f"NOTE:\tDecontaminating PacBio reads: {pacbio_hq}")
-        result = _decontaminate_one(
+        result = decontaminate_one(
             pacbio_hq, "PacBio", kraken_dir, kraken2_db, keep_domains, cpu_threads
         )
         if result is None:
@@ -518,7 +598,7 @@ if __name__ == "__main__":
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    initialize_logging_environment(sys.argv[3])
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     success = decontaminate_reads(
         sys.argv[1],   # sample_id

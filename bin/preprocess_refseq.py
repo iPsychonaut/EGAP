@@ -14,7 +14,7 @@ Updated on Wed Sept 3 2025
 """
 import os, sys, glob, shutil
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
 
 
 # --------------------------------------------------------------
@@ -195,6 +195,8 @@ if __name__ == "__main__":
         print("Usage: python3 preprocess_refseq.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", 
               file=sys.stderr)
         sys.exit(1)
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     # Log each argument
     for i, arg in enumerate(sys.argv):

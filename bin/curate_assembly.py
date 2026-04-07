@@ -19,7 +19,7 @@ import pandas as pd
 import shutil
 from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
 
 
 # --------------------------------------------------------------
@@ -350,8 +350,8 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     est_size = current_series["EST_SIZE"]
 
     # --- ABSOLUTIZE EVERYTHING ---
-    output_dir_abs = str(Path(output_dir).resolve())
-    species_dir = os.path.join(output_dir_abs, species_id)
+    output_dirto_abs = str(Path(output_dir).resolve())
+    species_dir = os.path.join(output_dirto_abs, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
     curation_out_dir = os.path.join(sample_dir, "curated_assembly")
 
@@ -372,15 +372,15 @@ def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
     # Resolve to absolute strings if present
-    def _abs(p): return str(Path(p).resolve()) if isinstance(p, str) else p
-    species_dir = _abs(species_dir)
-    sample_dir = _abs(sample_dir)
-    curation_out_dir = _abs(curation_out_dir)
-    illumina_f_raw_reads = _abs(illumina_f_raw_reads) if pd.notna(illumina_f_raw_reads) else illumina_f_raw_reads
-    illumina_r_raw_reads = _abs(illumina_r_raw_reads) if pd.notna(illumina_r_raw_reads) else illumina_r_raw_reads
-    ont_raw_reads = _abs(ont_raw_reads) if pd.notna(ont_raw_reads) else ont_raw_reads
-    pacbio_raw_reads = _abs(pacbio_raw_reads) if pd.notna(pacbio_raw_reads) else pacbio_raw_reads
-    ref_seq = _abs(ref_seq) if pd.notna(ref_seq) else ref_seq
+    def to_abs(p): return str(Path(p).resolve()) if isinstance(p, str) else p
+    species_dir = to_abs(species_dir)
+    sample_dir = to_abs(sample_dir)
+    curation_out_dir = to_abs(curation_out_dir)
+    illumina_f_raw_reads = to_abs(illumina_f_raw_reads) if pd.notna(illumina_f_raw_reads) else illumina_f_raw_reads
+    illumina_r_raw_reads = to_abs(illumina_r_raw_reads) if pd.notna(illumina_r_raw_reads) else illumina_r_raw_reads
+    ont_raw_reads = to_abs(ont_raw_reads) if pd.notna(ont_raw_reads) else ont_raw_reads
+    pacbio_raw_reads = to_abs(pacbio_raw_reads) if pd.notna(pacbio_raw_reads) else pacbio_raw_reads
+    ref_seq = to_abs(ref_seq) if pd.notna(ref_seq) else ref_seq
 
     print(f"DEBUG - illumina_sra - {illumina_sra}")
     print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
@@ -522,5 +522,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 6:
         print("Usage: python3 curate_assembly.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     final_curated_assembly = curate_assembly(sys.argv[1], sys.argv[2], sys.argv[3], str(sys.argv[4]), str(sys.argv[5]))
