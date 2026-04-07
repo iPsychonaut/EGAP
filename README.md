@@ -227,6 +227,10 @@ If `KRAKEN2_DB` is not set or points to an invalid path, the read-decontaminatio
   <img src="resources/EGAP_pipeline.png" alt="EGAP Pipeline" width="500">
 </div>
 
+<div align="center">
+  <img src="resources/EGAP_pipeline_flow.svg" alt="EGAP Pipeline Flow — detailed stage diagram" width="800">
+</div>
+
 ## Command-Line Usage
 
 ### Parameters

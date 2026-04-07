@@ -1,0 +1,357 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 1640" width="960" height="1640"
+     font-family="Arial, Helvetica, sans-serif">
+
+  <!-- ── Defs: shadows + arrowheads ─────────────────────────────────────── -->
+  <defs>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000018"/>
+    </filter>
+    <marker id="arr" markerWidth="9" markerHeight="6" refX="9" refY="3" orient="auto">
+      <polygon points="0 0,9 3,0 6" fill="#64748B"/>
+    </marker>
+    <marker id="arr-amber" markerWidth="9" markerHeight="6" refX="9" refY="3" orient="auto">
+      <polygon points="0 0,9 3,0 6" fill="#B45309"/>
+    </marker>
+  </defs>
+
+  <!-- ── Canvas background ─────────────────────────────────────────────── -->
+  <rect width="960" height="1640" fill="#EFF6FF"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  TITLE BAR                                                          -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="0" y="0" width="960" height="72" fill="#1E293B"/>
+  <text x="480" y="30" text-anchor="middle" font-size="21" font-weight="bold" fill="#FFFFFF">
+    EGAP v3.4.0 — Genome Assembly Pipeline Flow
+  </text>
+  <text x="480" y="55" text-anchor="middle" font-size="12.5" fill="#94A3B8">
+    Raw Reads  →  Preprocessing &amp; QC  →  Decontamination  →  Assembly  →  Polishing  →  Curation  →  Final Assembly
+  </text>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  INPUT ROW  (y 92 – 160)                                           -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ONT -->
+  <rect x="50"  y="92" width="205" height="68" rx="8" fill="#1D4ED8" filter="url(#shadow)"/>
+  <text x="152" y="115" text-anchor="middle" font-size="10" font-weight="bold" fill="#BFDBFE">INPUT</text>
+  <text x="152" y="133" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">ONT Reads</text>
+  <text x="152" y="151" text-anchor="middle" font-size="10"  fill="#BFDBFE">SRA · DIR · FASTQ</text>
+
+  <!-- Illumina -->
+  <rect x="377" y="92" width="205" height="68" rx="8" fill="#1D4ED8" filter="url(#shadow)"/>
+  <text x="480" y="115" text-anchor="middle" font-size="10" font-weight="bold" fill="#BFDBFE">INPUT</text>
+  <text x="480" y="133" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">Illumina Reads</text>
+  <text x="480" y="151" text-anchor="middle" font-size="10"  fill="#BFDBFE">SRA · DIR · FASTQ</text>
+
+  <!-- PacBio -->
+  <rect x="704" y="92" width="205" height="68" rx="8" fill="#1D4ED8" filter="url(#shadow)"/>
+  <text x="807" y="115" text-anchor="middle" font-size="10" font-weight="bold" fill="#BFDBFE">INPUT</text>
+  <text x="807" y="133" text-anchor="middle" font-size="14" font-weight="bold" fill="#FFFFFF">PacBio Reads</text>
+  <text x="807" y="151" text-anchor="middle" font-size="10"  fill="#BFDBFE">SRA · DIR · FASTQ</text>
+
+  <!-- Converging arrows → center (x=480) -->
+  <polyline points="152,160 152,178 480,195" fill="none" stroke="#64748B" stroke-width="2"/>
+  <line x1="480" y1="160" x2="480" y2="195" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+  <polyline points="807,160 807,178 480,195" fill="none" stroke="#64748B" stroke-width="2"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  STAGE 1 — PREPROCESS &amp; QC  (y 195 – 325)                     -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="195" width="600" height="130" rx="8" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <rect x="180" y="195" width="600" height="36"  rx="8" fill="#6D28D9"/>
+  <rect x="180" y="219" width="600" height="12"       fill="#6D28D9"/>
+  <text x="480" y="220" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">
+    ①  PREPROCESS &amp; QC READS
+  </text>
+
+  <!-- 4 sub-columns -->
+  <text x="253" y="256" text-anchor="middle" font-size="11" font-weight="bold" fill="#4C1D95">Merge</text>
+  <text x="253" y="271" text-anchor="middle" font-size="9.5" fill="#6D28D9">combine_fastq_gz</text>
+  <text x="253" y="284" text-anchor="middle" font-size="9.5" fill="#6D28D9">extract_and_check</text>
+  <text x="253" y="297" text-anchor="middle" font-size="9.5" fill="#6D28D9">(ONT &amp; Illumina)</text>
+
+  <line x1="330" y1="240" x2="330" y2="315" stroke="#EDE9FE" stroke-width="1"/>
+
+  <text x="407" y="256" text-anchor="middle" font-size="11" font-weight="bold" fill="#4C1D95">Trim &amp; Deduplicate</text>
+  <text x="407" y="271" text-anchor="middle" font-size="9.5" fill="#6D28D9">Trimmomatic</text>
+  <text x="407" y="284" text-anchor="middle" font-size="9.5" fill="#6D28D9">BBDuk · Clumpify</text>
+
+  <line x1="480" y1="240" x2="480" y2="315" stroke="#EDE9FE" stroke-width="1"/>
+
+  <text x="553" y="256" text-anchor="middle" font-size="11" font-weight="bold" fill="#4C1D95">Filter &amp; Correct</text>
+  <text x="553" y="271" text-anchor="middle" font-size="9.5" fill="#6D28D9">Filtlong</text>
+  <text x="553" y="284" text-anchor="middle" font-size="9.5" fill="#6D28D9">Ratatosk</text>
+  <text x="553" y="297" text-anchor="middle" font-size="9.5" fill="#6D28D9">(ONT / PacBio)</text>
+
+  <line x1="630" y1="240" x2="630" y2="315" stroke="#EDE9FE" stroke-width="1"/>
+
+  <text x="705" y="256" text-anchor="middle" font-size="11" font-weight="bold" fill="#4C1D95">Read Metrics</text>
+  <text x="705" y="271" text-anchor="middle" font-size="9.5" fill="#6D28D9">FastQC</text>
+  <text x="705" y="284" text-anchor="middle" font-size="9.5" fill="#6D28D9">NanoPlot</text>
+  <text x="705" y="297" text-anchor="middle" font-size="9.5" fill="#6D28D9">BBMap insert-size</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="480" y1="325" x2="480" y2="352" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  QC CHECKPOINT 1 — READ QUALITY  (y 352 – 422)                    -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="352" width="600" height="70" rx="8" fill="#064E3B" filter="url(#shadow)"/>
+  <text x="225" y="392" text-anchor="middle" font-size="28" fill="#6EE7B7">✔</text>
+  <text x="275" y="378" text-anchor="start"  font-size="13" font-weight="bold" fill="#ECFDF5">READ QUALITY CHECKPOINT</text>
+  <text x="275" y="396" text-anchor="start"  font-size="10.5" fill="#6EE7B7">FastQC · NanoPlot · BBMap insert-size  —  read quality metrics generated</text>
+  <text x="275" y="412" text-anchor="start"  font-size="10.5" fill="#6EE7B7">Reads assessed before assembly; stats embedded in final QC report</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="480" y1="422" x2="480" y2="449" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  STAGE 2 — READ DECONTAMINATION  (y 449 – 567)                    -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="449" width="455" height="118" rx="8" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <rect x="180" y="449" width="455" height="36"  rx="8" fill="#B45309"/>
+  <rect x="180" y="473" width="455" height="12"       fill="#B45309"/>
+  <!-- NEW badge -->
+  <rect x="556" y="453" width="72" height="22" rx="4" fill="#EF4444"/>
+  <text x="592" y="468" text-anchor="middle" font-size="10" font-weight="bold" fill="#FFFFFF">NEW v3.4.0</text>
+  <text x="400" y="473" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">②  READ DECONTAMINATION</text>
+
+  <text x="197" y="503" font-size="11.5" font-weight="bold" fill="#78350F">Tool: Kraken2</text>
+  <text x="197" y="520" font-size="10"   fill="#92400E">Classifies ONT &amp; PacBio long reads against a reference k-mer database</text>
+  <text x="197" y="536" font-size="10"   fill="#92400E">✔  Kept: reads matching target domain (eukarya / bacteria / archaea) + unclassified</text>
+  <text x="197" y="552" font-size="10"   fill="#92400E">ℹ  Step skipped gracefully when KRAKEN2_DB is not configured</text>
+
+  <!-- Archive box (right) -->
+  <rect x="650" y="449" width="270" height="118" rx="8" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="785" y="476" text-anchor="middle" font-size="11" font-weight="bold" fill="#92400E">📦  Archived  (pigz)</text>
+  <line x1="650" y1="485" x2="920" y2="485" stroke="#FCD34D" stroke-width="1"/>
+  <text x="785" y="504" text-anchor="middle" font-size="10"   fill="#78350F">_pre_decontam.fastq.gz</text>
+  <text x="785" y="520" text-anchor="middle" font-size="10"   fill="#78350F">_removed_reads.fastq.gz</text>
+  <text x="785" y="540" text-anchor="middle" font-size="10"   fill="#B45309" font-style="italic">Preserved for audit —</text>
+  <text x="785" y="555" text-anchor="middle" font-size="10"   fill="#B45309" font-style="italic">not used downstream</text>
+
+  <!-- Dashed arrow → archive -->
+  <line x1="635" y1="508" x2="648" y2="508" stroke="#B45309" stroke-width="1.5"
+        stroke-dasharray="5 3" marker-end="url(#arr-amber)"/>
+
+  <!-- Arrow ↓ (from centre of decontam box) -->
+  <line x1="407" y1="567" x2="407" y2="588" stroke="#64748B" stroke-width="2"/>
+  <line x1="407" y1="588" x2="480" y2="588" stroke="#64748B" stroke-width="2"/>
+  <line x1="480" y1="588" x2="480" y2="605" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  STAGE 3 — ASSEMBLY  (y 605 – 740)                                -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="605" width="600" height="135" rx="8" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <rect x="180" y="605" width="600" height="36"  rx="8" fill="#075985"/>
+  <rect x="180" y="629" width="600" height="12"       fill="#075985"/>
+  <text x="480" y="630" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">
+    ③  ASSEMBLY  (all applicable assemblers run in parallel)
+  </text>
+
+  <!-- MaSuRCA -->
+  <rect x="192" y="653" width="130" height="74" rx="6" fill="#E0F2FE" stroke="#0284C7" stroke-width="1"/>
+  <text x="257" y="672" text-anchor="middle" font-size="11" font-weight="bold" fill="#0C4A6E">MaSuRCA</text>
+  <text x="257" y="688" text-anchor="middle" font-size="9.5" fill="#075985">Illumina-only</text>
+  <text x="257" y="702" text-anchor="middle" font-size="9.5" fill="#075985">Hybrid</text>
+  <text x="257" y="716" text-anchor="middle" font-size="9.5" fill="#075985">(ONT / PacBio)</text>
+
+  <!-- Flye -->
+  <rect x="334" y="653" width="130" height="74" rx="6" fill="#E0F2FE" stroke="#0284C7" stroke-width="1"/>
+  <text x="399" y="672" text-anchor="middle" font-size="11" font-weight="bold" fill="#0C4A6E">Flye</text>
+  <text x="399" y="688" text-anchor="middle" font-size="9.5" fill="#075985">ONT-only</text>
+  <text x="399" y="702" text-anchor="middle" font-size="9.5" fill="#075985">PacBio-only</text>
+
+  <!-- SPAdes -->
+  <rect x="476" y="653" width="130" height="74" rx="6" fill="#E0F2FE" stroke="#0284C7" stroke-width="1"/>
+  <text x="541" y="672" text-anchor="middle" font-size="11" font-weight="bold" fill="#0C4A6E">SPAdes</text>
+  <text x="541" y="688" text-anchor="middle" font-size="9.5" fill="#075985">Illumina-only</text>
+  <text x="541" y="702" text-anchor="middle" font-size="9.5" fill="#075985">Hybrid (ONT)</text>
+
+  <!-- hifiasm -->
+  <rect x="618" y="653" width="150" height="74" rx="6" fill="#E0F2FE" stroke="#0284C7" stroke-width="1"/>
+  <text x="693" y="672" text-anchor="middle" font-size="11" font-weight="bold" fill="#0C4A6E">hifiasm</text>
+  <text x="693" y="688" text-anchor="middle" font-size="9.5" fill="#075985">PacBio HiFi</text>
+  <text x="693" y="702" text-anchor="middle" font-size="9.5" fill="#075985">reads only</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="480" y1="740" x2="480" y2="767" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  QC CHECKPOINT 2 — ASSEMBLY SELECTION  (y 767 – 852)              -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="767" width="600" height="85" rx="8" fill="#064E3B" filter="url(#shadow)"/>
+  <text x="225" y="815" text-anchor="middle" font-size="28" fill="#6EE7B7">✔</text>
+  <text x="275" y="793" text-anchor="start"  font-size="13" font-weight="bold" fill="#ECFDF5">ASSEMBLY QC &amp; BEST-ASSEMBLY SELECTION</text>
+  <text x="275" y="812" text-anchor="start"  font-size="10.5" fill="#6EE7B7">BUSCO / Compleasm  (2 lineages: primary + secondary)  ·  QUAST  (N50, contig count, GC%)</text>
+  <text x="275" y="829" text-anchor="start"  font-size="10.5" fill="#6EE7B7">All assemblies ranked  →  best completeness + contiguity selected for polishing</text>
+  <text x="275" y="846" text-anchor="start"  font-size="10.5" fill="#6EE7B7">Intermediate k-mer dirs, PAF files &amp; temp FASTAs cleaned up by file_manager</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="480" y1="852" x2="480" y2="876" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- BEST ASSEMBLY pill -->
+  <rect x="300" y="876" width="360" height="52" rx="8" fill="#1E293B" filter="url(#shadow)"/>
+  <text x="480" y="897" text-anchor="middle" font-size="10"   fill="#94A3B8">SELECTED</text>
+  <text x="480" y="916" text-anchor="middle" font-size="15" font-weight="bold" fill="#FFFFFF">★  Best Assembly</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="480" y1="928" x2="480" y2="953" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  STAGE 4 — ASSEMBLY POLISHING  (y 953 – 1068)                     -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="953" width="600" height="115" rx="8" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <rect x="180" y="953" width="600" height="36"  rx="8" fill="#9D174D"/>
+  <rect x="180" y="977" width="600" height="12"       fill="#9D174D"/>
+  <text x="480" y="978" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">④  ASSEMBLY POLISHING</text>
+
+  <text x="278" y="1012" text-anchor="middle" font-size="11" font-weight="bold" fill="#831843">Racon  (×2 passes)</text>
+  <text x="278" y="1028" text-anchor="middle" font-size="9.5" fill="#9D174D">ONT / PacBio</text>
+  <text x="278" y="1042" text-anchor="middle" font-size="9.5" fill="#9D174D">long-read polish</text>
+  <text x="278" y="1056" text-anchor="middle" font-size="9.5" fill="#9D174D">BWA-MEM2 · minimap2</text>
+
+  <line x1="380" y1="995" x2="380" y2="1060" stroke="#FCE7F3" stroke-width="1"/>
+
+  <text x="480" y="1012" text-anchor="middle" font-size="11" font-weight="bold" fill="#831843">Pilon</text>
+  <text x="480" y="1028" text-anchor="middle" font-size="9.5" fill="#9D174D">Illumina short-read</text>
+  <text x="480" y="1042" text-anchor="middle" font-size="9.5" fill="#9D174D">error correction</text>
+  <text x="480" y="1056" text-anchor="middle" font-size="9.5" fill="#9D174D">SAMtools · BAMtools</text>
+
+  <line x1="580" y1="995" x2="580" y2="1060" stroke="#FCE7F3" stroke-width="1"/>
+
+  <text x="680" y="1012" text-anchor="middle" font-size="11" font-weight="bold" fill="#831843">purge_dups</text>
+  <text x="680" y="1028" text-anchor="middle" font-size="9.5" fill="#9D174D">Haplotig removal</text>
+  <text x="680" y="1042" text-anchor="middle" font-size="9.5" fill="#9D174D">long reads only</text>
+  <text x="680" y="1056" text-anchor="middle" font-size="9.5" fill="#9D174D">minimap2 · SAMtools</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="480" y1="1068" x2="480" y2="1093" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  STAGE 5 — ASSEMBLY CURATION  (y 1093 – 1200)                     -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="1093" width="600" height="107" rx="8" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <rect x="180" y="1093" width="600" height="36"  rx="8" fill="#0F766E"/>
+  <rect x="180" y="1117" width="600" height="12"       fill="#0F766E"/>
+  <text x="480" y="1118" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">⑤  ASSEMBLY CURATION</text>
+
+  <text x="278" y="1153" text-anchor="middle" font-size="11" font-weight="bold" fill="#134E4A">RagTag</text>
+  <text x="278" y="1169" text-anchor="middle" font-size="9.5" fill="#0F766E">Scaffold &amp; patch</text>
+  <text x="278" y="1183" text-anchor="middle" font-size="9.5" fill="#0F766E">vs reference genome</text>
+  <text x="278" y="1197" text-anchor="middle" font-size="9.5" fill="#0F766E">(if ref provided)</text>
+
+  <line x1="380" y1="1135" x2="380" y2="1193" stroke="#CCFBF1" stroke-width="1"/>
+
+  <text x="480" y="1153" text-anchor="middle" font-size="11" font-weight="bold" fill="#134E4A">TGS-GapCloser</text>
+  <text x="480" y="1169" text-anchor="middle" font-size="9.5" fill="#0F766E">Gap closing</text>
+  <text x="480" y="1183" text-anchor="middle" font-size="9.5" fill="#0F766E">ONT reads</text>
+
+  <line x1="580" y1="1135" x2="580" y2="1193" stroke="#CCFBF1" stroke-width="1"/>
+
+  <text x="680" y="1153" text-anchor="middle" font-size="11" font-weight="bold" fill="#134E4A">Abyss-Sealer</text>
+  <text x="680" y="1169" text-anchor="middle" font-size="9.5" fill="#0F766E">Gap sealing</text>
+  <text x="680" y="1183" text-anchor="middle" font-size="9.5" fill="#0F766E">Illumina-only mode</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="480" y1="1200" x2="480" y2="1225" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  STAGE 6 — ASSEMBLY DECONTAMINATION  (y 1225 – 1345)              -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="1225" width="455" height="120" rx="8" fill="#FFFFFF" stroke="#E2E8F0" filter="url(#shadow)"/>
+  <rect x="180" y="1225" width="455" height="36"  rx="8" fill="#B45309"/>
+  <rect x="180" y="1249" width="455" height="12"       fill="#B45309"/>
+  <!-- NEW badge -->
+  <rect x="556" y="1229" width="72" height="22" rx="4" fill="#EF4444"/>
+  <text x="592" y="1244" text-anchor="middle" font-size="10" font-weight="bold" fill="#FFFFFF">NEW v3.4.0</text>
+  <text x="400" y="1249" text-anchor="middle" font-size="13" font-weight="bold" fill="#FFFFFF">⑥  ASSEMBLY DECONTAMINATION</text>
+
+  <text x="197" y="1280" font-size="11.5" font-weight="bold" fill="#78350F">Tool: Tiara  (deep-learning contig classifier)</text>
+  <text x="197" y="1298" font-size="10"   fill="#92400E">Classifies every contig in the curated assembly by taxonomic origin</text>
+  <text x="197" y="1314" font-size="10"   fill="#92400E">✔  Kept: contigs matching target organism class  (e.g. eukarya for fungi)</text>
+  <text x="197" y="1330" font-size="10"   fill="#92400E">✔  Non-target contigs (e.g. bacterial) removed and archived</text>
+
+  <!-- Archive box (right) -->
+  <rect x="650" y="1225" width="270" height="120" rx="8" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="785" y="1252" text-anchor="middle" font-size="11" font-weight="bold" fill="#92400E">📦  Archived  (pigz)</text>
+  <line x1="650" y1="1261" x2="920" y2="1261" stroke="#FCD34D" stroke-width="1"/>
+  <text x="785" y="1281" text-anchor="middle" font-size="10" fill="#78350F">_tiara_kept.fasta.gz</text>
+  <text x="785" y="1297" text-anchor="middle" font-size="10" fill="#78350F">_tiara_removed.fasta.gz</text>
+  <text x="785" y="1317" text-anchor="middle" font-size="10" fill="#B45309" font-style="italic">Removed contigs preserved</text>
+  <text x="785" y="1332" text-anchor="middle" font-size="10" fill="#B45309" font-style="italic">for audit — not used downstream</text>
+
+  <!-- Dashed arrow → archive -->
+  <line x1="635" y1="1285" x2="648" y2="1285" stroke="#B45309" stroke-width="1.5"
+        stroke-dasharray="5 3" marker-end="url(#arr-amber)"/>
+
+  <!-- Arrow ↓ (from centre of decontam box) -->
+  <line x1="407" y1="1345" x2="407" y2="1366" stroke="#64748B" stroke-width="2"/>
+  <line x1="407" y1="1366" x2="480" y2="1366" stroke="#64748B" stroke-width="2"/>
+  <line x1="480" y1="1366" x2="480" y2="1383" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  QC CHECKPOINT 3 — FINAL ASSESSMENT  (y 1383 – 1468)             -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="1383" width="600" height="85" rx="8" fill="#064E3B" filter="url(#shadow)"/>
+  <text x="225" y="1431" text-anchor="middle" font-size="28" fill="#6EE7B7">✔</text>
+  <text x="275" y="1409" text-anchor="start"  font-size="13" font-weight="bold" fill="#ECFDF5">FINAL QUALITY ASSESSMENT</text>
+  <text x="275" y="1428" text-anchor="start"  font-size="10.5" fill="#6EE7B7">BUSCO / Compleasm  (2 lineages)  ·  QUAST  (N50, L50, contig count, GC%)</text>
+  <text x="275" y="1446" text-anchor="start"  font-size="10.5" fill="#6EE7B7">Assembly graded  →  AMAZING · GREAT · OK · POOR</text>
+  <text x="275" y="1464" text-anchor="start"  font-size="10.5" fill="#6EE7B7">Compleasm lineage downloads cleaned up by file_manager after run</text>
+
+  <!-- Arrow ↓ -->
+  <line x1="480" y1="1468" x2="480" y2="1493" stroke="#64748B" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  FINAL OUTPUT  (y 1493 – 1600)                                     -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="180" y="1493" width="600" height="108" rx="8" fill="#1E293B" filter="url(#shadow)"/>
+  <text x="480" y="1520" text-anchor="middle" font-size="11"   fill="#94A3B8">OUTPUT</text>
+  <text x="480" y="1542" text-anchor="middle" font-size="15" font-weight="bold" fill="#FFFFFF">Final Assembly  +  HTML QC Report</text>
+
+  <!-- Quality rating badges -->
+  <rect x="196" y="1552" width="124" height="32" rx="6" fill="#065F46"/>
+  <text x="258" y="1573" text-anchor="middle" font-size="13" font-weight="bold" fill="#6EE7B7">★ AMAZING</text>
+
+  <rect x="330" y="1552" width="98"  height="32" rx="6" fill="#1D4ED8"/>
+  <text x="379" y="1573" text-anchor="middle" font-size="13" font-weight="bold" fill="#BFDBFE">GREAT</text>
+
+  <rect x="438" y="1552" width="80"  height="32" rx="6" fill="#78350F"/>
+  <text x="478" y="1573" text-anchor="middle" font-size="13" font-weight="bold" fill="#FDE68A">OK</text>
+
+  <rect x="528" y="1552" width="90"  height="32" rx="6" fill="#7F1D1D"/>
+  <text x="573" y="1573" text-anchor="middle" font-size="13" font-weight="bold" fill="#FCA5A5">POOR</text>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  FOOTER                                                             -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="0" y="1614" width="960" height="26" fill="#1E293B"/>
+  <text x="480" y="1631" text-anchor="middle" font-size="10" fill="#64748B">
+    EGAP v3.4.0  ·  Entheome Genome Assembly Pipeline  ·  github.com/iPsychonaut/EGAP
+  </text>
+
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <!--  LEGEND (bottom-left)                                               -->
+  <!-- ════════════════════════════════════════════════════════════════════ -->
+  <rect x="8" y="1493" width="155" height="118" rx="6" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1" filter="url(#shadow)"/>
+  <text x="85" y="1512" text-anchor="middle" font-size="10" font-weight="bold" fill="#1E293B">LEGEND</text>
+  <line x1="16" y1="1518" x2="155" y2="1518" stroke="#E2E8F0" stroke-width="1"/>
+
+  <rect x="16" y="1524" width="14" height="10" rx="2" fill="#6D28D9"/>
+  <text x="36" y="1534" font-size="9.5" fill="#1E293B">Pipeline stage</text>
+
+  <rect x="16" y="1542" width="14" height="10" rx="2" fill="#064E3B"/>
+  <text x="36" y="1552" font-size="9.5" fill="#1E293B">QC checkpoint</text>
+
+  <rect x="16" y="1560" width="14" height="10" rx="2" fill="#B45309"/>
+  <text x="36" y="1570" font-size="9.5" fill="#1E293B">Decontamination</text>
+
+  <rect x="16" y="1578" width="14" height="10" rx="2" fill="#FFFBEB" stroke="#FCD34D" stroke-width="1"/>
+  <text x="36" y="1588" font-size="9.5" fill="#1E293B">Archived output</text>
+
+  <line x1="16" y1="1596" x2="29" y2="1596" stroke="#B45309" stroke-width="1.5" stroke-dasharray="4 2"/>
+  <text x="36" y="1600" font-size="9.5" fill="#1E293B">Archive branch</text>
+
+</svg>
