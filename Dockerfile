@@ -13,10 +13,63 @@ RUN mamba install -n base --yes conda-pack
 # Generate EGAP_env
 ###############################################################################
 
-# Create EGAP_env with Python 3.8
-# RUN conda create -c conda-forge -c bioconda -c defaults -n EGAP_env --yes python==3.8 egap
-RUN conda create -c conda-forge -c bioconda -c defaults \
-    -n EGAP_env --yes python=3.8 egap
+# Create EGAP_env with Python 3.8 and all EGAP v3.4.0 dependencies.
+# Pinning rationale (verified against conda list on 2026-04-06):
+#   numpy=1.19.5     — tiara=1.0.3 requires numpy<1.20; do not loosen.
+#   tiara=1.0.3      — exact pin; newer solves break the numpy constraint.
+#   kraken2=2.1.6    — exact pin; tested working version.
+#   sra-tools=3.2.0  — exact pin; API changes between minor versions.
+#   trimmomatic=0.40 — exact pin; share-dir path used in adapter symlinks.
+#   flye=2.9.5       — exact pin; >=3.0 changes assembly graph format.
+RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
+    'python>=3.8,<3.9' \
+    pandas \
+    'numpy=1.19.5' \
+    'masurca=4.1.4' \
+    'quast=5.3.0' \
+    compleasm \
+    busco \
+    biopython \
+    ragtag \
+    'nanoplot=1.46.2' \
+    termcolor \
+    minimap2 \
+    bwa-mem2 \
+    samtools \
+    bamtools \
+    tgsgapcloser \
+    abyss \
+    sepp \
+    psutil \
+    beautifulsoup4 \
+    ncbi-datasets-cli \
+    matplotlib-base \
+    'trimmomatic=0.40' \
+    pilon \
+    fastqc \
+    bbmap \
+    racon \
+    kmc \
+    'spades=4.2.0' \
+    purge_dups \
+    'flye=2.9.5' \
+    pbccs \
+    'hifiasm=0.25.0' \
+    gfatools \
+    bifrost \
+    ratatosk \
+    'sra-tools=3.2.0' \
+    filtlong \
+    pyinaturalist \
+    jinja2 \
+    geopy \
+    tabulate \
+    openpyxl \
+    requests \
+    rich \
+    textual \
+    'tiara=1.0.3' \
+    'kraken2=2.1.6'
     
 # Download required resources for quast
 RUN conda run -n EGAP_env quast-download-gridss && \
@@ -33,11 +86,39 @@ RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
     rm /tmp/EGAP_env.tar && \
     /EGAP_env/bin/conda-unpack
 
-# Download the latest EGAP.py from GitHub into the EGAP_env.
-# Install wget (if not already available) to retrieve the file.
+# Download EGAP v3.4.0 scripts from GitHub into the EGAP_env.
+# Install wget (if not already available) to retrieve the files.
 RUN apt-get update && apt-get install -y wget && \
-    wget -O /EGAP_env/EGAP.py https://raw.githubusercontent.com/iPsychonaut/EGAP/master/EGAP.py && \
+    EGAP_BRANCH="v3.4.0" && \
+    EGAP_RAW="https://raw.githubusercontent.com/iPsychonaut/EGAP/${EGAP_BRANCH}" && \
+    wget -O /EGAP_env/EGAP.py "${EGAP_RAW}/EGAP.py" && \
     chmod +x /EGAP_env/EGAP.py && \
+    mkdir -p /EGAP_env/bin && \
+    for SCRIPT in \
+        EGAP_TUI.py \
+        file_manager.py \
+        utilities.py \
+        preprocess_illumina.py \
+        preprocess_ont.py \
+        preprocess_pacbio.py \
+        preprocess_refseq.py \
+        decontaminate_reads.py \
+        decontaminate_assembly.py \
+        assemble_masurca.py \
+        assemble_spades.py \
+        assemble_flye.py \
+        assemble_hifiasm.py \
+        compare_assemblies.py \
+        polish_assembly.py \
+        curate_assembly.py \
+        qc_assessment.py \
+        html_reporter.py \
+        process_metadata.py \
+        final_compress.py; \
+    do \
+        wget -O "/EGAP_env/bin/${SCRIPT}" "${EGAP_RAW}/bin/${SCRIPT}"; \
+    done && \
+    chmod +x /EGAP_env/bin/*.py && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a wrapper script in EGAP_env/bin called "EGAP"
@@ -137,6 +218,12 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
     USER="me" \
     FUNANNOTATE_DB="/opt/databases" \
     GENEMARK_PATH="/mnt/d/EGEP"
+
+# EGAP v3.4.0 runtime defaults
+# Override KRAKEN2_DB at runtime: docker run -e KRAKEN2_DB=/kraken2_db -v /host/db:/kraken2_db ...
+ENV KRAKEN2_DB="" \
+    PYTHONUNBUFFERED=1 \
+    EGAP_DRY_RUN=0
 
 # Run funannotate setup (within funannotate_env)
 RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"

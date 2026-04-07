@@ -1,0 +1,111 @@
+{% set name = "egap" %}
+{% set version = "3.4.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  - url: https://github.com/iPsychonaut/EGAP/archive/refs/tags/v{{ version }}.tar.gz
+    sha256: NEED
+  - url: https://github.com/iPsychonaut/runner/archive/refs/tags/v0.0.0.tar.gz
+    sha256: 4e67bb1e970dadb86425cb2698e0e2e34f70d78cbf77a32f73c13f66dffb55fc
+
+build:
+  noarch: python
+  number: 0
+  run_exports:
+    - {{ pin_subpackage(name, max_pin=None) }}
+
+requirements:
+  host:
+    - python >=3.8,<3.9
+    - pip
+  run:
+    - python >=3.8,<3.9
+    # ── numpy / pandas / tiara constraint chain ─────────────────────────────
+    # tiara=1.0.3 (pytorch/skorch based) requires numpy<1.20.
+    # pandas>=2.0 in turn requires numpy>=1.23.2, so pandas must stay <2.0.
+    # Do NOT loosen numpy upper bound unless tiara is also upgraded.
+    - numpy >=1.19.5,<1.20.0
+    - pandas >=1.4.4,<2.0
+    # ── assemblers / aligners ────────────────────────────────────────────────
+    - masurca >=4.1.4
+    - quast >=5.3.0
+    - flye >=2.9.5,<3.0a0
+    - spades >=4.2.0
+    - hifiasm >=0.25.0
+    - pbccs >=6.4.0
+    - racon >=1.5.0
+    - minimap2 >=2.30
+    - bwa-mem2 >=2.3
+    - gfatools >=0.5.5
+    # ── read QC / preprocessing ──────────────────────────────────────────────
+    - trimmomatic >=0.40
+    - fastqc >=0.12.1
+    - bbmap >=39.81
+    - nanoplot >=1.46.2
+    - filtlong >=0.3.1
+    - sra-tools >=3.2.0
+    - kmc >=3.2.4
+    # ── decontamination ─────────────────────────────────────────────────────
+    - kraken2 >=2.1.6
+    - tiara =1.0.3
+    # ── polishing / curation ─────────────────────────────────────────────────
+    - samtools >=1.23.1
+    - bamtools >=2.5.3
+    - pilon >=1.24
+    - purge_dups >=1.2.6
+    - ragtag >=2.1.0
+    - tgsgapcloser >=1.2.1
+    - abyss >=2.3.10
+    # ── QC / completeness ────────────────────────────────────────────────────
+    - compleasm >=0.2.7
+    - busco >=5.8.3
+    # ── error correction / hybrid ────────────────────────────────────────────
+    - bifrost >=1.3.5
+    - ratatosk >=0.9.0
+    - sepp >=4.5.1
+    # ── utilities & compression ──────────────────────────────────────────────
+    - pigz >=2.8
+    - psutil >=6.0.0
+    - ncbi-datasets-cli >=18.22.1
+    # ── Python libraries ─────────────────────────────────────────────────────
+    - biopython >=1.83
+    - beautifulsoup4 >=4.12.3
+    - matplotlib-base >=3.5.3
+    - termcolor >=2.4.0
+    - jinja2 >=3.1.4
+    - geopy >=2.4.1
+    - tabulate >=0.9.0
+    - openpyxl >=3.1.5
+    - requests >=2.32.3
+    - pyinaturalist >=0.21.1
+    - rich >=13.9.4
+    - textual >=0.89.1
+
+test:
+  requires:
+    - python
+  commands:
+    - EGAP --help
+
+about:
+  home: https://github.com/iPsychonaut/EGAP
+  license: BSD-3-Clause
+  license_file: LICENSE
+  summary: "EGAP pipeline for genome assembly and QC analysis"
+  description: |
+    EGAP (Entheome Genome Assembly Pipeline) is a versatile bioinformatics
+    pipeline for hybrid genome assembly from Oxford Nanopore, Illumina, and
+    PacBio data. It supports multiple input modes and assembly methods and
+    determines the best based on multiple metrics: BUSCO Completeness
+    (Single + Duplicated), Assembly Contig Count, Assembly N50, Assembly L50,
+    and Assembly GC-content.
+
+extra:
+  notes: |
+    This package installs a custom executable named "EGAP" in $PREFIX/bin.
+    Please refer to the upstream GitHub page for usage instructions.
+  recipe-maintainers:
+    - iPsychonaut

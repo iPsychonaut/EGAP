@@ -188,6 +188,39 @@ In a dedicated environment through the Bioconda channel with the following comma
 conda create -y -n EGAP_env python=3.8 && conda activate EGAP_env && conda install -y -c bioconda egap
 ```
 
+##### Kraken2 Database Setup (required for read decontamination):
+EGAP uses Kraken2 to screen long reads for contamination. A Kraken2 database must be downloaded separately and the path provided via the `KRAKEN2_DB` environment variable. The pre-built Standard 16 GB database is recommended:
+
+```bash
+# Download the pre-built Standard 16 GB database
+wget https://genome-idx.s3.amazonaws.com/kraken/k2_standard_16gb_20240904.tar.gz
+mkdir -p ~/kraken2_db
+tar -xzf k2_standard_16gb_20240904.tar.gz -C ~/kraken2_db
+
+# Set the environment variable for the current session and make it permanent
+export KRAKEN2_DB=~/kraken2_db
+echo 'export KRAKEN2_DB=~/kraken2_db' >> ~/.bashrc
+```
+
+> **Docker users:** Pass the variable and mount the database directory at runtime:
+> ```bash
+> docker run -it \
+>   -v /path/to/kraken2_db:/kraken2_db \
+>   -e KRAKEN2_DB=/kraken2_db \
+>   -v /path/to/data:/data \
+>   entheome_ecosystem bash
+> ```
+
+> **Singularity users:** Bind-mount the database directory and export the variable before running:
+> ```bash
+> export KRAKEN2_DB=/path/to/kraken2_db
+> singularity shell entheome.sif \
+>   -B /path/to/kraken2_db:/path/to/kraken2_db \
+>   -B /path/to/data:/data
+> ```
+
+If `KRAKEN2_DB` is not set or points to an invalid path, the read-decontamination step is skipped automatically and a warning is printed to the log.
+
 ## Pipeline Flow
 
 <div align="center">
