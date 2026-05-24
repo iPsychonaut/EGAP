@@ -8,11 +8,16 @@ Handles raw directory concatenation and SRA downloads.
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on 2026-04-16
 
-@author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
+Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, shutil, sys, subprocess, glob, re
+import os
+import shutil
+import sys
+import subprocess
+import glob
+import re
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads, initialize_logging_environment
 from qc_assessment import nanoplot_qc_reads

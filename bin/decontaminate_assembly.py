@@ -28,6 +28,8 @@ Rationale for 'organelle':
 
 Created on Tue Apr 01 2026
 
+Updated on 2026-04-16
+
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 

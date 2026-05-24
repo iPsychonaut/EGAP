@@ -9,7 +9,7 @@ and retrieves iNaturalist observation data with reverse geocoding for location d
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Feb 25 2026
+Updated on 2026-04-16
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
@@ -347,8 +347,29 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
 
 
 def process_metadata(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
-    """
-    PEP 8 Documentation
+    """Generate NCBI SRA and assembly metadata TSVs for a single sample.
+
+    Resolves the sample's species directory, locates the metadata templates
+    bundled in ``resources/templates``, and emits two spreadsheets: an SRA
+    submission metadata file and an assembly metadata file. iNaturalist
+    location data is retrieved and reverse-geocoded when an INATRUALIST_ID
+    column is present on the sample's CSV row.
+
+    Args:
+        sample_id (str): The SAMPLE_ID value identifying which CSV row to
+            process.
+        input_csv (str): Path to the EGAP input CSV.
+        output_dir (str): Root output directory for the EGAP run. Species
+            subdirectories live directly beneath this path.
+        cpu_threads (int | str): Number of threads available for computations
+            performed during assembly-metadata generation (e.g. genome coverage
+            calculations).
+        ram_gb (int | str): RAM budget passed for API compatibility with
+            other EGAP steps. Not currently used by this step.
+
+    Returns:
+        tuple[str, str]: A pair of ``(sra_output_path, assembly_metadata_path)``
+        pointing at the two TSVs generated for the sample.
     """
     # Load input CSV and extract sample data
     input_df = pd.read_csv(input_csv)

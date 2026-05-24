@@ -17,11 +17,15 @@ Fixes in this version:
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on 2026-04-16
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, sys, glob, shutil, re
+import os
+import sys
+import glob
+import shutil
+import re
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads, initialize_logging_environment
 from qc_assessment import nanoplot_qc_reads

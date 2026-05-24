@@ -8,11 +8,14 @@ assemblies (polish/compare/QC) can consume a predictable file path and name.
 
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on 2026-04-16
 
-@author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
+Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, sys, glob, shutil
+import os
+import sys
+import glob
+import shutil
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
 

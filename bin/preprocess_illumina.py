@@ -10,9 +10,9 @@ with declumpified FASTQ file paths in ${params.output_dir}/${sample_prefix}/Illu
 
 Created on Wed Aug 16 2023
 
-Updated on Fri Apr 04 2026
+Updated on 2026-04-16
 
-@author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
+Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
 import sys

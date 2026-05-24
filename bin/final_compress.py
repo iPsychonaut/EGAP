@@ -2,20 +2,47 @@
 """
 final_compress.py
 
-PEP 8 Documentation
+Compress every remaining FASTA/FASTQ file under a sample's output directory.
+
+Called at the very end of an EGAP run to reduce on-disk footprint once all
+analyses that require uncompressed inputs have completed. Uses pigz for
+parallel gzip compression; the sample directory is discovered from the
+input CSV's SPECIES_ID / SAMPLE_ID columns rather than a user-supplied path.
 
 Created on Fri May 16 15:52:30 2025
 
+Updated on 2026-04-16
+
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, sys
+import os
+import sys
 import pandas as pd
 from utilities import pigz_compress, get_current_row_data
 
 
 def final_compress(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
-    """
-    PEP 8 Documentation
+    """Compress every ``.fasta`` and ``.fastq`` file under the sample directory.
+
+    The sample directory is resolved from the input CSV's SPECIES_ID and
+    SAMPLE_ID columns as ``{output_dir}/{species_id}/{sample_id}``. Every
+    uncompressed FASTA or FASTQ file under that tree is compressed in place
+    with pigz using the supplied thread count.
+
+    Args:
+        sample_id (str): The SAMPLE_ID value identifying which CSV row (and
+            therefore which sample directory) to compress.
+        input_csv (str): Path to the EGAP input CSV containing SPECIES_ID
+            and SAMPLE_ID columns.
+        output_dir (str): Root output directory for the EGAP run — species
+            subdirectories live directly under this path.
+        cpu_threads (int | str): Number of threads pigz may use when
+            compressing each file.
+        ram_gb (int | str): RAM budget passed for API compatibility with
+            other EGAP steps. Not currently used by this step.
+
+    Returns:
+        None: Files are compressed in place; the function has no return value.
     """
     print(f"Compressing all FASTA and FASTQ files for {sample_id}...")
 

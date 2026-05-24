@@ -9,11 +9,13 @@ metadata quirks.
 
 Created on Wed Aug 16 2023
 
-Updated on Mon Sept 8 2025
+Updated on 2026-04-16
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, glob, sys
+import os
+import glob
+import sys
 import re
 from io import StringIO
 from pathlib import Path

@@ -1,12 +1,25 @@
-# start with miniconda3 as build environment
+# =============================================================================
+# Entheome Ecosystem — multi-stage Docker image
+# -----------------------------------------------------------------------------
+# Builds three conda environments used across the Entheome toolchain:
+#   * EGAP_env         — Entheome Genome Assembly Pipeline (EGAP) v3.4.0
+#   * EGEP_env         — Annotation helper tools
+#   * funannotate_env  — Funannotate for eukaryotic genome annotation
+# The final runtime image is a slim Debian layer that carries all three envs
+# plus Augustus and related runtime dependencies.
+# =============================================================================
+
 FROM condaforge/mambaforge AS build
-LABEL maintainer="Ian M Bollinger <ian.bollinger@entheome.org> / <ian.michael.bollinger@gmail.com>"
 
+LABEL maintainer="Ian Bollinger <ian.bollinger@entheome.org>" \
+      version="3.4.0" \
+      description="Entheome Genome Assembly Pipeline (EGAP) v3.4.0 — multi-env Entheome ecosystem image" \
+      org.opencontainers.image.source="https://github.com/iPsychonaut/EGAP" \
+      org.opencontainers.image.version="3.4.0" \
+      org.opencontainers.image.authors="Ian Bollinger <ian.bollinger@entheome.org>"
 
-# docker build -t entheome_ecosystem .
-# docker run -it -v /mnt/d:/mnt/d entheome_ecosystem bash
-
-# Update, install mamba and conda-pack:
+# Install mamba and conda-pack in the base env — used to build and then
+# pack per-env tarballs that are copied into the slim runtime image below.
 RUN mamba install -n base --yes conda-pack
 
 ###############################################################################
@@ -219,11 +232,62 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
     FUNANNOTATE_DB="/opt/databases" \
     GENEMARK_PATH="/mnt/d/EGEP"
 
+# -----------------------------------------------------------------------------
 # EGAP v3.4.0 runtime defaults
-# Override KRAKEN2_DB at runtime: docker run -e KRAKEN2_DB=/kraken2_db -v /host/db:/kraken2_db ...
+# -----------------------------------------------------------------------------
+# Kraken2 DB is NOT baked into the image (the standard 16 GB archive would
+# roughly double the image size). Bind-mount the database directory at runtime
+# and point KRAKEN2_DB at the mount point, e.g.:
+#
+#   docker run --rm \
+#       -e KRAKEN2_DB=/kraken2_db \
+#       -v /host/path/to/kraken2_db:/kraken2_db:ro \
+#       -v /host/data:/data \
+#       entheome_ecosystem:3.4.0 --input /data/samples.csv --output /data/out
+#
+# To provision a Kraken2 database on the host before running EGAP, either
+# build from source (authoritative, ~6-12 hrs):
+#   kraken2-build --standard --db /host/kraken2_db --threads 16 --use-ftp
+# or download the pre-built standard 16 GB index (faster, verify filename at
+# https://benlangmead.github.io/aws-indexes/k2):
+#   wget -c https://genome-idx.s3.amazonaws.com/kraken/k2_standard_16gb_20240904.tar.gz \
+#        -O /host/kraken2_db/k2_standard_16gb.tar.gz
+#   tar -xzf /host/kraken2_db/k2_standard_16gb.tar.gz -C /host/kraken2_db/
 ENV KRAKEN2_DB="" \
+    CONDA_DEFAULT_ENV=EGAP_env \
     PYTHONUNBUFFERED=1 \
     EGAP_DRY_RUN=0
 
-# Run funannotate setup (within funannotate_env)
+# One-time Funannotate database setup. Skipped silently if already initialised.
 RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"
+
+# -----------------------------------------------------------------------------
+# Default entrypoint — runs EGAP directly.
+# Override to enter an interactive shell:
+#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.0
+# -----------------------------------------------------------------------------
+ENTRYPOINT ["/EGAP_env/bin/EGAP"]
+CMD ["--help"]
+
+# =============================================================================
+# Usage examples
+# -----------------------------------------------------------------------------
+# Build:
+#   docker build -t entheome_ecosystem:3.4.0 .
+#
+# Show EGAP help:
+#   docker run --rm entheome_ecosystem:3.4.0
+#
+# Run EGAP with a host-mounted Kraken2 DB and data directory:
+#   docker run --rm \
+#       -e KRAKEN2_DB=/kraken2_db \
+#       -v /host/kraken2_db:/kraken2_db:ro \
+#       -v /host/data:/data \
+#       entheome_ecosystem:3.4.0 \
+#       --input-csv /data/samples.csv \
+#       --output /data/output \
+#       --threads 16 --ram 64
+#
+# Interactive shell (all three conda envs available on PATH):
+#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.0
+# =============================================================================

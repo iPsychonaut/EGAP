@@ -16,7 +16,10 @@ Bootstrap: docker
 From: debian:buster
 
 %labels
-    Maintainer Ian M Bollinger <ian.bollinger@entheome.org>
+    Author       Ian Bollinger <ian.bollinger@entheome.org>
+    Maintainer   Ian M Bollinger <ian.bollinger@entheome.org>
+    Version      3.4.0
+    Description  Entheome ecosystem (EGAP v3.4.0 + EGEP + Funannotate) Singularity image
 
 %post
     export DEBIAN_FRONTEND=noninteractive
@@ -277,32 +280,75 @@ PY
     exec "$@"
 
 %help
-    This container provides tools for genomic analysis with EGEP and EGAP environments (EGAP v3.4.0).
+    Entheome ecosystem Singularity image (EGAP v3.4.0 + EGEP + Funannotate).
 
-    Quick start:
+    Three conda environments are baked in:
+      EGAP_env         — genome assembly pipeline (primary)
+      EGEP_env         — auxiliary annotation tools
+      funannotate_env  — Funannotate for eukaryotic genome annotation
+
+    ---------------------------------------------------------------------------
+    Running EGAP
+    ---------------------------------------------------------------------------
+    The Kraken2 database is intentionally NOT baked in (16 GB archive). Mount
+    it from the host and point KRAKEN2_DB at the mount:
+
       singularity run \
-        --env KRAKEN2_DB=/kraken2_db \
-        -B /host/kraken2_db:/kraken2_db \
-        -B /path/to/data:/data \
-        entheome.sif \
-        python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-          -csv /data/samples.csv -o /data/output -t 16 -r 64
+          --env KRAKEN2_DB=/kraken2_db \
+          -B /host/kraken2_db:/kraken2_db \
+          -B /host/data:/data \
+          entheome.sif \
+          python /opt/conda/envs/EGAP_env/bin/EGAP.py \
+              --input-csv /data/samples.csv \
+              --output /data/output \
+              --threads 16 --ram 64
 
-    Environment variables:
-      FUNANNOTATE_DB   Path to funannotate databases (required for EGEP steps)
-      KRAKEN2_DB       Path to Kraken2 database directory (required for read decontamination)
-                       Download: https://genome-idx.s3.amazonaws.com/kraken/k2_standard_16gb_20240904.tar.gz
-      EGAP_DRY_RUN     Set to 1 to log file-management actions without executing them (default: 0)
-      PYTHONUNBUFFERED Set to 1 for real-time log output (default: 1)
+    Without Kraken2 (read decontamination skipped):
 
-    Activating conda environments manually:
+      singularity run -B /host/data:/data entheome.sif \
+          python /opt/conda/envs/EGAP_env/bin/EGAP.py \
+              --input-csv /data/samples.csv --output /data/output
+
+    ---------------------------------------------------------------------------
+    Environment variables
+    ---------------------------------------------------------------------------
+    FUNANNOTATE_DB    Path to funannotate databases (required for EGEP steps)
+    KRAKEN2_DB        Path to Kraken2 database directory (required for read
+                      decontamination; unset = skip with warning)
+    EGAP_DRY_RUN      Set to 1 to log file-management actions without
+                      executing them (default: 0)
+    PYTHONUNBUFFERED  Set to 1 for real-time log output (default: 1)
+
+    ---------------------------------------------------------------------------
+    Provisioning a Kraken2 database on the host
+    ---------------------------------------------------------------------------
+    Build from source (authoritative, ~6-12 hrs):
+      kraken2-build --standard --db /host/kraken2_db --threads 16 --use-ftp
+
+    Download pre-built 16 GB standard index (faster; verify filename at
+    https://benlangmead.github.io/aws-indexes/k2):
+      wget -c https://genome-idx.s3.amazonaws.com/kraken/k2_standard_16gb_20240904.tar.gz \
+           -O /host/kraken2_db/k2_standard_16gb.tar.gz
+      tar -xzf /host/kraken2_db/k2_standard_16gb.tar.gz -C /host/kraken2_db/
+
+    ---------------------------------------------------------------------------
+    Other workflows
+    ---------------------------------------------------------------------------
+    Interactive shell with every env on PATH:
+      singularity shell entheome.sif
+
+    Activate a specific conda env:
       source /opt/conda/etc/profile.d/conda.sh
-      conda activate EGAP_env   # for EGAP v3.4.0 assembly pipeline
-      conda activate EGEP_env   # for annotation tools
+      conda activate EGAP_env         # for EGAP v3.4.0 assembly pipeline
+      conda activate EGEP_env         # for annotation helpers
       conda activate funannotate_env  # for Funannotate
 
-    Initialize funannotate databases (first run only):
-      singularity run egep.sif funannotate setup -i all -d $FUNANNOTATE_DB
+    Initialise funannotate databases (first run only):
+      singularity run entheome.sif funannotate setup -i all -d $FUNANNOTATE_DB
 
-    Example with GeneMark:
-      singularity shell entheome.sif -B /path/to/genemark:/opt/genemark
+    With GeneMark bind-mounted:
+      singularity shell entheome.sif -B /host/genemark:/opt/genemark
+
+    ---------------------------------------------------------------------------
+    Validation:
+      singularity --version    # requires Apptainer/Singularity >= 3.8

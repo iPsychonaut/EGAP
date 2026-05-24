@@ -11,11 +11,14 @@ Run hifiasm on PacBio HiFi reads (FASTQ/FASTA, gz ok). CWD-safe and resilient:
 - GFA->FASTA via gfatools (fallback to AWK if needed).
 
 Created on Wed Aug 16 2023
-Updated on Wed Sept 3 2025
+
+Updated on 2026-04-16
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, sys, shutil
+import os
+import sys
+import shutil
 import pandas as pd
 from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
 from qc_assessment import qc_assessment
