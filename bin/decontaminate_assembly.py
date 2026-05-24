@@ -26,6 +26,9 @@ Rationale for 'organelle':
 
 'unknown' is always kept to avoid discarding genuine but low-complexity sequence.
 
+Stage:
+    Tiara Assembly Decontamination
+
 Created on Tue Apr 01 2026
 
 Updated on 2026-04-16
@@ -36,10 +39,12 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import sys
 import shutil
+from typing import Optional
+
 import pandas as pd
 from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print, pigz_compress
+from utilities import run_subprocess_cmd, initialize_logging_environment, log_print, pigz_compress, load_sample_context
 
 
 # --------------------------------------------------------------
@@ -195,7 +200,13 @@ def parse_tiara(tiara_out):
 # --------------------------------------------------------------
 # Main decontamination function
 # --------------------------------------------------------------
-def decontaminate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def decontaminate_assembly(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Decontaminate an assembly by removing non-target Tiara-classified sequences.
 
     Args:
@@ -212,11 +223,10 @@ def decontaminate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb
     ram_gb      = int(ram_gb)
 
     # ----------------------------------------------------------
-    # Section 1: Read CSV metadata
+    # Section 1: Load per-sample context
     # ----------------------------------------------------------
-    input_df = pd.read_csv(input_csv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     species_id          = current_series["SPECIES_ID"]
     kingdom_id          = current_series["ORGANISM_KINGDOM"]
@@ -226,7 +236,7 @@ def decontaminate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb
     illumina_r_raw      = current_series["ILLUMINA_RAW_R_READS"]
     pacbio_raw_reads    = current_series["PACBIO_RAW_READS"]
 
-    species_dir = os.path.join(output_dir, species_id)
+    species_dir = os.path.join(ctx.output_dir, species_id)
     sample_dir  = os.path.join(species_dir, sample_id)
     os.makedirs(sample_dir, exist_ok=True)
 

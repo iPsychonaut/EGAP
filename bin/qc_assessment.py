@@ -6,6 +6,11 @@ qc_assessment.py
 This script performs final assembly assessment with BUSCO and QUAST,
 analyzes and classifies the assembly, and finalizes renaming and compression.
 
+Stage:
+    BUSCO (Initial Assessment)
+    BUSCO (Final Assessment)
+    QUAST
+
 Created on Wed Aug 16 2023
 
 Updated on Wed Feb 25 2026
@@ -21,7 +26,16 @@ import pandas as pd
 from Bio import SeqIO
 from collections import Counter
 import matplotlib.pyplot as plt
-from utilities import run_subprocess_cmd, pigz_compress, pigz_decompress, get_current_row_data, analyze_nanostats, initialize_logging_environment, log_print
+from utilities import (
+    run_subprocess_cmd,
+    pigz_compress,
+    pigz_decompress,
+    analyze_nanostats,
+    initialize_logging_environment,
+    load_sample_context,
+    log_print,
+    validate_fasta,
+)
 from file_manager import clean_lineage_downloads
 
 
@@ -95,40 +109,6 @@ def run_lineage_eval(assembly_path: str,
                        busco_count, busco_odb, assembly_type, cpu_threads)
 
     return assembly_path
-
-# --------------------------------------------------------------
-# Validate FASTA file
-# --------------------------------------------------------------
-def validate_fasta(file_path):
-    """Validate that a FASTA file exists, is non-empty, and contains valid nucleotide sequences.
-
-    Args:
-        file_path (str): Path to the FASTA file.
-
-    Returns:
-        bool: True if valid, False otherwise.
-    """
-    if not os.path.exists(file_path):
-        print(f"ERROR:\tFASTA file not found: {file_path}")
-        return False
-    if os.path.getsize(file_path) < 100:
-        print(f"ERROR:\tFASTA file is suspiciously small: {file_path}")
-        return False
-    try:
-        with open(file_path, "r") as f:
-            for record in SeqIO.parse(f, "fasta"):
-                if not record.seq:
-                    print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
-                    return False
-                if not all(c.upper() in "ATCGN" for c in record.seq):
-                    print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
-                    return False
-                return True
-    except Exception as e:
-        print(f"ERROR:\tInvalid FASTA format in {file_path}: {str(e)}")
-        return False
-    return False
-
 
 # --------------------------------------------------------------
 # Perform quality control on reads using NanoPlot
@@ -631,10 +611,9 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
     Returns:
         tuple: (path to compressed assembly, list of key statistics, updated stats dictionary).
     """
-    # Parse the CSV and retrieve relevant row data
-    input_df = pd.read_csv(input_csv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
+    sample_stats_dict = ctx.sample_stats_dict
 
     # Identify read paths, reference, and BUSCO lineage info from CSV
     ont_raw_reads = current_series["ONT_RAW_READS"]
@@ -649,14 +628,14 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
     karyote_id = current_series["ORGANISM_KARYOTE"]
     species_id = current_series["SPECIES_ID"]
 
-    species_dir = os.path.join(output_dir, species_id)
+    species_dir = os.path.join(ctx.output_dir, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
     assembly_path = os.path.join(sample_dir, f"{assembly_type}_assembly", f"{sample_id}_{assembly_type}.fasta")
 
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
-    print(f"Parsing assembly for index {current_index} from {input_csv}:\n{current_row}")
+    print(f"Parsing assembly for index {ctx.current_index} from {ctx.input_csv}:\n{ctx.current_row}")
 
     # Ensure working directory is sample_dir
     os.makedirs(sample_dir, exist_ok=True)
@@ -826,10 +805,9 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     print(f"DEBUG: sample_id - {sample_id}")
     print(f"DEBUG: output_dir - {output_dir}")
 
-    # Read the CSV file and filter to the row corresponding to the sample of interest
-    input_df = pd.read_csv(input_csv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
+    sample_stats_dict = ctx.sample_stats_dict
 
     # Identify read paths, reference, and BUSCO lineage info from CSV
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -847,7 +825,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
     kingdom_id = current_series["ORGANISM_KINGDOM"]
     karyote_id = current_series["ORGANISM_KARYOTE"]
     est_size = current_series["EST_SIZE"]
-    species_dir = os.path.join(output_dir, species_id)
+    species_dir = os.path.join(ctx.output_dir, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
@@ -973,7 +951,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         print(f"ERROR:\tInvalid assembly after promotion: {assembly_path}")
         return None, None
     
-    print(f"Parsing final assembly for index {current_index} from {input_csv}:\n{current_row}")
+    print(f"Parsing final assembly for index {ctx.current_index} from {ctx.input_csv}:\n{ctx.current_row}")
     
     # -------- Compleasm/BUSCO (now runs on the final-labeled path) --------
     run_lineage_eval(assembly_path, sample_id, sample_stats_dict,

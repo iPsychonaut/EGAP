@@ -5,6 +5,9 @@ assemble_spades.py
 
 This script runs SPAdes assembly with Illumina and optional long reads.
 
+Stage:
+    Short-read Assembly (SPAdes)
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16
@@ -14,8 +17,10 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import sys
 import shutil
+from typing import Optional
+
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, log_print, initialize_logging_environment
+from utilities import run_subprocess_cmd, log_print, initialize_logging_environment, load_sample_context
 from qc_assessment import qc_assessment
 from file_manager import remove_file, remove_dir
 
@@ -23,7 +28,13 @@ from file_manager import remove_file, remove_dir
 # --------------------------------------------------------------
 # Run SPAdes assembly with Illumina and optional long reads
 # --------------------------------------------------------------
-def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def assemble_spades(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Assemble genomic data using SPAdes with Illumina and optional ONT reads.
 
     Reads metadata from *input_csv*, resolves read paths, runs SPAdes in
@@ -57,13 +68,8 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         Propagated from ``run_subprocess_cmd`` if the SPAdes binary is not
         found on ``PATH``.
     """
-    # Keep absolute paths so later code never loses them
-    input_csv_abs  = os.path.abspath(input_csv)
-    output_dir_abs = os.path.abspath(output_dir)
-
-    input_df = pd.read_csv(input_csv_abs)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
@@ -77,7 +83,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
 
-    species_dir = os.path.join(output_dir_abs, species_id)
+    species_dir = os.path.join(ctx.output_dir, species_id)
 
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
         ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
@@ -121,7 +127,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if os.path.exists(egap_spades_assembly_path) and os.path.getsize(egap_spades_assembly_path) > 0:
         log_print(f"SKIP:\tSPAdes assembly already present: {egap_spades_assembly_path}")
         egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
-            "spades", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+            "spades", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return egap_spades_assembly_path
 
@@ -206,7 +212,7 @@ def assemble_spades(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # QC using absolute paths
     egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
-        "spades", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+        "spades", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
     )
 
     # --- Cleanup SPAdes intermediates once final assembly is confirmed ---

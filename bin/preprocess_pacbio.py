@@ -15,6 +15,9 @@ Fixes in this version:
 - If a previous filtered file exists but is empty, regenerate it.
 - Absolute paths everywhere; robust logging; no silent fallbacks.
 
+Stage:
+    Filtering (Filtlong - PacBio)
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16
@@ -26,13 +29,12 @@ import sys
 import glob
 import shutil
 import re
+from typing import Optional
+
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads, initialize_logging_environment
+from utilities import run_subprocess_cmd, select_long_reads, initialize_logging_environment, load_sample_context, to_abs
 from qc_assessment import nanoplot_qc_reads
 
-
-def to_abs(p):  # normalize to absolute path (for strings only)
-    return os.path.abspath(p) if isinstance(p, str) else p
 
 def nonempty(fp, min_bytes=1024) -> bool:
     try:
@@ -41,17 +43,17 @@ def nonempty(fp, min_bytes=1024) -> bool:
         return False
 
 
-def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def preprocess_pacbio(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     print(f"Preprocessing PacBio reads for {sample_id}...")
 
-    # Resolve to absolute so later chdir is safe
-    input_csvto_abs  = to_abs(input_csv)
-    output_dirto_abs = to_abs(output_dir)
-
-    # Read metadata
-    input_df = pd.read_csv(input_csvto_abs)
-    current_row, _, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current = ctx.current_series
 
     pacbio_sra       = current["PACBIO_SRA"]
     pacbio_raw_reads = current["PACBIO_RAW_READS"]
@@ -70,7 +72,7 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         return None
 
     # Layout
-    species_dirto_abs = os.path.join(output_dirto_abs, species_id)
+    species_dirto_abs = os.path.join(ctx.output_dir, species_id)
     pacbio_dirto_abs  = os.path.join(species_dirto_abs, "PacBio")
     os.makedirs(pacbio_dirto_abs, exist_ok=True)
 
@@ -78,20 +80,20 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
         pacbio_raw_reads = os.path.join(pacbio_dirto_abs, f"{pacbio_sra}.fastq")
     elif isinstance(pacbio_raw_reads, str) and not os.path.isabs(pacbio_raw_reads):
-        pacbio_raw_reads = to_abs(os.path.join(output_dirto_abs, pacbio_raw_reads))
+        pacbio_raw_reads = to_abs(os.path.join(ctx.output_dir, pacbio_raw_reads))
 
     # Normalize reference FASTA if only GCA is present
     if pd.notna(ref_seq_gca) and (pd.isna(ref_seq) or not isinstance(ref_seq, str) or not ref_seq.strip()):
         ref_seq = os.path.join(species_dirto_abs, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
     if isinstance(ref_seq, str) and not os.path.isabs(ref_seq):
-        ref_seq = to_abs(os.path.join(output_dirto_abs, ref_seq))
+        ref_seq = to_abs(os.path.join(ctx.output_dir, ref_seq))
 
     prev_cwd = os.getcwd()
     os.chdir(pacbio_dirto_abs)
     try:
         # Option 1: concatenate raw dir *.fastq
         if isinstance(pacbio_raw_dir, str) and pacbio_raw_dir.strip():
-            pb_raw_dirto_abs = pacbio_raw_dir if os.path.isabs(pacbio_raw_dir) else os.path.join(output_dirto_abs, pacbio_raw_dir)
+            pb_raw_dirto_abs = pacbio_raw_dir if os.path.isabs(pacbio_raw_dir) else os.path.join(ctx.output_dir, pacbio_raw_dir)
             files = sorted(glob.glob(os.path.join(pb_raw_dirto_abs, "*.fastq")))
             if not files:
                 print(f"ERROR:\tNo PacBio .fastq files found in {pb_raw_dirto_abs}")
@@ -191,7 +193,7 @@ def preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             print(f"WARN:\tNanoPlot failed on filtered PacBio reads ({e}); continuing.")
 
         # Select best long reads via shared helper (absolute paths)
-        best_long_reads = select_long_reads(output_dirto_abs, input_csvto_abs, sample_id, cpu_threads)
+        best_long_reads = select_long_reads(ctx.output_dir, ctx.input_csv, sample_id, cpu_threads)
         if not best_long_reads or not os.path.exists(best_long_reads):
             best_long_reads = filtered_pb
 

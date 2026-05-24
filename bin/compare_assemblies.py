@@ -6,6 +6,9 @@ compare_assemblies.py
 This script compares assemblies from MaSuRCA, SPAdes, Flye, and Hifiasm, selecting
 the best based on BUSCO completeness, contig count, and N50.
 
+Stage:
+    Best Initial Assembly Selection
+
 Created on Wed Aug 16 2023
 
 Updated on Wed Feb 25 2026
@@ -20,43 +23,9 @@ import glob
 import pandas as pd
 from pathlib import Path
 from collections import Counter
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, validate_fasta
 from Bio import SeqIO
 from qc_assessment import run_lineage_eval
-
-
-# --------------------------------------------------------------
-# Validate FASTA file
-# --------------------------------------------------------------
-def validate_fasta(file_path):
-    """Validate that a FASTA file exists, is non-empty, and contains valid nucleotide sequences.
-
-    Args:
-        file_path (str): Path to the FASTA file.
-
-    Returns:
-        bool: True if valid, False otherwise.
-    """
-    if not os.path.exists(file_path):
-        print(f"ERROR:\tFASTA file not found: {file_path}")
-        return False
-    if os.path.getsize(file_path) < 100:
-        print(f"ERROR:\tFASTA file is suspiciously small: {file_path}")
-        return False
-    try:
-        with open(file_path, "r") as f:
-            for record in SeqIO.parse(f, "fasta"):
-                if not record.seq:
-                    print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
-                    return False
-                if not all(c.upper() in "ATCGN" for c in record.seq):
-                    print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
-                    return False
-                return True
-    except Exception as e:
-        print(f"ERROR:\tInvalid FASTA format in {file_path}: {str(e)}")
-        return False
-    return False
 
 
 # --------------------------------------------------------------

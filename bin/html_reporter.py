@@ -7,6 +7,9 @@ Generates an EGAP HTML summary using Jinja templates. Robust to missing
 artifacts (FastQC / NanoPlot / QUAST / BUSCO), CWD-safe, and tolerant of
 metadata quirks.
 
+Stage:
+    Final HTML Report
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16
@@ -27,19 +30,37 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-# Optional iNat import (process_metadata may fail due to utilities.calculate_genome_coverage)
+# Optional iNat import — process_metadata depends on geopy/requests and is
+# allowed to be absent in a minimal install.  The real implementations live in
+# bin/process_metadata.py; the stubs below preserve the (None, None, None,
+# None, None) / (None, None, None) shape that callers expect.
 _HAS_INAT = True
 try:
     from process_metadata import get_inat_obs, reverse_geocode
-except Exception as e:
+except ImportError as e:  # optional dep missing (geopy/requests) or module absent
     print(f"WARN:\tprocess_metadata import failed ({e}); iNaturalist fields will be skipped.")
     _HAS_INAT = False
-    def get_inat_obs(_): return (None, None, None, None, None)
-    def reverse_geocode(_, __): return (None, None, None)
+
+    def get_inat_obs(_):
+        """Stub returned when ``process_metadata`` deps are unavailable.
+
+        Returns a 5-tuple of ``None`` matching
+        :func:`process_metadata.get_inat_obs` so report rendering can
+        continue without iNaturalist enrichment.
+        """
+        return (None, None, None, None, None)
+
+    def reverse_geocode(_, __):
+        """Stub returned when ``process_metadata`` deps are unavailable.
+
+        Returns a 3-tuple of ``None`` matching
+        :func:`process_metadata.reverse_geocode`.
+        """
+        return (None, None, None)
 
 # Use the shared helper from utilities so row extraction stays consistent
 try:
-    from utilities import get_current_row_data, initialize_logging_environment
+    from utilities import get_current_row_data, initialize_logging_environment, to_abs
 except Exception as e:
     print(f"ERROR:\tutilities.get_current_row_data not importable: {e}")
     raise
@@ -189,9 +210,6 @@ def load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.Dat
                 return pd.DataFrame()
     return pd.DataFrame()
 
-
-def to_abs(p):
-    return os.path.abspath(p) if isinstance(p, str) else p
 
 def has_both_templates(dir_path: Path) -> bool:
     return all((dir_path / fname).exists() for fname in REQUIRED_TEMPLATES)

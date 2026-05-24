@@ -6,6 +6,10 @@ preprocess_ont.py
 This script preprocesses ONT reads with NanoPlot, Filtlong, and Ratatosk.
 Handles raw directory concatenation and SRA downloads.
 
+Stage:
+    Filtering (Filtlong - ONT)
+    Error Correction (Ratatosk)
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16
@@ -18,8 +22,10 @@ import sys
 import subprocess
 import glob
 import re
+from typing import Optional
+
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, select_long_reads, initialize_logging_environment
+from utilities import run_subprocess_cmd, select_long_reads, initialize_logging_environment, load_sample_context
 from qc_assessment import nanoplot_qc_reads
 
 # String values written by older pipeline runs (na_rep="None") that must be
@@ -44,7 +50,13 @@ def null(val):
 # --------------------------------------------------------------
 # Preprocess ONT sequencing reads
 # --------------------------------------------------------------
-def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def preprocess_ont(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Preprocess ONT reads with NanoPlot, Filtlong, and Ratatosk.
 
     Handles concatenation of raw directory files, SRA downloads, quality control with
@@ -64,12 +76,8 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"Preprocessing ONT reads for {sample_id}...")
 
     # Always anchor everything to absolute output_dir to avoid nested paths after chdir
-    output_dir_abs = os.path.abspath(output_dir)
-    input_csv_abs = os.path.abspath(input_csv)
-    # Keep your original species_id source of truth:
-    input_df = pd.read_csv(input_csv_abs)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     # Identify read paths, reference, and BUSCO lineage info from CSV
     ont_raw_reads = null(current_series["ONT_RAW_READS"])
@@ -79,7 +87,7 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     est_size      = current_series["EST_SIZE"]
 
     # Recompute species_dir_abs now that species_id is known
-    species_dir_abs = os.path.join(output_dir_abs, species_id)
+    species_dir_abs = os.path.join(ctx.output_dir, species_id)
     ont_dir_abs = os.path.join(species_dir_abs, "ONT")
     os.makedirs(ont_dir_abs, exist_ok=True)
 
@@ -88,9 +96,9 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         # Expected dump location for SRA
         ont_raw_reads = os.path.join(ont_dir_abs, f"{ont_sra}.fastq")
     elif isinstance(ont_raw_reads, str) and not os.path.isabs(ont_raw_reads):
-        # If given a relative path, make it absolute relative to output_dir_abs (project root),
+        # If given a relative path, make it absolute relative to ctx.output_dir (project root),
         # not the current cwd (prevents nested repetition)
-        ont_raw_reads = os.path.abspath(os.path.join(output_dir_abs, ont_raw_reads))
+        ont_raw_reads = os.path.abspath(os.path.join(ctx.output_dir, ont_raw_reads))
 
     # Illumina dedup (absolute paths so downstream tools can find them regardless of cwd)
     illu_dedup_f_reads = os.path.join(species_dir_abs, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
@@ -114,7 +122,7 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         # Handle Raw Data Directory (concatenate .fastq files)
         if ont_raw_dir is not None:
             print(f"NOTE:\tConcatenating ONT files from {ont_raw_dir}")
-            ont_raw_dir_abs = ont_raw_dir if os.path.isabs(ont_raw_dir) else os.path.join(output_dir_abs, ont_raw_dir)
+            ont_raw_dir_abs = ont_raw_dir if os.path.isabs(ont_raw_dir) else os.path.join(ctx.output_dir, ont_raw_dir)
             ont_files = sorted(glob.glob(os.path.join(ont_raw_dir_abs, "*.fastq")))
             if not ont_files:
                 print(f"ERROR:\tNo ONT files found in {ont_raw_dir_abs}")
@@ -216,8 +224,8 @@ def preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             print(f"WARN:\tNanoPlot failed on corrected ONT reads ({e}); continuing.")
     
         # Select best long reads (your helper uses output_dir/input_csv paths, unchanged)
-        highest_mean_qual_long_reads = select_long_reads(output_dir_abs, input_csv_abs, sample_id, cpu_threads)
-        highest = select_long_reads(output_dir_abs, input_csv_abs, sample_id, cpu_threads)
+        highest_mean_qual_long_reads = select_long_reads(ctx.output_dir, ctx.input_csv, sample_id, cpu_threads)
+        highest = select_long_reads(ctx.output_dir, ctx.input_csv, sample_id, cpu_threads)
         if not highest:
             highest = final_corrected_ont
     

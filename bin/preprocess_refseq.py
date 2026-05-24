@@ -6,6 +6,9 @@ preprocess_refseq.py
 Prepare a standardized Reference Sequence FASTA for a given sample so downstream
 assemblies (polish/compare/QC) can consume a predictable file path and name.
 
+Stage:
+    Reference Sequence Acquisition (RefSeq / NCBI)
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16
@@ -16,14 +19,22 @@ import os
 import sys
 import glob
 import shutil
+from typing import Optional
+
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
+from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context
 
 
 # --------------------------------------------------------------
 # Preprocess reference sequence data (ABSOLUTE-PATH SAFE)
 # --------------------------------------------------------------
-def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def preprocess_refseq(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Preprocess reference sequence data for the assembly pipeline.
 
     Behavior
@@ -42,18 +53,11 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     print(f"Preprocessing Reference Sequence assembly for {sample_id.split('-')[0]}...")
 
-    # --- Resolve critical paths to absolute early ---
-    input_csv_abs  = Path(input_csv).expanduser().resolve()
-    output_dir_abs = Path(output_dir).expanduser().resolve()
-    print(f"DEBUG - input_csv_abs  - {input_csv_abs}")
-    print(f"DEBUG - output_dir_abs - {output_dir_abs}")
-
-    # Load CSV & select current row
-    input_df = pd.read_csv(str(input_csv_abs))
-    print(f"DEBUG - input_df - {input_df}")
-
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    output_dir_abs = Path(ctx.output_dir)
+    print(f"DEBUG - input_csv  - {ctx.input_csv}")
+    print(f"DEBUG - output_dir - {output_dir_abs}")
+    current_series = ctx.current_series
 
     # Pull fields (normalize NaNs and literal "None"/"nan" strings → None)
     _NULLS = {"", "none", "nan", "null", "na"}

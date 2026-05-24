@@ -9,6 +9,9 @@ analyses that require uncompressed inputs have completed. Uses pigz for
 parallel gzip compression; the sample directory is discovered from the
 input CSV's SPECIES_ID / SAMPLE_ID columns rather than a user-supplied path.
 
+Stage:
+    Final Compression
+
 Created on Fri May 16 15:52:30 2025
 
 Updated on 2026-04-16

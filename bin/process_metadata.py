@@ -7,6 +7,9 @@ Generates metadata for genome assemblies and Sequence Read Archive (SRA) submiss
 Processes sample data from a CSV to create TSV files with assembly metadata and SRA metadata,
 and retrieves iNaturalist observation data with reverse geocoding for location details.
 
+Stage:
+    Metadata (NCBI SRA / GenBank / iNaturalist)
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16

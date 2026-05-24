@@ -110,6 +110,10 @@ RUN apt-get update && apt-get install -y wget && \
     for SCRIPT in \
         EGAP_TUI.py \
         file_manager.py \
+        sh.py \
+        log.py \
+        fs.py \
+        sample_csv.py \
         utilities.py \
         preprocess_illumina.py \
         preprocess_ont.py \

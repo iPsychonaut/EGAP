@@ -5,6 +5,9 @@ assemble_masurca.py
 
 This script runs MaSuRCA assembly with Illumina and optional long reads.
 
+Stage:
+    Hybrid Assembly (MaSuRCA)
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16
@@ -16,9 +19,11 @@ import sys
 import shutil
 import re
 import stat
+from typing import Optional
+
 import pandas as pd
 from pathlib import Path
-from utilities import run_subprocess_cmd, get_current_row_data, log_print, initialize_logging_environment
+from utilities import run_subprocess_cmd, log_print, initialize_logging_environment, load_sample_context
 from qc_assessment import qc_assessment
 from file_manager import remove_file, remove_dir
 
@@ -211,7 +216,7 @@ def skip_gap_closing_section(assembly_sh_path):
 # --------------------------------------------------------------
 # NEW: Relax Flye check to allow PATH-based Flye
 # --------------------------------------------------------------
-def ensure_flye_vendor_shim():
+def _masurca_vendor_flye_ensure_shim():
     """
     Make MaSuRCA happy regardless of where Conda installed Flye by ensuring
     $CONDA_PREFIX/Flye/bin/flye exists (the path MaSuRCA probes).
@@ -248,7 +253,7 @@ def ensure_flye_vendor_shim():
     print(f"INFO:\tInstalled Flye vendor {made} for MaSuRCA: {vendor_exe} -> {flye_bin}")
 
 
-def patch_environment_flye(env_sh_path: str) -> str:
+def _masurca_vendor_flye_patch_environment(env_sh_path: str) -> str:
     """
     Prepend a small block to environment.sh so it prefers a PATH flye if present,
     provides a python2.7 fallback shim (to python3) if python2.7 is missing,
@@ -301,7 +306,7 @@ def patch_environment_flye(env_sh_path: str) -> str:
     return env_sh_path
 
 
-def patch_flye_check(assembly_sh_path: str) -> str:
+def _masurca_vendor_flye_patch_check(assembly_sh_path: str) -> str:
     """
     Make assemble.sh accept Flye from PATH if the bundled Flye is absent,
     and only hard-fail when FLYE_ASSEMBLY=1.
@@ -355,7 +360,7 @@ def patch_flye_check(assembly_sh_path: str) -> str:
                 'fi\n'
                 '# --- END EGAP FLYE PATH PATCH ---\n'
             )
-            new_txt = new_txt[:shebang_idx] + new_txt[shebang_idx:] + inject
+            new_txt = new_txt[:shebang_idx] + inject + new_txt[shebang_idx:]
 
     with open(assembly_sh_path, "w") as f:
         f.write(new_txt)
@@ -365,7 +370,13 @@ def patch_flye_check(assembly_sh_path: str) -> str:
 # --------------------------------------------------------------
 # Generate and run MaSuRCA assembly
 # --------------------------------------------------------------
-def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def masurca_config_gen(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Generate and execute MaSuRCA configuration for genome assembly.
 
     Configures MaSuRCA for CABOG assembly with Illumina paired-end reads
@@ -391,15 +402,10 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         Absolute path to the final MaSuRCA assembly FASTA, or ``None``
         if the assembly could not be completed.
     """
-    input_csvto_abs = os.path.abspath(input_csv)
-    print(f"DEBUG - input_csvto_abs - {input_csvto_abs}")
-
-    output_dirto_abs = str(Path(output_dir).resolve())
-    print(f"DEBUG - output_dirto_abs - {output_dirto_abs}")
-
-    input_df = pd.read_csv(input_csvto_abs)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    print(f"DEBUG - input_csv - {ctx.input_csv}")
+    print(f"DEBUG - output_dir - {ctx.output_dir}")
+    current_series = ctx.current_series
 
     # CSV fields
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -414,7 +420,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
 
-    species_dir = Path(output_dirto_abs).resolve() / str(species_id)
+    species_dir = Path(ctx.output_dir).resolve() / str(species_id)
     sample_dir = species_dir / str(sample_id)
     masurca_out_dir = (sample_dir / "masurca_assembly").resolve()
     masurca_out_dir.mkdir(parents=True, exist_ok=True)
@@ -425,7 +431,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         log_print(f"SKIP:\tFinal MaSuRCA assembly already present: {expected_final}")
         # Re-run QC on the existing assembly/output structure
         egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment(
-            "masurca", input_csvto_abs, sample_id, output_dirto_abs, cpu_threads, ram_gb
+            "masurca", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return str(egap_masurca_assembly_path)
 
@@ -560,12 +566,16 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             return None
         
         # Ensure MaSuRCA sees Flye regardless of install location
-        ensure_flye_vendor_shim()
+        _masurca_vendor_flye_ensure_shim()
         
         # Patch environment.sh to prefer PATH Flye and avoid fatal exit when FLYE_ASSEMBLY=0
         env_sh_path = masurca_out_dir / "environment.sh"
-        patch_environment_flye(str(env_sh_path))
-        
+        _masurca_vendor_flye_patch_environment(str(env_sh_path))
+
+        # Patch assemble.sh's Flye check to accept PATH Flye and only hard-fail when FLYE_ASSEMBLY=1.
+        # Must run before skip_gap_closing_section, which reads assemble.sh and writes assemble_skip_gap.sh.
+        _masurca_vendor_flye_patch_check(str(assemble_sh_path))
+
         # Patch assemble.sh to skip gap-closing (your existing helper)
         modified_assemble = skip_gap_closing_section(str(assemble_sh_path))
         
@@ -600,7 +610,7 @@ def masurca_config_gen(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path}")
         os.chdir(prev_cwd)
         egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment(
-            "masurca", input_csvto_abs, sample_id, output_dirto_abs, cpu_threads, ram_gb
+            "masurca", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
 
         # --- Cleanup MaSuRCA intermediates once final assembly is confirmed ---

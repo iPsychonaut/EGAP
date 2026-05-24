@@ -34,6 +34,9 @@ Decontaminated reads overwrite the highest-mean-quality long-read file
 that the assemblers already expect, preserving the original as
 *_pre_decontam.fastq so it can be recovered if needed.
 
+Stage:
+    Kraken2 Read Decontamination
+
 Created on Tue Apr 01 2026
 
 Updated on 2026-04-16
@@ -47,7 +50,7 @@ import shutil
 import pandas as pd
 from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, log_print, pigz_compress
+from utilities import run_subprocess_cmd, initialize_logging_environment, log_print, pigz_compress, load_sample_context
 
 
 # --------------------------------------------------------------
@@ -472,11 +475,10 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     cpu_threads = int(cpu_threads)
 
     # ----------------------------------------------------------
-    # Section 1: Read CSV metadata
+    # Section 1: Load per-sample context
     # ----------------------------------------------------------
-    input_df = pd.read_csv(os.path.abspath(input_csv))
-    current_row, _, _ = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     species_id       = current_series["SPECIES_ID"]
     kingdom_id       = current_series["ORGANISM_KINGDOM"]
@@ -486,7 +488,7 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     ont_sra          = current_series["ONT_SRA"]
     pacbio_sra       = current_series["PACBIO_SRA"]
 
-    species_dir  = os.path.join(os.path.abspath(output_dir), species_id)
+    species_dir  = os.path.join(ctx.output_dir, species_id)
     ont_dir      = os.path.join(species_dir, "ONT")
     pacbio_dir   = os.path.join(species_dir, "PacBio")
 

@@ -8,6 +8,11 @@ then optionally decontaminates with Kraken2.
 Reads input from a CSV file, processes all Illumina datasets, and updates the CSV
 with declumpified FASTQ file paths in ${params.output_dir}/${sample_prefix}/Illumina/.
 
+Stage:
+    Adapter Removal (Trimmomatic)
+    Deduplication (BBMap)
+    Clumped Illumina (Clumpify)
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16
@@ -19,7 +24,7 @@ import sys
 import shutil
 import glob
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, md5_check, initialize_logging_environment, log_print
+from utilities import run_subprocess_cmd, md5_check, initialize_logging_environment, log_print, load_sample_context
 from decontaminate_reads import (
     get_kraken2_db,
     get_kraken_keep_domains,
@@ -364,12 +369,8 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     log_print(f"Preprocessing Illumina reads for {sample_id.split('-')[0]}...")
 
-    # Parse the CSV and retrieve relevant row data
-    input_df = pd.read_csv(input_csv)
-    log_print(f"DEBUG - input_df - {input_df}")
-
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     log_print(f"DEBUG - current_series - {current_series}")
 
@@ -391,7 +392,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         return None, None
 
     # Prepare directories
-    species_dir = Path(output_dir).resolve() / str(species_id)
+    species_dir = Path(ctx.output_dir) / str(species_id)
     illumina_dir = species_dir / "Illumina"
     illumina_dir.mkdir(parents=True, exist_ok=True)
 

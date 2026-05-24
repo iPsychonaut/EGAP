@@ -7,6 +7,10 @@ This module processes genomic assembly data by applying polishing steps using Ra
 for long reads (ONT or PacBio) and Pilon for Illumina reads. It handles input validation,
 subprocess execution, and file management for assembly refinement.
 
+Stage:
+    Polishing (minimap2 + Racon, for long reads)
+    Polishing (bwa + samtools + bamtools + Pilon, for Illumina)
+
 Created on Wed Aug 16 2023
 
 Updated on Wed Sept 3 2025
@@ -16,9 +20,11 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import sys
 import shutil
+from typing import Optional
+
 import pandas as pd
 from pathlib import Path  # <<< NEW
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
+from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context
 from file_manager import remove_file, remove_dir, remove_glob, remove_bwa_indices
 
 
@@ -180,11 +186,16 @@ def pilon_polish(best_assembly, second_racon_assembly, pilon_bam, assembly_out_d
 # --------------------------------------------------------------
 # Perform full assembly polishing
 # --------------------------------------------------------------
-def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def polish_assembly(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Polish an assembly by running Racon (two rounds with long reads) and Pilon."""
-    input_df = pd.read_csv(input_csv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
@@ -198,11 +209,9 @@ def polish_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
 
-    # Normalize base paths to absolute
-    output_dir_abs = str(Path(output_dir).resolve())
-    print(f"DEBUG - output_dir_abs      - {output_dir_abs}")
+    print(f"DEBUG - ctx.output_dir      - {ctx.output_dir}")
 
-    species_dir = os.path.join(output_dir_abs, species_id)
+    species_dir = os.path.join(ctx.output_dir, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
 
     # ---------- FAST SKIP if final polished output exists ----------

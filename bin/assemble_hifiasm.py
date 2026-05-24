@@ -10,6 +10,9 @@ Run hifiasm on PacBio HiFi reads (FASTQ/FASTA, gz ok). CWD-safe and resilient:
 - Tolerant to hifiasm output filename variants.
 - GFA->FASTA via gfatools (fallback to AWK if needed).
 
+Stage:
+    Long-read Assembly (hifiasm)
+
 Created on Wed Aug 16 2023
 
 Updated on 2026-04-16
@@ -19,29 +22,27 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import sys
 import shutil
+from typing import Optional
+
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment
+from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context, to_abs
 from qc_assessment import qc_assessment
 
 
-def to_abs(p):  # helper for absolute paths
-    return os.path.abspath(p) if isinstance(p, str) else p
-
-
-def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def assemble_hifiasm(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Assemble with hifiasm using PacBio reads and QC the result.
 
     Returns:
         str or None: Path to <sample_id>_hifiasm.fasta or None on failure/skip.
     """
-    # --- Resolve critical paths to absolute early ---
-    input_csvto_abs = to_abs(input_csv)
-    output_dirto_abs = to_abs(output_dir)
-
-    # Read metadata safely (independent of CWD changes)
-    input_df = pd.read_csv(input_csvto_abs)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     # CSV fields
     pacbio_sra = current_series["PACBIO_SRA"]
@@ -50,14 +51,14 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     ref_seq = current_series["REF_SEQ"]
     species_id = current_series["SPECIES_ID"]
 
-    species_dir = os.path.join(output_dirto_abs, species_id)
+    species_dir = os.path.join(ctx.output_dir, species_id)
 
     # Normalize implied PacBio path if only SRA is provided
     if (pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads)):
         pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
     # If CSV had a relative path, anchor it under the project
     if isinstance(pacbio_raw_reads, str) and not os.path.isabs(pacbio_raw_reads):
-        pacbio_raw_reads = to_abs(os.path.join(output_dirto_abs, pacbio_raw_reads))
+        pacbio_raw_reads = to_abs(os.path.join(ctx.output_dir, pacbio_raw_reads))
 
     print(f"DEBUG - pacbio_sra - {pacbio_sra}")
     print(f"DEBUG - pacbio_raw_reads - {pacbio_raw_reads}")
@@ -96,7 +97,7 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if os.path.exists(egap_hifiasm_assembly_path) and os.path.getsize(egap_hifiasm_assembly_path) > 0:
         print(f"SKIP:\tHiFi assembly already present: {egap_hifiasm_assembly_path}")
         egap_hifiasm_assembly_path, hifiasm_stats_list, _ = qc_assessment(
-            "hifiasm", input_csvto_abs, sample_id, output_dirto_abs, cpu_threads, ram_gb
+            "hifiasm", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return egap_hifiasm_assembly_path
 
@@ -159,7 +160,7 @@ def assemble_hifiasm(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
         # QC (absolute paths so CWD is irrelevant)
         egap_hifiasm_assembly_path, hifiasm_stats_list, _ = qc_assessment(
-            "hifiasm", input_csvto_abs, sample_id, output_dirto_abs, cpu_threads, ram_gb
+            "hifiasm", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return egap_hifiasm_assembly_path
     finally:
