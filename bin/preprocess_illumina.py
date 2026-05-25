@@ -23,6 +23,8 @@ import os
 import sys
 import shutil
 import glob
+from pathlib import Path
+
 import pandas as pd
 from utilities import run_subprocess_cmd, md5_check, initialize_logging_environment, log_print, load_sample_context
 from decontaminate_reads import (
@@ -109,8 +111,17 @@ def nonempty(p):
 def find_truseq_adapters():
     """Search common locations for the TruSeq3-PE.fa adapter file.
 
-    Searches (in order): the active conda environment, the directory
-    adjacent to the trimmomatic binary, and common system paths.
+    Search order:
+        1. The active conda environment
+           (``$CONDA_PREFIX/share/trimmomatic*/adapters/TruSeq3-PE.fa``).
+        2. The directory adjacent to the ``trimmomatic`` binary on PATH.
+        3. The repository's bundled fallback copy at
+           ``<repo_root>/resources/TruSeq3-PE.fa``.  This is shipped
+           with the EGAP source so the pipeline still works when
+           trimmomatic is installed without its adapter files (some
+           minimal/system installs split them out).
+        4. Common system paths (``/usr/share``, ``/usr/local/share``,
+           ``~/miniconda3``) via a recursive glob -- last-ditch.
 
     Returns
     -------
@@ -134,7 +145,12 @@ def find_truseq_adapters():
         )
         if candidates:
             return candidates[0]
-    # 3) Fallback: search common paths
+    # 3) Repository-bundled fallback at <repo_root>/resources/TruSeq3-PE.fa
+    #    Anchored to this script's location so it works regardless of CWD.
+    bundled_adapters = Path(__file__).resolve().parent.parent / "resources" / "TruSeq3-PE.fa"
+    if bundled_adapters.is_file():
+        return str(bundled_adapters)
+    # 4) Fallback: search common paths
     for search_root in ["/usr/share", "/usr/local/share", os.path.expanduser("~/miniconda3")]:
         candidates = glob.glob(os.path.join(search_root, "**", "TruSeq3-PE.fa"), recursive=True)
         if candidates:
