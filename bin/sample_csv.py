@@ -9,7 +9,7 @@ long-read selection logic, and the typed ``SampleContext`` /
 
 Extracted from :mod:`utilities` in v3.4.1.  Hosts everything that
 operates on a single row of the master sample-driver CSV.  Depends on
-:mod:`fs` for :func:`to_abs`.
+:mod:`file_operations` for :func:`to_abs`.
 
 Stage:
     Cross-cutting (sample-row driver consumed by every pipeline stage)
@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 import pandas as pd
 
-from fs import to_abs
+from file_operations import to_abs
 
 
 # --------------------------------------------------------------

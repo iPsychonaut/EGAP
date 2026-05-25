@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-sh.py
+subprocess_runner.py
 
 Subprocess execution helpers shared across EGAP modules.
 

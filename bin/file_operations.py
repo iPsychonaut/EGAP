@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-fs.py
+file_operations.py
 
 Filesystem, path, and FASTA/FASTQ I/O helpers for EGAP modules.
 
@@ -9,7 +9,7 @@ Extracted from :mod:`utilities` in v3.4.1.  Hosts path-normalisation,
 FASTA validation, parallel gzip wrappers (``pigz``), MD5 verification,
 base-count tallies, coverage calculation, and a small move helper.
 
-Depends on :mod:`sh` (``run_subprocess_cmd`` for the ``pigz`` wrappers).
+Depends on :mod:`subprocess_runner` (``run_subprocess_cmd`` for the ``pigz`` wrappers).
 Callers that still ``from utilities import to_abs`` continue to work via
 the re-export shim in :mod:`utilities`.
 
@@ -31,7 +31,7 @@ from typing import List
 
 from Bio import SeqIO
 
-from sh import run_subprocess_cmd
+from subprocess_runner import run_subprocess_cmd
 
 
 # --------------------------------------------------------------
