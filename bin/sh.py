@@ -5,7 +5,7 @@ sh.py
 
 Subprocess execution helpers shared across EGAP modules.
 
-Extracted from :mod:`utilities` in v3.4.0 so the subprocess concern is
+Extracted from :mod:`utilities` in v3.4.1 so the subprocess concern is
 isolated from logging, filesystem, and DataFrame helpers.  Callers that
 still ``from utilities import run_subprocess_cmd`` continue to work via
 the re-export shim in :mod:`utilities`.

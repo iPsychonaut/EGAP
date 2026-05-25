@@ -7,7 +7,7 @@ Backwards-compatibility re-export shim.
 
 Historical ``utilities.py`` (Aug 2023 - Sep 2025) contained subprocess
 helpers, logging globals, filesystem / FASTA-FASTQ helpers, and the
-per-sample CSV driver in a single ~750-line module.  In v3.4.0 these
+per-sample CSV driver in a single ~750-line module.  In v3.4.1 these
 were split into four focused modules so each concern can evolve
 independently and so the dependency direction is explicit:
 

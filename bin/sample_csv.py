@@ -7,7 +7,7 @@ Per-sample CSV-row helpers, statistics dictionary, NanoPlot parsers,
 long-read selection logic, and the typed ``SampleContext`` /
 ``AssemblerStage`` contracts.
 
-Extracted from :mod:`utilities` in v3.4.0.  Hosts everything that
+Extracted from :mod:`utilities` in v3.4.1.  Hosts everything that
 operates on a single row of the master sample-driver CSV.  Depends on
 :mod:`fs` for :func:`to_abs`.
 
@@ -283,7 +283,7 @@ class AssemblerStage(Protocol):
     is primarily intended for static type-checkers
     (``mypy --strict``).  Adding ``-> AssemblerStage`` annotations to
     the orchestrator's dispatch table is the cheapest way to lock in
-    the convention identified by the v3.4.0 graphify pass.
+    the convention identified by the v3.4.1 graphify pass.
 
     Parameters (of ``__call__``)
     ----------------------------

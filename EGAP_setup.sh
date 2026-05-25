@@ -2,7 +2,7 @@
 # ===========================================================================
 # EGAP_setup.sh
 #
-# Installation script for the Entheome Genome Assembly Pipeline (EGAP) v3.4.0.
+# Installation script for the Entheome Genome Assembly Pipeline (EGAP) v3.4.1.
 # Installs Miniforge3 (if absent), creates the EGAP_env conda environment,
 # installs auxiliary tools (runner, quast resources), and optionally provisions
 # the Kraken2 16 GB Standard database used for read decontamination.
@@ -27,7 +27,7 @@
 #                      pointing at the chosen Kraken2 database directory.
 #
 # Author:  Ian Bollinger (ian.bollinger@entheome.org)
-# Version: 3.4.0
+# Version: 3.4.1
 # Updated: 2026-04-16
 # ===========================================================================
 set -euo pipefail
@@ -252,7 +252,7 @@ export_kraken2_var() {
 # Main
 # ---------------------------------------------------------------------------
 main() {
-    log_info "EGAP v3.4.0 setup starting."
+    log_info "EGAP v3.4.1 setup starting."
     detect_platform
     install_miniforge
 
@@ -263,7 +263,7 @@ main() {
     install_aux_tools
     provision_kraken2
 
-    log_pass "EGAP v3.4.0 installation complete."
+    log_pass "EGAP v3.4.1 installation complete."
     echo
     echo "Next steps:"
     echo "  1. Open a new shell (or run: source ~/.bashrc)"

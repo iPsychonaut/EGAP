@@ -29,7 +29,7 @@
 
 ## Overview
 
-EGAP (Entheome Genome Assembly Pipeline) v3.4.0 is a versatile bioinformatics pipeline for hybrid genome assembly using Oxford Nanopore (ONT), Illumina, and PacBio data. It evaluates assemblies based on BUSCO Completeness (Single + Duplicated), Assembly Contig Count, and N50, with additional metrics like L50 and GC-content available via QUAST.
+EGAP (Entheome Genome Assembly Pipeline) v3.4.1 is a versatile bioinformatics pipeline for hybrid genome assembly using Oxford Nanopore (ONT), Illumina, and PacBio data. It evaluates assemblies based on BUSCO Completeness (Single + Duplicated), Assembly Contig Count, and N50, with additional metrics like L50 and GC-content available via QUAST.
 
 1. **Preprocess & QC Reads**
    - Merges multiple FASTQ files (`ont_combine_fastq_gz`, `illumina_extract_and_check`).
@@ -38,7 +38,7 @@ EGAP (Entheome Genome Assembly Pipeline) v3.4.0 is a versatile bioinformatics pi
    - Filters and corrects ONT reads (Filtlong, Ratatosk).
    - Generates Read Metrics (FastQC, NanoPlot, BBMap insert-size stats).
 
-2. **Read Decontamination** *(new in v3.4.0)*
+2. **Read Decontamination** *(new in v3.4.1)*
    - Classifies ONT/PacBio long reads with **Kraken2** against a user-supplied database.
    - Retains reads matching the target organism's domain (eukarya / bacteria / archaea); always keeps unclassified reads.
    - Preserves all reads — kept reads continue to the assembler, removed reads are archived as a compressed `.fastq.gz` alongside the original pre-decontamination backup.
@@ -61,7 +61,7 @@ EGAP (Entheome Genome Assembly Pipeline) v3.4.0 is a versatile bioinformatics pi
    - Scaffolds and patches with RagTag (if reference provided).
    - Closes gaps with TGS-GapCloser (ONT) or Abyss-Sealer (Illumina-only).
 
-6. **Assembly Decontamination** *(new in v3.4.0)*
+6. **Assembly Decontamination** *(new in v3.4.1)*
    - Classifies every contig in the final curated assembly with **Tiara** (deep-learning classifier).
    - Removes non-target sequences (e.g. bacterial contamination from fungal assemblies).
    - Preserves removed sequences as a compressed `.fasta.gz` for auditability.
@@ -115,7 +115,7 @@ Optimized for fungal genomes, EGAP is adaptable to other organisms by adjusting 
 | Free disk space | ~150 GB per sample | 500 GB+ for multi-sample runs |
 | Kraken2 database space | ~75 GB (uncompressed 16 GB Standard index plus hash files) | same |
 
-A single EGAP run can peak at ~300 GB of intermediate files before cleanup; see [File Management & Storage Optimization](#file-management--storage-optimization) for how v3.4.0 reclaims this space as the pipeline progresses.
+A single EGAP run can peak at ~300 GB of intermediate files before cleanup; see [File Management & Storage Optimization](#file-management--storage-optimization) for how v3.4.1 reclaims this space as the pipeline progresses.
 
 ### Software
 
@@ -151,9 +151,9 @@ The following tools are installed:
 - [QUAST](https://github.com/ablab/quast)
 - [BUSCO](https://gitlab.com/ezlab/busco)
 - [Compleasm](https://github.com/bioinformatics-centre/compleasm)
-- [Kraken2](https://github.com/DerrickWood/kraken2) *(new in v3.4.0 — read decontamination)*
-- [Tiara](https://github.com/ibe-uw/tiara) *(new in v3.4.0 — assembly decontamination)*
-- [pigz](https://zlib.net/pigz/) *(new in v3.4.0 — parallel FASTA/FASTQ compression)*
+- [Kraken2](https://github.com/DerrickWood/kraken2) *(new in v3.4.1 — read decontamination)*
+- [Tiara](https://github.com/ibe-uw/tiara) *(new in v3.4.1 — assembly decontamination)*
+- [pigz](https://zlib.net/pigz/) *(new in v3.4.1 — parallel FASTA/FASTQ compression)*
 
 ##### Install Via Bash (recommended for most users):
 The shell script `EGAP_setup.sh` at the repo root installs Miniforge3 (if absent), creates the `EGAP_env` conda environment, installs auxiliary tools, and optionally provisions the Kraken2 database:
@@ -184,7 +184,7 @@ The script appends `export KRAKEN2_DB=<chosen path>` to `~/.bashrc` and `~/.zshr
 Build the image (the bundled `Dockerfile` produces a multi-env image with EGAP, EGEP, and Funannotate):
 
 ```bash
-docker build -t entheome_ecosystem:3.4.0 .
+docker build -t entheome_ecosystem:3.4.1 .
 ```
 
 The default `ENTRYPOINT` runs EGAP directly, so you can treat the image like the `EGAP` CLI. Bind-mount your data and Kraken2 database at runtime:
@@ -194,7 +194,7 @@ docker run --rm \
     -e KRAKEN2_DB=/kraken2_db \
     -v /path/to/kraken2_db:/kraken2_db:ro \
     -v /path/to/data:/data \
-    entheome_ecosystem:3.4.0 \
+    entheome_ecosystem:3.4.1 \
     --input_csv /data/samples.csv \
     --output_dir /data/output \
     --cpu_threads 16 --ram_gb 64
@@ -205,7 +205,7 @@ Interactive shell with all three conda envs on PATH (override the entrypoint):
 ```bash
 docker run --rm -it --entrypoint bash \
     -v /path/to/data:/data \
-    entheome_ecosystem:3.4.0
+    entheome_ecosystem:3.4.1
 ```
 
 ##### Install Via Nextflow/Singularity:
@@ -282,12 +282,12 @@ Preprocess  →  Decontaminate reads  →  Assemble  →  Compare  →  Polish  
 | Stage | What it does |
 |-------|--------------|
 | **Preprocess** | Merges raw FASTQs; trims adapters (Trimmomatic, BBDuk); deduplicates (Clumpify); filters/corrects ONT reads (Filtlong, Ratatosk); runs FastQC/NanoPlot metrics. |
-| **Decontaminate reads** *(new in v3.4.0)* | Classifies long reads with Kraken2 against a user-supplied database; keeps target-domain + unclassified reads; archives removed reads. Non-fatal — skipped if `KRAKEN2_DB` is unset. |
+| **Decontaminate reads** *(new in v3.4.1)* | Classifies long reads with Kraken2 against a user-supplied database; keeps target-domain + unclassified reads; archives removed reads. Non-fatal — skipped if `KRAKEN2_DB` is unset. |
 | **Assemble** | Runs the relevant assembler(s) for the sample's read types (see [Supported Sequencing Strategies](#supported-sequencing-strategies)). |
 | **Compare** | Evaluates every candidate assembly with BUSCO/Compleasm + QUAST and picks the best by completeness, N50, and contig count. |
 | **Polish** | Racon (×2 with long reads) and Pilon (with Illumina); removes haplotigs with purge_dups if long reads are present. |
 | **Curate** | Scaffolds with RagTag (if reference provided) and gap-fills with TGS-GapCloser (ONT) or Abyss-Sealer (Illumina). |
-| **Decontaminate assembly** *(new in v3.4.0)* | Classifies every contig with Tiara (deep-learning) and removes non-target sequence; archives removed contigs. |
+| **Decontaminate assembly** *(new in v3.4.1)* | Classifies every contig with Tiara (deep-learning) and removes non-target sequence; archives removed contigs. |
 | **Assess & Report** | Final BUSCO/Compleasm + QUAST; classifies assembly as **AMAZING / GREAT / OK / POOR**; emits HTML report and per-sample log. |
 
 <div align="center">
@@ -359,7 +359,7 @@ EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64 --tui --dry_run
 
 ## TUI Interface
 
-EGAP v3.4.0 includes a full terminal user interface built with [Textual](https://github.com/Textualize/textual). It provides a live view of pipeline progress without leaving the terminal.
+EGAP v3.4.1 includes a full terminal user interface built with [Textual](https://github.com/Textualize/textual). It provides a live view of pipeline progress without leaving the terminal.
 
 ### Launching
 
@@ -402,7 +402,7 @@ Both launch modes support `--dry_run`.
 
 ## File Management & Storage Optimization
 
-A single EGAP run can grow from ~60 GB to 300+ GB of intermediate files that are not needed after each step completes. v3.4.0 introduces automatic cleanup via the centralized `bin/file_manager.py` module.
+A single EGAP run can grow from ~60 GB to 300+ GB of intermediate files that are not needed after each step completes. v3.4.1 introduces automatic cleanup via the centralized `bin/file_manager.py` module.
 
 ### What Gets Cleaned Up
 
@@ -548,7 +548,7 @@ The CSV file should have the following header and columns:
 - **EST_SIZE**: Estimated genome size (e.g., `55m` for 55 Mbp, `5g` for 5 Gbp).
 - **REF_SEQ_GCA**: Curated Genome Assembly (GCA) Accession number (or `None`).
 - **REF_SEQ**: Path to the reference genome for assembly scaffolding (or `None`).
-- **KRAKEN2_DB** *(optional, new in v3.4.0)*: Path to a Kraken2 database for read decontamination. Overrides the `KRAKEN2_DB` environment variable. Omit the column entirely or use `None` to rely on the env var or skip decontamination.
+- **KRAKEN2_DB** *(optional, new in v3.4.1)*: Path to a Kraken2 database for read decontamination. Overrides the `KRAKEN2_DB` environment variable. Omit the column entirely or use `None` to rely on the env var or skip decontamination.
 
 ### Notes
 
@@ -676,7 +676,7 @@ MaSuRCA's CABOG stage is sensitive to thread count and RAM. Try reducing `--cpu_
 
 Tiara's classifier is kingdom-aware. Double-check that `ORGANISM_KINGDOM` in the CSV matches the sample (for fungi use `Funga`, not `Flora` or `Fauna`). If the kingdom is correct, inspect `{sample_dir}/decontamination/tiara_output.txt` — a genuinely contaminated assembly can legitimately lose more than half its contigs. The removed sequences are preserved as `{sample_id}_tiara_removed.fasta.gz` for manual review.
 
-**Q: Disk fills up during a run even though v3.4.0 is supposed to auto-clean intermediates.**
+**Q: Disk fills up during a run even though v3.4.1 is supposed to auto-clean intermediates.**
 
 Cleanup only fires after the downstream output is confirmed present (a safety guard). If a step fails, intermediates are retained so you can resume without re-running expensive upstream work. Use `--dry_run` to audit what *would* be removed on a fresh run, and check the per-sample log for `Removed intermediate file (X GB freed)` entries to confirm cleanup is happening. For a stalled run, inspect `{output_dir}/{sample_id}/` for the largest directories — `masurca_assembly/CA/` and `spades_assembly/K*/` are the usual culprits if a run aborted mid-assembly.
 

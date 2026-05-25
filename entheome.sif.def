@@ -18,8 +18,8 @@ From: debian:buster
 %labels
     Author       Ian Bollinger <ian.bollinger@entheome.org>
     Maintainer   Ian M Bollinger <ian.bollinger@entheome.org>
-    Version      3.4.0
-    Description  Entheome ecosystem (EGAP v3.4.0 + EGEP + Funannotate) Singularity image
+    Version      3.4.1
+    Description  Entheome ecosystem (EGAP v3.4.1 + EGEP + Funannotate) Singularity image
 
 %post
     export DEBIAN_FRONTEND=noninteractive
@@ -253,7 +253,7 @@ PY
     export ZOE="/usr/share/snap"
     export USER="me"
     source /opt/conda/etc/profile.d/conda.sh
-    # EGAP v3.4.0 — override at runtime via --env or bind-mount
+    # EGAP v3.4.1 — override at runtime via --env or bind-mount
     # e.g.: singularity run --env KRAKEN2_DB=/kraken2_db -B /host/db:/kraken2_db entheome.sif
     export KRAKEN2_DB="${KRAKEN2_DB:-}"
     export PYTHONUNBUFFERED=1
@@ -280,7 +280,7 @@ PY
     exec "$@"
 
 %help
-    Entheome ecosystem Singularity image (EGAP v3.4.0 + EGEP + Funannotate).
+    Entheome ecosystem Singularity image (EGAP v3.4.1 + EGEP + Funannotate).
 
     Three conda environments are baked in:
       EGAP_env         — genome assembly pipeline (primary)
@@ -339,7 +339,7 @@ PY
 
     Activate a specific conda env:
       source /opt/conda/etc/profile.d/conda.sh
-      conda activate EGAP_env         # for EGAP v3.4.0 assembly pipeline
+      conda activate EGAP_env         # for EGAP v3.4.1 assembly pipeline
       conda activate EGEP_env         # for annotation helpers
       conda activate funannotate_env  # for Funannotate
 

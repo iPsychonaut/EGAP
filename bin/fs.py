@@ -5,7 +5,7 @@ fs.py
 
 Filesystem, path, and FASTA/FASTQ I/O helpers for EGAP modules.
 
-Extracted from :mod:`utilities` in v3.4.0.  Hosts path-normalisation,
+Extracted from :mod:`utilities` in v3.4.1.  Hosts path-normalisation,
 FASTA validation, parallel gzip wrappers (``pigz``), MD5 verification,
 base-count tallies, coverage calculation, and a small move helper.
 

@@ -5,7 +5,7 @@ log.py
 
 Logging helpers (file + ANSI-coloured stdout) for EGAP modules.
 
-Extracted from :mod:`utilities` in v3.4.0.  Module-level
+Extracted from :mod:`utilities` in v3.4.1.  Module-level
 ``DEFAULT_LOG_FILE`` and ``ENVIRONMENT_TYPE`` singletons are set by
 :func:`initialize_logging_environment` and read by :func:`log_print`,
 so callers can ``log_print(msg)`` without threading a log handle
