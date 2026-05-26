@@ -117,7 +117,17 @@ def log_print(input_message, log_file=None):
         with open(log_file, "a") as file:
             print(message, file=file)
     except TypeError:
+        # log_file was None (initialize_logging_environment never ran).
         print(f"UNLOGGED ERROR:\tUnable to load the log file provided: {log_file}")
+    except (FileNotFoundError, OSError) as exc:
+        # Defensive: a stale relative path (chdir'd subprocess) or a
+        # transient FS hiccup should never crash a calling pipeline
+        # stage that's just trying to log progress.  Fall back to stderr
+        # so the message is at least visible in pipeline.log.
+        print(
+            f"UNLOGGED ERROR:\tCould not write to {log_file}: {exc}.  "
+            f"Original message follows:\n  {message}"
+        )
     color_code = COLORS.get(print_color, COLORS["white"])
     print(f"{color_code}{message}{COLORS['reset']}")
 
@@ -164,6 +174,13 @@ def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     else:
         print(f"UNLOGGED ERROR:\tUnsupported OS: {os_name}")
         return
+    # Anchor the log path to its absolute form so a later subprocess that
+    # ``chdir``s (e.g. ``assemble_masurca`` running ``assemble.sh`` from
+    # the ``masurca_assembly`` subdir) can still resolve DEFAULT_LOG_FILE.
+    # Without this, ``log_print`` raises FileNotFoundError when invoked
+    # after any chdir, which masks the real per-stage error message and
+    # crashes graceful-recovery paths that depend on logging.
+    input_file_path = os.path.abspath(input_file_path)
     print(input_file_path)
     run_log = generate_log_file(input_file_path, use_numerical_suffix=False)
     DEFAULT_LOG_FILE = run_log

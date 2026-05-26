@@ -19,6 +19,7 @@ import os
 import sys
 import glob
 import shutil
+import zipfile
 from typing import Optional
 
 import pandas as pd
@@ -160,9 +161,19 @@ def preprocess_refseq(
         if not pkg_zip.exists():
             raise FileNotFoundError(f"NCBI download failed: {pkg_zip} not found.")
 
-        # 2) Unzip in-place under refseq_dir
-        unzip_cmd = f"cd '{refseq_dir}' && unzip -o ncbi_dataset.zip -d ."
-        _ = run_subprocess_cmd(unzip_cmd, shell_check=True)
+        # 2) Unzip in-place under refseq_dir using Python's stdlib (no system
+        #    ``unzip`` dep -- some minimal Linux installs and most WSL Ubuntu
+        #    images ship without it, and adding a hard system dependency just
+        #    for NCBI datasets archives is unnecessary when zipfile is built
+        #    into the interpreter).
+        try:
+            with zipfile.ZipFile(str(pkg_zip)) as zf:
+                zf.extractall(str(refseq_dir))
+            print(f"PASS:\tExtracted {pkg_zip.name} via zipfile to {refseq_dir}")
+        except zipfile.BadZipFile as exc:
+            raise FileNotFoundError(
+                f"NCBI dataset archive is corrupt or not a valid zip: {pkg_zip} ({exc})"
+            )
 
         if not gca_dir.exists():
             raise FileNotFoundError(f"Expected unpack dir not found: {gca_dir}")
