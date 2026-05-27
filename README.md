@@ -41,7 +41,7 @@ EGAP (Entheome Genome Assembly Pipeline) v3.4.1 is a versatile bioinformatics pi
 2. **Read Decontamination** *(new in v3.4.1)*
    - Classifies ONT/PacBio long reads with **Kraken2** against a user-supplied database.
    - Retains reads matching the target organism's domain (eukarya / bacteria / archaea); always keeps unclassified reads.
-   - Preserves all reads — kept reads continue to the assembler, removed reads are archived as a compressed `.fastq.gz` alongside the original pre-decontamination backup.
+   - Preserves all reads: kept reads continue to the assembler, and removed reads are archived as a compressed `.fastq.gz` alongside the original pre-decontamination backup.
    - Non-fatal: skipped gracefully when no Kraken2 database is configured.
 
 3. **Assembly**
@@ -120,7 +120,7 @@ A single EGAP run can peak at ~300 GB of intermediate files before cleanup; see 
 ### Software
 
 - **OS:** Linux x86_64 (primary target; tested on Debian/Ubuntu). macOS x86_64/arm64 is supported by `EGAP_setup.sh` but some assemblers are Linux-only.
-- **Python:** 3.8 (EGAP pins to `>=3.8,<3.9` because several dependencies — notably `tiara=1.0.3`, `numpy=1.19.5` — are incompatible with newer Python).
+- **Python:** 3.8 (EGAP pins to `>=3.8,<3.9` because several dependencies, notably `tiara=1.0.3` and `numpy=1.19.5`, are incompatible with newer Python).
 - **Conda:** Miniforge3, Miniconda3, or Anaconda (the installer uses Miniforge3).
 - **git, wget, tar** on PATH.
 - **Optional:** Docker ≥ 20.10 for container usage, Apptainer/Singularity ≥ 3.8 for HPC usage.
@@ -151,9 +151,9 @@ The following tools are installed:
 - [QUAST](https://github.com/ablab/quast)
 - [BUSCO](https://gitlab.com/ezlab/busco)
 - [Compleasm](https://github.com/bioinformatics-centre/compleasm)
-- [Kraken2](https://github.com/DerrickWood/kraken2) *(new in v3.4.1 — read decontamination)*
-- [Tiara](https://github.com/ibe-uw/tiara) *(new in v3.4.1 — assembly decontamination)*
-- [pigz](https://zlib.net/pigz/) *(new in v3.4.1 — parallel FASTA/FASTQ compression)*
+- [Kraken2](https://github.com/DerrickWood/kraken2) *(new in v3.4.1, read decontamination)*
+- [Tiara](https://github.com/ibe-uw/tiara) *(new in v3.4.1, assembly decontamination)*
+- [pigz](https://zlib.net/pigz/) *(new in v3.4.1, parallel FASTA/FASTQ compression)*
 
 ##### Install Via Bash (recommended for most users):
 The shell script `EGAP_setup.sh` at the repo root installs Miniforge3 (if absent), creates the `EGAP_env` conda environment, installs auxiliary tools, and optionally provisions the Kraken2 database:
@@ -162,10 +162,10 @@ The shell script `EGAP_setup.sh` at the repo root installs Miniforge3 (if absent
 git clone https://github.com/iPsychonaut/EGAP.git
 cd EGAP
 
-# Default — builds the Kraken2 standard 16 GB database from source (6-12 hrs).
+# Default: builds the Kraken2 standard 16 GB database from source (6-12 hrs).
 bash EGAP_setup.sh
 
-# Faster — download the pre-built 16 GB standard index (~1-2 hrs).
+# Faster: download the pre-built 16 GB standard index (~1-2 hrs).
 bash EGAP_setup.sh --kraken-prebuilt
 
 # Skip the Kraken2 step entirely (decontamination will be disabled until you
@@ -282,7 +282,7 @@ Preprocess  →  Decontaminate reads  →  Assemble  →  Compare  →  Polish  
 | Stage | What it does |
 |-------|--------------|
 | **Preprocess** | Merges raw FASTQs; trims adapters (Trimmomatic, BBDuk); deduplicates (Clumpify); filters/corrects ONT reads (Filtlong, Ratatosk); runs FastQC/NanoPlot metrics. |
-| **Decontaminate reads** *(new in v3.4.1)* | Classifies long reads with Kraken2 against a user-supplied database; keeps target-domain + unclassified reads; archives removed reads. Non-fatal — skipped if `KRAKEN2_DB` is unset. |
+| **Decontaminate reads** *(new in v3.4.1)* | Classifies long reads with Kraken2 against a user-supplied database; keeps target-domain + unclassified reads; archives removed reads. Non-fatal; skipped if `KRAKEN2_DB` is unset. |
 | **Assemble** | Runs the relevant assembler(s) for the sample's read types (see [Supported Sequencing Strategies](#supported-sequencing-strategies)). |
 | **Compare** | Evaluates every candidate assembly with BUSCO/Compleasm + QUAST and picks the best by completeness, N50, and contig count. |
 | **Polish** | Racon (×2 with long reads) and Pilon (with Illumina); removes haplotigs with purge_dups if long reads are present. |
@@ -295,7 +295,7 @@ Preprocess  →  Decontaminate reads  →  Assemble  →  Compare  →  Polish  
 </div>
 
 <div align="center">
-  <img src="resources/EGAP_pipeline_flow.svg" alt="EGAP Pipeline Flow — detailed stage diagram" width="800">
+  <img src="resources/EGAP_pipeline_flow.svg" alt="EGAP Pipeline Flow (detailed stage diagram)" width="800">
 </div>
 
 ## Supported Sequencing Strategies
@@ -311,7 +311,7 @@ Which assemblers EGAP invokes depends entirely on which read types you supply in
 | PacBio only | Flye, hifiasm | BUSCO, N50, contig count |
 | ONT + Illumina (hybrid) | MaSuRCA, SPAdes | BUSCO, N50, contig count |
 | ONT + Illumina + Reference | MaSuRCA, SPAdes | BUSCO, N50, contig count (scaffolded against reference) |
-| Assembly only (REF_SEQ / REF_SEQ_GCA, no reads) | *(QC-only mode — no assembly is run)* | BUSCO, QUAST metrics |
+| Assembly only (REF_SEQ / REF_SEQ_GCA, no reads) | *(QC-only mode; no assembly is run)* | BUSCO, QUAST metrics |
 
 > **Note:** ONT-only and ONT + Reference modes currently run Flye only. Additional ONT-focused assemblers (NextDenovo, Canu) are on the roadmap under [Future Improvements](#future-improvements).
 
@@ -365,7 +365,7 @@ EGAP v3.4.1 includes a full terminal user interface built with [Textual](https:/
 
 The TUI can be started in two ways:
 
-**Via the `--tui` flag on `EGAP.py` (recommended)** — all arguments pass through automatically:
+**Via the `--tui` flag on `EGAP.py` (recommended).** All arguments pass through automatically:
 ```bash
 EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64 --tui
 ```
@@ -388,10 +388,10 @@ Both launch modes support `--dry_run`.
 └─────────────────┴─────────────────────────────────┴──────────────────────────┘
 ```
 
-- **Live Log** — real-time streaming of all subprocess output, with numpy API noise filtered out.
-- **Step Progress Table** — one row per sample × step; cells update from `PENDING → RUNNING → PASS/FAIL` as each step completes.
-- **CPU / RAM Monitor** — per-core utilization history bars and live RAM/swap usage, refreshed every 0.5 s.
-- **Settings Panel** — all pipeline settings pulled from `EGAP.py`'s single source of truth, auto-scrolling through the full list.
+- **Live Log:** real-time streaming of all subprocess output, with numpy API noise filtered out.
+- **Step Progress Table:** one row per sample × step; cells update from `PENDING → RUNNING → PASS/FAIL` as each step completes.
+- **CPU / RAM Monitor:** per-core utilization history bars and live RAM/swap usage, refreshed every 0.5 s.
+- **Settings Panel:** all pipeline settings pulled from `EGAP.py`'s single source of truth, auto-scrolling through the full list.
 
 ### Keyboard Shortcuts
 
@@ -456,7 +456,7 @@ Each row in the input CSV gets its own log file written in real time throughout 
 
 ## Decontamination
 
-### Read Decontamination (Kraken2 — pre-assembly)
+### Read Decontamination (Kraken2, pre-assembly)
 
 Runs after ONT/PacBio preprocessing and before assembly. Classifies every read against a Kraken2 database and partitions them by domain.
 
@@ -474,7 +474,7 @@ Runs after ONT/PacBio preprocessing and before assembly. Classifies every read a
 1. `KRAKEN2_DB` environment variable
 2. `KRAKEN2_DB` column in the input CSV
 
-If neither is set the step is skipped with a `WARN` — it is non-fatal.
+If neither is set the step is skipped with a `WARN` and the pipeline continues; it is non-fatal.
 
 **Output files** (all in `{species_dir}/kraken2_reads/`):
 
@@ -487,7 +487,7 @@ If neither is set the step is skipped with a `WARN` — it is non-fatal.
 
 The original pre-decontamination reads are renamed to `_pre_decontam.fastq.gz` (compressed). The decontaminated reads overwrite the `_highest_mean_qual_long_reads.fastq` path that all assemblers already expect, so no assembler changes are needed.
 
-### Assembly Decontamination (Tiara — post-assembly)
+### Assembly Decontamination (Tiara, post-assembly)
 
 Runs after curation and before final QC. Classifies every contig using Tiara's deep-learning model.
 
@@ -512,7 +512,7 @@ Runs after curation and before final QC. Classifies every contig using Tiara's d
 
 The final decontaminated assembly is written to `{sample_dir}/{sample_id}_decontaminated.fasta` (uncompressed, for downstream tools).
 
-A warning is issued if more than 50% of sequences are removed — this may indicate an incorrect kingdom assignment or an unexpected Tiara result.
+A warning is issued if more than 50% of sequences are removed, which may indicate an incorrect kingdom assignment or an unexpected Tiara result.
 
 ## CSV Generation
 
@@ -664,29 +664,29 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 
 ## Troubleshooting & FAQ
 
-**Q: The pipeline logs `WARN: Kraken2 database not found — skipping read decontamination.` Is that a problem?**
+**Q: The pipeline logs `WARN: No Kraken2 database found ... Skipping read decontamination.` Is that a problem?**
 
-No — read decontamination is non-fatal by design. If `KRAKEN2_DB` is unset or points at an invalid directory, the step is skipped with a warning and the pipeline continues. To enable it, set `KRAKEN2_DB` to a valid database path (see [Installation → Kraken2](#kraken2-database-setup-required-for-read-decontamination)) or add a `KRAKEN2_DB` column to your input CSV.
+No. Read decontamination is non-fatal by design. If `KRAKEN2_DB` is unset or points at an invalid directory, the step is skipped with a warning and the pipeline continues. To enable it, set `KRAKEN2_DB` to a valid database path (see [Installation, Kraken2](#kraken2-database-setup-required-for-read-decontamination)) or add a `KRAKEN2_DB` column to your input CSV.
 
 **Q: MaSuRCA fails with a CABOG / unitigger error partway through assembly.**
 
-MaSuRCA's CABOG stage is sensitive to thread count and RAM. Try reducing `--cpu_threads` (for example from 32 → 16) and ensuring the machine has at least 2 × estimated genome size in free RAM. Also confirm that `EST_SIZE` in the CSV is realistic — a wildly wrong value (e.g. `50m` for a 5 Gbp genome) can trigger unitigger failures.
+MaSuRCA's CABOG stage is sensitive to thread count and RAM. Try reducing `--cpu_threads` (for example from 32 to 16) and ensuring the machine has at least 2 × estimated genome size in free RAM. Also confirm that `EST_SIZE` in the CSV is realistic; a wildly wrong value (e.g. `50m` for a 5 Gbp genome) can trigger unitigger failures.
 
 **Q: Tiara removes >50% of my contigs and the warning fires.**
 
-Tiara's classifier is kingdom-aware. Double-check that `ORGANISM_KINGDOM` in the CSV matches the sample (for fungi use `Funga`, not `Flora` or `Fauna`). If the kingdom is correct, inspect `{sample_dir}/decontamination/tiara_output.txt` — a genuinely contaminated assembly can legitimately lose more than half its contigs. The removed sequences are preserved as `{sample_id}_tiara_removed.fasta.gz` for manual review.
+Tiara's classifier is kingdom-aware. Double-check that `ORGANISM_KINGDOM` in the CSV matches the sample (for fungi use `Funga`, not `Flora` or `Fauna`). If the kingdom is correct, inspect `{sample_dir}/decontamination/tiara_output.txt`; a genuinely contaminated assembly can legitimately lose more than half its contigs. The removed sequences are preserved as `{sample_id}_tiara_removed.fasta.gz` for manual review.
 
 **Q: Disk fills up during a run even though v3.4.1 is supposed to auto-clean intermediates.**
 
-Cleanup only fires after the downstream output is confirmed present (a safety guard). If a step fails, intermediates are retained so you can resume without re-running expensive upstream work. Use `--dry_run` to audit what *would* be removed on a fresh run, and check the per-sample log for `Removed intermediate file (X GB freed)` entries to confirm cleanup is happening. For a stalled run, inspect `{output_dir}/{sample_id}/` for the largest directories — `masurca_assembly/CA/` and `spades_assembly/K*/` are the usual culprits if a run aborted mid-assembly.
+Cleanup only fires after the downstream output is confirmed present (a safety guard). If a step fails, intermediates are retained so you can resume without re-running expensive upstream work. Use `--dry_run` to audit what *would* be removed on a fresh run, and check the per-sample log for `Removed intermediate file (X GB freed)` entries to confirm cleanup is happening. For a stalled run, inspect `{output_dir}/{sample_id}/` for the largest directories; `masurca_assembly/CA/` and `spades_assembly/K*/` are the usual culprits if a run aborted mid-assembly.
 
 **Q: The TUI shows `PENDING` forever on one sample while others progress.**
 
-EGAP processes samples sequentially by default — the TUI renders all samples up front but only the current one actively runs. To parallelise across samples, run multiple EGAP invocations with separate CSVs.
+EGAP processes samples sequentially by default. The TUI renders all samples up front but only the current one actively runs. To parallelise across samples, run multiple EGAP invocations with separate CSVs.
 
 **Q: `docker build` fails pulling packages from bioconda.**
 
-Bioconda occasionally throws solver conflicts when transitive dependencies shift. If a build fails mid-env-create, re-run — conda's solver is non-deterministic and a retry often succeeds. If it persistently fails, check the build log for the conflicting package and file an issue; the Dockerfile's version pins (numpy=1.19.5, tiara=1.0.3, kraken2=2.1.6, flye=2.9.5, etc.) are load-bearing and documented inline.
+Bioconda occasionally throws solver conflicts when transitive dependencies shift. If a build fails mid-env-create, just re-run; conda's solver is non-deterministic and a retry often succeeds. If it persistently fails, check the build log for the conflicting package and file an issue. The Dockerfile's version pins (numpy=1.19.5, tiara=1.0.3, kraken2=2.1.6, flye=2.9.5, etc.) are load-bearing and documented inline.
 
 **Q: Singularity build fails on an HPC with "operation not permitted".**
 
@@ -694,11 +694,11 @@ Most HPCs disable `--fakeroot` and require pre-built images. Build the SIF on a 
 
 **Q: EGAP hangs at "Downloading Compleasm lineage…" or "Downloading from SRA…".**
 
-Network-bound steps have no built-in timeout. Check outbound connectivity to NCBI (`nslookup sra-download.ncbi.nlm.nih.gov`) and to `https://busco-data.ezlab.org`. On shared HPCs a proxy may be needed — set `HTTPS_PROXY` before invoking EGAP.
+Network-bound steps have no built-in timeout. Check outbound connectivity to NCBI (`nslookup sra-download.ncbi.nlm.nih.gov`) and to `https://busco-data.ezlab.org`. On shared HPCs a proxy may be needed; set `HTTPS_PROXY` before invoking EGAP.
 
 **Q: A hybrid (ONT + Illumina) run fails curation or assembly decontamination with `ERROR: FASTA file contains non-nucleotide sequences`.**
 
-Pilon emits IUPAC ambiguity codes (notably `K` for G/T and `R` for A/G) at positions where short- and long-read evidence disagree, so polished hybrid assemblies are not pure `ATCGN`. As of v3.4.1 the FASTA validator accepts the full IUPAC nucleotide alphabet (`ACGTUNRYSWKMBDHV`) and prints the offending characters when something genuinely invalid appears. If you still see this error on v3.4.1+, the diagnostic will list the unexpected characters — that points to true corruption rather than expected ambiguity.
+Pilon emits IUPAC ambiguity codes (notably `K` for G/T and `R` for A/G) at positions where short- and long-read evidence disagree, so polished hybrid assemblies are not pure `ATCGN`. As of v3.4.1 the FASTA validator accepts the full IUPAC nucleotide alphabet (`ACGTUNRYSWKMBDHV`) and prints the offending characters when something genuinely invalid appears. If you still see this error on v3.4.1+, the diagnostic will list the unexpected characters, which points to true corruption rather than expected ambiguity.
 
 ## Future Improvements
 
