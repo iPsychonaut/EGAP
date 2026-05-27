@@ -66,19 +66,32 @@ def to_abs(path):
 # --------------------------------------------------------------
 # Validate that a FASTA file exists and looks well-formed
 # --------------------------------------------------------------
+# IUPAC nucleotide alphabet -- the set of characters that may legitimately
+# appear in a polished assembly.  Pilon emits ambiguity codes (K, R, Y, S,
+# W, M, B, D, H, V) at positions where read evidence is mixed; rejecting
+# them would mean rejecting every Pilon-polished assembly that has any
+# residual uncertainty after polishing.  T and U are both allowed so the
+# same validator works for RNA-derived assemblies too.
+_VALID_NUCLEOTIDES = set("ACGTUNRYSWKMBDHV")
+
+
 def validate_fasta(file_path):
     """Validate that a FASTA file exists, is non-empty, and parses as nucleotide.
 
     The canonical FASTA sanity check used across the pipeline: rejects
     empty/missing paths, suspiciously small files (<100 bytes), records
     with empty sequences, and records that contain characters outside
-    ``ATCGN`` (case-insensitive).
+    the IUPAC nucleotide alphabet (case-insensitive).
 
     Notes
     -----
-    Only the first record is inspected once it parses successfully -
-    matching the historical fast-path behaviour of the per-module copies
-    this function replaces.
+    The accepted character set is the full IUPAC nucleotide alphabet
+    (``A C G T U N R Y S W K M B D H V``).  Earlier versions of this
+    validator accepted only ``ATCGN`` and so rejected every Pilon-
+    polished hybrid assembly (Pilon emits ``K``/``R`` ambiguity codes
+    at mixed-evidence positions).  Only the first record is inspected
+    once it parses successfully -- matching the historical fast-path
+    behaviour of the per-module copies this function replaces.
 
     Parameters
     ----------
@@ -90,9 +103,12 @@ def validate_fasta(file_path):
     -------
     bool
         ``True`` when the file exists, is >=100 bytes, and the first
-        record's sequence is non-empty and contains only ``ATCGN``
-        characters.  ``False`` in every failure case (missing file,
-        parse error, etc.); diagnostics are printed to stdout.
+        record's sequence is non-empty and contains only IUPAC
+        nucleotide characters.  ``False`` in every failure case
+        (missing file, parse error, etc.); diagnostics are printed to
+        stdout, including the offending character set when validation
+        fails on alphabet grounds so callers can see *which* code was
+        unexpected.
     """
     if not file_path:
         print("ERROR:\tFASTA path is empty/None")
@@ -109,8 +125,13 @@ def validate_fasta(file_path):
                 if not record.seq:
                     print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
                     return False
-                if not all(c.upper() in "ATCGN" for c in record.seq):
-                    print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
+                seq_chars = set(str(record.seq).upper())
+                bad = seq_chars - _VALID_NUCLEOTIDES
+                if bad:
+                    print(
+                        f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path} "
+                        f"(unexpected chars: {sorted(bad)})"
+                    )
                     return False
                 return True
     except Exception as e:
