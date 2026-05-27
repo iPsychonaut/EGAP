@@ -696,6 +696,10 @@ Most HPCs disable `--fakeroot` and require pre-built images. Build the SIF on a 
 
 Network-bound steps have no built-in timeout. Check outbound connectivity to NCBI (`nslookup sra-download.ncbi.nlm.nih.gov`) and to `https://busco-data.ezlab.org`. On shared HPCs a proxy may be needed — set `HTTPS_PROXY` before invoking EGAP.
 
+**Q: A hybrid (ONT + Illumina) run fails curation or assembly decontamination with `ERROR: FASTA file contains non-nucleotide sequences`.**
+
+Pilon emits IUPAC ambiguity codes (notably `K` for G/T and `R` for A/G) at positions where short- and long-read evidence disagree, so polished hybrid assemblies are not pure `ATCGN`. As of v3.4.1 the FASTA validator accepts the full IUPAC nucleotide alphabet (`ACGTUNRYSWKMBDHV`) and prints the offending characters when something genuinely invalid appears. If you still see this error on v3.4.1+, the diagnostic will list the unexpected characters — that points to true corruption rather than expected ambiguity.
+
 ## Future Improvements
 
 - **Enhanced Support for Diverse Genomes**: Optimize pipeline parameters for non-fungal genomes to improve versatility.
