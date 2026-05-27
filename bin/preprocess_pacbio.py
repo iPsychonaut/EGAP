@@ -54,6 +54,12 @@ def preprocess_pacbio(
 
     ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
     current = ctx.current_series
+    # IMPORTANT: also pull sample_stats_dict out of the context, otherwise the
+    # later ``sample_stats_dict = nanoplot_qc_reads(..., sample_stats_dict)``
+    # call sites would trip Python's "local variable referenced before
+    # assignment" rule (the LHS assignment marks the name local for the whole
+    # function, hiding any outer ctx attribute access on the RHS).
+    sample_stats_dict = ctx.sample_stats_dict
 
     pacbio_sra       = current["PACBIO_SRA"]
     pacbio_raw_reads = current["PACBIO_RAW_READS"]
