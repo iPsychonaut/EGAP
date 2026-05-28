@@ -6,6 +6,9 @@ compare_assemblies.py
 This script compares assemblies from MaSuRCA, SPAdes, Flye, and Hifiasm, selecting
 the best based on BUSCO completeness, contig count, and N50.
 
+Stage:
+    Best Initial Assembly Selection
+
 Created on Wed Aug 16 2023
 
 Updated on Wed Feb 25 2026
@@ -20,43 +23,9 @@ import glob
 import pandas as pd
 from pathlib import Path
 from collections import Counter
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, validate_fasta
 from Bio import SeqIO
 from qc_assessment import run_lineage_eval
-
-
-# --------------------------------------------------------------
-# Validate FASTA file
-# --------------------------------------------------------------
-def validate_fasta(file_path):
-    """Validate that a FASTA file exists, is non-empty, and contains valid nucleotide sequences.
-
-    Args:
-        file_path (str): Path to the FASTA file.
-
-    Returns:
-        bool: True if valid, False otherwise.
-    """
-    if not os.path.exists(file_path):
-        print(f"ERROR:\tFASTA file not found: {file_path}")
-        return False
-    if os.path.getsize(file_path) < 100:
-        print(f"ERROR:\tFASTA file is suspiciously small: {file_path}")
-        return False
-    try:
-        with open(file_path, "r") as f:
-            for record in SeqIO.parse(f, "fasta"):
-                if not record.seq:
-                    print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
-                    return False
-                if not all(c.upper() in "ATCGN" for c in record.seq):
-                    print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
-                    return False
-                return True
-    except Exception as e:
-        print(f"ERROR:\tInvalid FASTA format in {file_path}: {str(e)}")
-        return False
-    return False
 
 
 # --------------------------------------------------------------
@@ -152,14 +121,14 @@ def get_quast_stats(assembly, cpu_threads, sample_dir, assembler):
 # --------------------------------------------------------------
 # Compare and select best assembly
 # --------------------------------------------------------------
-def _first_existing(paths):
+def first_existing(paths):
     for p in paths:
         if p and os.path.exists(p) and os.path.getsize(p) > 100:
             return p
     return None
 
 
-def _ensure_dir(p):
+def ensure_dir(p):
     d = os.path.dirname(p)
     os.makedirs(d, exist_ok=True)
     return p
@@ -175,10 +144,10 @@ def discover_spades(sample_dir, sample_id):
     ]
     cands += glob.glob(os.path.join(base, "**", "scaffolds.fasta"), recursive=True)
     cands += glob.glob(os.path.join(base, "**", "contigs.fasta"), recursive=True)
-    src = _first_existing(cands)
+    src = first_existing(cands)
     if not src:
         return None
-    dst = _ensure_dir(os.path.join(base, f"{sample_id}_spades.fasta"))
+    dst = ensure_dir(os.path.join(base, f"{sample_id}_spades.fasta"))
     if os.path.abspath(src) != os.path.abspath(dst):
         shutil.copy(src, dst)
     return dst
@@ -195,10 +164,10 @@ def discover_masurca(sample_dir, sample_id):
     for ca in ca_dirs:
         cands.append(os.path.join(ca, "primary.genome.scf.fasta"))
         cands.append(os.path.join(ca, "9-terminator", "genome.scf.fasta"))
-    src = _first_existing(cands)
+    src = first_existing(cands)
     if not src:
         return None
-    dst = _ensure_dir(os.path.join(base, f"{sample_id}_masurca.fasta"))
+    dst = ensure_dir(os.path.join(base, f"{sample_id}_masurca.fasta"))
     if os.path.abspath(src) != os.path.abspath(dst):
         shutil.copy(src, dst)
     return dst
@@ -211,10 +180,10 @@ def discover_flye(sample_dir, sample_id):
         os.path.join(base, "assembly.fasta"),
     ]
     cands += glob.glob(os.path.join(base, "**", "assembly.fasta"), recursive=True)
-    src = _first_existing(cands)
+    src = first_existing(cands)
     if not src:
         return None
-    dst = _ensure_dir(os.path.join(base, f"{sample_id}_flye.fasta"))
+    dst = ensure_dir(os.path.join(base, f"{sample_id}_flye.fasta"))
     if os.path.abspath(src) != os.path.abspath(dst):
         shutil.copy(src, dst)
     return dst
@@ -229,10 +198,10 @@ def discover_hifiasm(sample_dir, sample_id):
     cands += glob.glob(os.path.join(base, "**", "*.p_ctg.fa"), recursive=True)
     cands += glob.glob(os.path.join(base, "**", "*.p_ctg.fasta"), recursive=True)
     cands += glob.glob(os.path.join(base, "**", "*.fa"), recursive=True)
-    src = _first_existing(cands)
+    src = first_existing(cands)
     if not src:
         return None
-    dst = _ensure_dir(os.path.join(base, f"{sample_id}_hifiasm.fasta"))
+    dst = ensure_dir(os.path.join(base, f"{sample_id}_hifiasm.fasta"))
     if os.path.abspath(src) != os.path.abspath(dst):
         shutil.copy(src, dst)
     return dst
@@ -421,7 +390,9 @@ if __name__ == "__main__":
         print("Usage: python3 compare_assemblies.py <sample_id> <input_csv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
-        
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
+
     best_assembly = compare_assemblies(sys.argv[1],       # sample_id
                                       sys.argv[2],       # input_csv
                                       sys.argv[3],       # output_dir

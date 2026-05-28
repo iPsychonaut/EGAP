@@ -6,21 +6,36 @@ preprocess_refseq.py
 Prepare a standardized Reference Sequence FASTA for a given sample so downstream
 assemblies (polish/compare/QC) can consume a predictable file path and name.
 
+Stage:
+    Reference Sequence Acquisition (RefSeq / NCBI)
+
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on 2026-04-16
 
-@author: ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com
+Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, sys, glob, shutil
+import os
+import sys
+import glob
+import shutil
+import zipfile
+from typing import Optional
+
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context
 
 
 # --------------------------------------------------------------
 # Preprocess reference sequence data (ABSOLUTE-PATH SAFE)
 # --------------------------------------------------------------
-def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def preprocess_refseq(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Preprocess reference sequence data for the assembly pipeline.
 
     Behavior
@@ -39,18 +54,11 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     print(f"Preprocessing Reference Sequence assembly for {sample_id.split('-')[0]}...")
 
-    # --- Resolve critical paths to absolute early ---
-    input_csv_abs  = Path(input_csv).expanduser().resolve()
-    output_dir_abs = Path(output_dir).expanduser().resolve()
-    print(f"DEBUG - input_csv_abs  - {input_csv_abs}")
-    print(f"DEBUG - output_dir_abs - {output_dir_abs}")
-
-    # Load CSV & select current row
-    input_df = pd.read_csv(str(input_csv_abs))
-    print(f"DEBUG - input_df - {input_df}")
-
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    output_dir_abs = Path(ctx.output_dir)
+    print(f"DEBUG - input_csv  - {ctx.input_csv}")
+    print(f"DEBUG - output_dir - {output_dir_abs}")
+    current_series = ctx.current_series
 
     # Pull fields (normalize NaNs and literal "None"/"nan" strings → None)
     _NULLS = {"", "none", "nan", "null", "na"}
@@ -153,9 +161,19 @@ def preprocess_refseq(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         if not pkg_zip.exists():
             raise FileNotFoundError(f"NCBI download failed: {pkg_zip} not found.")
 
-        # 2) Unzip in-place under refseq_dir
-        unzip_cmd = f"cd '{refseq_dir}' && unzip -o ncbi_dataset.zip -d ."
-        _ = run_subprocess_cmd(unzip_cmd, shell_check=True)
+        # 2) Unzip in-place under refseq_dir using Python's stdlib (no system
+        #    ``unzip`` dep -- some minimal Linux installs and most WSL Ubuntu
+        #    images ship without it, and adding a hard system dependency just
+        #    for NCBI datasets archives is unnecessary when zipfile is built
+        #    into the interpreter).
+        try:
+            with zipfile.ZipFile(str(pkg_zip)) as zf:
+                zf.extractall(str(refseq_dir))
+            print(f"PASS:\tExtracted {pkg_zip.name} via zipfile to {refseq_dir}")
+        except zipfile.BadZipFile as exc:
+            raise FileNotFoundError(
+                f"NCBI dataset archive is corrupt or not a valid zip: {pkg_zip} ({exc})"
+            )
 
         if not gca_dir.exists():
             raise FileNotFoundError(f"Expected unpack dir not found: {gca_dir}")
@@ -195,6 +213,8 @@ if __name__ == "__main__":
         print("Usage: python3 preprocess_refseq.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", 
               file=sys.stderr)
         sys.exit(1)
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     # Log each argument
     for i, arg in enumerate(sys.argv):

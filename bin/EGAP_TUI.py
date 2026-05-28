@@ -24,6 +24,8 @@ python EGAP_TUI.py -csv /mnt/c/Users/theda/OneDrive/Desktop/EGAP/EGAP_TUI_test.c
 
 Created on Sun Feb 22 14:56:27 2026
 
+Updated on 2026-04-16
+
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 
@@ -104,9 +106,9 @@ class CpuThreadsHistoryWidget(Widget):
         psutil.cpu_percent(percpu=True)
 
     def on_mount(self) -> None:
-        self.set_interval(self.refresh_s, self._tick)
+        self.set_interval(self.refresh_s, self.tick)
 
-    def _tick(self) -> None:
+    def tick(self) -> None:
         percpu = psutil.cpu_percent(percpu=True)
         for i in range(min(len(percpu), self.n_cores)):
             ch, style = pct_to_block(percpu[i])
@@ -305,6 +307,9 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         self.log_buffer_max_lines = 5000  # adjust as you like
         self.log_buffer: deque[str] = deque(maxlen=self.log_buffer_max_lines)
 
+        # Persistent append log file (opened once output_dir is known in run_pipeline)
+        self.log_file = None
+
         self.params_auto_scroll = True
         self.params_scroll_dir = 1  # 1 = down, -1 = up
 
@@ -347,23 +352,6 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
     
         params_container.scroll_to(y=next_y, animate=False)
 
-    async def on_key(self, event) -> None:
-        # event is textual.events.Key in your run (repr shows Key(key='f2', ...))
-        parts = [
-            f"key={getattr(event, 'key', None)!r}",
-            f"name={getattr(event, 'name', None)!r}",
-            f"character={getattr(event, 'character', None)!r}",
-            f"is_printable={getattr(event, 'is_printable', None)!r}",
-        ]
-    
-        # Some Textual versions store modifiers differently; include if present
-        if hasattr(event, "modifiers"):
-            parts.append(f"modifiers={getattr(event, 'modifiers')!r}")
-        if hasattr(event, "meta"):
-            parts.append(f"meta={getattr(event, 'meta')!r}")
-    
-        self.log_line("KEY: " + " ".join(parts))
-    
     async def shutdown_pipeline(self):
         self.shutdown_requested = True
         self.log_line("Shutdown requested — terminating pipeline...")
@@ -399,6 +387,13 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         # Safety: if the UI is closed by any means, attempt to stop pipeline
         if not self.shutdown_requested:
             await self.shutdown_pipeline()
+        # Close the persistent log file
+        if self.log_file is not None:
+            try:
+                self.log_file.close()
+            except OSError:
+                pass
+            self.log_file = None
 
     async def action_copy_logs(self) -> None:
         text = "\n".join(self.log_buffer)
@@ -448,6 +443,12 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         clean = line.rstrip("\n")
         self.log_buffer.append(clean)
         self.log_widget.write(clean)
+        if self.log_file is not None:
+            try:
+                self.log_file.write(clean + "\n")
+                self.log_file.flush()
+            except OSError:
+                pass
 
     def format_settings_block(self, title: str, items: Dict) -> Text:
         t = Text()
@@ -499,9 +500,10 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
     def init_step_plan(self, samples: List[Tuple[str, str]]) -> None:
         processes = [
             "preprocess_refseq", "preprocess_illumina", "preprocess_ont",
-            "preprocess_pacbio", "assemble_masurca", "assemble_flye",
+            "preprocess_pacbio", "decontaminate_reads",
+            "assemble_masurca", "assemble_flye",
             "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-            "polish_assembly", "curate_assembly",
+            "polish_assembly", "curate_assembly", "decontaminate_assembly",
         ]
     
         self.steps = []
@@ -601,12 +603,19 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
     async def run_subprocess_stream(self, cmd: List[str], cwd: Optional[Path] = None) -> int:
         self.log_line(f"\n→ Running: {' '.join(cmd)}\n")
 
+        # Inherit the current environment but force unbuffered Python output so
+        # every print() in the child script appears in the TUI immediately rather
+        # than being held in an 8 KB pipe buffer until the process exits.
+        child_env = os.environ.copy()
+        child_env["PYTHONUNBUFFERED"] = "1"
+
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=str(cwd) if cwd else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
+                env=child_env,
                 preexec_fn=os.setsid,  # critical for killing the whole tree
             )
         except Exception as e:
@@ -631,15 +640,37 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
 
     async def run_pipeline(self) -> None:
         try:
-            parser = argparse.ArgumentParser(
-                description=f"Run EGAP with TUI (v{getattr(egap, 'version', 'unknown')})"
-            )
-            parser.add_argument("--input_csv", "-csv", type=str, required=True)
-            parser.add_argument("--output_dir", "-o", type=str, required=True)
-            parser.add_argument("--cpu_threads", "-t", type=int, default=1)
-            parser.add_argument("--ram_gb", "-r", type=int, default=8)
+            # ----------------------------------------------------------------
+            # Argument resolution: two paths
+            #   1. Launched via `EGAP.py --tui` → EGAP.py attaches its already-
+            #      parsed argparse.Namespace as self._preloaded_args so we never
+            #      re-parse sys.argv (which still contains --tui, --dry_run, etc.
+            #      that this inner parser doesn't know about).
+            #   2. Standalone launch (`python EGAP_TUI.py -csv ...`) → parse
+            #      sys.argv the normal way.
+            # ----------------------------------------------------------------
+            preloaded = getattr(self, "_preloaded_args", None)
+            if preloaded is not None:
+                self.args = preloaded
+            else:
+                parser = argparse.ArgumentParser(
+                    description=f"Run EGAP with TUI (v{getattr(egap, 'VERSION', 'unknown')})"
+                )
+                parser.add_argument("--input_csv", "-csv", type=str, required=True)
+                parser.add_argument("--output_dir", "-o", type=str, required=True)
+                parser.add_argument("--cpu_threads", "-t", type=int, default=1)
+                parser.add_argument("--ram_gb", "-r", type=int, default=8)
+                parser.add_argument("--dry_run", action="store_true", default=False,
+                                    help="Log file-management actions without executing them. "
+                                         "Equivalent to EGAP_DRY_RUN=1.")
+                self.args = parser.parse_args()
 
-            self.args = parser.parse_args()
+            # Propagate dry_run env var regardless of how args were obtained.
+            if getattr(self.args, "dry_run", False):
+                os.environ["EGAP_DRY_RUN"] = "1"
+
+            # Per-sample log files are opened inside the sample loop below.
+
             self.set_params_body()
             settings = egap.get_pipeline_settings(
                 current_moment=self.pipeline_start_time,
@@ -696,6 +727,22 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 if self.shutdown_requested:
                     return
 
+                # Open a per-sample log file and keep it active for this sample.
+                _sample_log_path = Path(output_dir) / f"{sample_id}_log.txt"
+                try:
+                    _sample_log_path.parent.mkdir(parents=True, exist_ok=True)
+                    self.log_file = open(_sample_log_path, "a", buffering=1)
+                except OSError as e:
+                    self.log_line(f"WARN:\tCould not open sample log file: {e}")
+                    self.log_file = None
+
+                self.log_line(f"\nNOTE:\t{'='*60}")
+                self.log_line(f"NOTE:\tBeginning pipeline for sample: {sample_id}")
+                self.log_line(f"NOTE:\tSample log: {_sample_log_path}")
+                self.log_line(f"NOTE:\t{'='*60}")
+
+                sample_step_failed = False
+
                 for proc_name in processes:
                     if self.shutdown_requested:
                         return
@@ -710,7 +757,8 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                         ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         self.set_step_status(sample_id, step_label, "FAIL", return_code=127, ended_at=ended)
                         self.log_line(f"\nERROR:\tMissing script: {script}")
-                        return
+                        sample_step_failed = True
+                        break
 
                     cmd = [
                         sys.executable,
@@ -732,76 +780,93 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                     if rc != 0:
                         self.set_step_status(sample_id, step_label, "FAIL", return_code=rc, ended_at=ended)
                         self.log_line(f"\nERROR:\t{proc_name} failed for {sample_id} (rc={rc})")
-                        return
+                        sample_step_failed = True
+                        break
 
                     self.set_step_status(sample_id, step_label, "PASS", return_code=rc, ended_at=ended)
 
-                # ---- Final QC assessment ----
+                if sample_step_failed:
+                    self.log_line(f"\nWARN:\tOne or more steps failed for {sample_id}; "
+                                  f"still running final QC and HTML report.")
+
+                # ---- Final QC assessment (always runs per sample) ----
                 qc_step_label = "qc_assessment(final)"
                 qc_script = bin_dir / "qc_assessment.py"
                 if not qc_script.exists():
                     qc_script = project_dir / "qc_assessment.py"
-                
+
                 started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self.set_step_status(sample_id, qc_step_label, "RUNNING", started_at=started)
-                
+
                 if not qc_script.exists():
                     ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     self.set_step_status(sample_id, qc_step_label, "FAIL", return_code=127, ended_at=ended)
-                    self.log_line(f"ERROR: Missing script: {qc_script}")
-                    return
-                
-                qc_cmd = [
-                    sys.executable,
-                    str(qc_script),
-                    "final",
-                    input_csv,
-                    sample_id,
-                    output_dir,
-                    str(cpu_threads),
-                    str(ram_gb),
-                ]
-                rc = await self.run_subprocess_stream(qc_cmd)
-                ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                if rc != 0:
-                    self.set_step_status(sample_id, qc_step_label, "FAIL", return_code=rc, ended_at=ended)
-                    self.log_line(f"ERROR: qc_assessment failed for {sample_id} (rc={rc})")
-                    return
-                self.set_step_status(sample_id, qc_step_label, "PASS", return_code=rc, ended_at=ended)
-                
-                # ---- HTML report ----
+                    self.log_line(f"ERROR:\tMissing script: {qc_script}")
+                else:
+                    qc_cmd = [
+                        sys.executable,
+                        str(qc_script),
+                        "final",
+                        input_csv,
+                        sample_id,
+                        output_dir,
+                        str(cpu_threads),
+                        str(ram_gb),
+                    ]
+                    rc = await self.run_subprocess_stream(qc_cmd)
+                    ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    if rc != 0:
+                        self.set_step_status(sample_id, qc_step_label, "FAIL", return_code=rc, ended_at=ended)
+                        self.log_line(f"WARN:\tqc_assessment returned non-zero for {sample_id} (rc={rc})")
+                    else:
+                        self.set_step_status(sample_id, qc_step_label, "PASS", return_code=rc, ended_at=ended)
+
+                # ---- HTML report (always runs per sample) ----
                 html_step_label = "html_reporter"
                 html_script = bin_dir / "html_reporter.py"
                 if not html_script.exists():
                     html_script = project_dir / "html_reporter.py"
-                
+
                 started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 self.set_step_status(sample_id, html_step_label, "RUNNING", started_at=started)
-                
+
                 if not html_script.exists():
                     ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     self.set_step_status(sample_id, html_step_label, "FAIL", return_code=127, ended_at=ended)
-                    self.log_line(f"ERROR: Missing script: {html_script}")
-                    return
-                
-                html_cmd = [
-                    sys.executable,
-                    str(html_script),
-                    sample_id,
-                    input_csv,
-                    output_dir,
-                    str(cpu_threads),
-                    str(ram_gb),
-                ]
-                rc = await self.run_subprocess_stream(html_cmd)
-                ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                if rc != 0:
-                    self.set_step_status(sample_id, html_step_label, "FAIL", return_code=rc, ended_at=ended)
-                    self.log_line(f"ERROR: html_reporter failed for {sample_id} (rc={rc})")
-                    return
-                self.set_step_status(sample_id, html_step_label, "PASS", return_code=rc, ended_at=ended)
+                    self.log_line(f"ERROR:\tMissing script: {html_script}")
+                else:
+                    html_cmd = [
+                        sys.executable,
+                        str(html_script),
+                        sample_id,
+                        input_csv,
+                        output_dir,
+                        str(cpu_threads),
+                        str(ram_gb),
+                    ]
+                    rc = await self.run_subprocess_stream(html_cmd)
+                    ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    if rc != 0:
+                        self.set_step_status(sample_id, html_step_label, "FAIL", return_code=rc, ended_at=ended)
+                        self.log_line(f"WARN:\thtml_reporter returned non-zero for {sample_id} (rc={rc})")
+                    else:
+                        self.set_step_status(sample_id, html_step_label, "PASS", return_code=rc, ended_at=ended)
 
-            self.log_line("\nPASS:\tAll samples processed successfully.")
+                if sample_step_failed:
+                    self.log_line(f"\nFAIL:\tSample {sample_id} completed with errors. "
+                                  f"Continuing to next sample.")
+                else:
+                    self.log_line(f"\nPASS:\tSample {sample_id} completed successfully.")
+
+                # Close this sample's log before moving to the next sample.
+                if self.log_file is not None:
+                    try:
+                        self.log_file.close()
+                    except OSError:
+                        pass
+                    self.log_file = None
+
+            self.log_line("\nPASS:\tAll samples processed.")
         except Exception:
             self.log_line("\nFATAL:\tpipeline task crashed with exception:")
             self.log_line(traceback.format_exc())

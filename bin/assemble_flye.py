@@ -6,36 +6,39 @@ assemble_flye.py
 This script performs genome assembly on long reads (ONT or PacBio) using the Flye assembler.
 CWD-safe (absolute paths), otherwise same behavior as original.
 
+Stage:
+    Long-read Assembly (Flye)
+
 Created on Wed Aug 16 2023
 
-Updated on Wed Sept 3 2025
+Updated on 2026-04-16
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, sys, shutil
+import os
+import sys
+import shutil
+from typing import Optional
+
 import pandas as pd
-from utilities import run_subprocess_cmd, get_current_row_data
+from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context, to_abs
 from qc_assessment import qc_assessment
 
 
-def _abs(p):
-    return os.path.abspath(p) if isinstance(p, str) else p
-
-
-def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def assemble_flye(
+    sample_id: str,
+    input_csv: str,
+    output_dir: str,
+    cpu_threads: int,
+    ram_gb: int,
+) -> Optional[str]:
     """Assemble genomic data using Flye with ONT or PacBio reads.
 
     Returns:
         str or None: Path to the Flye assembly FASTA, or None if no long reads are provided.
     """
-    # --- make inputs absolute so later chdir is safe ---
-    input_csv_abs  = _abs(input_csv)
-    output_dir_abs = _abs(output_dir)
-
-    # Read CSV safely
-    input_df = pd.read_csv(input_csv_abs)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # single row
+    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     # Identify read paths, reference, and BUSCO lineage info from CSV
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -50,9 +53,9 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
 
-    species_dir = os.path.join(output_dir_abs, species_id)
+    species_dir = os.path.join(ctx.output_dir, species_id)
 
-    # Normalize implied/downloaded paths (all absolute, anchored under output_dir_abs)
+    # Normalize implied/downloaded paths (all absolute, anchored under ctx.output_dir)
     if pd.notna(ont_sra) and pd.isna(ont_raw_reads):
         ont_raw_reads = os.path.join(species_dir, "ONT", f"{ont_sra}.fastq")
     if pd.notna(illumina_sra) and pd.isna(illumina_f_raw_reads) and pd.isna(illumina_r_raw_reads):
@@ -63,16 +66,16 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
-    # If CSV had relative paths, anchor them to output_dir_abs
-    def _norm(p):
+    # If CSV had relative paths, anchor them to ctx.output_dir
+    def norm(p):
         if isinstance(p, str) and not os.path.isabs(p):
-            return _abs(os.path.join(output_dir_abs, p))
+            return to_abs(os.path.join(ctx.output_dir, p))
         return p
-    illumina_f_raw_reads = _norm(illumina_f_raw_reads)
-    illumina_r_raw_reads = _norm(illumina_r_raw_reads)
-    ont_raw_reads        = _norm(ont_raw_reads)
-    pacbio_raw_reads     = _norm(pacbio_raw_reads)
-    ref_seq              = _norm(ref_seq)
+    illumina_f_raw_reads = norm(illumina_f_raw_reads)
+    illumina_r_raw_reads = norm(illumina_r_raw_reads)
+    ont_raw_reads        = norm(ont_raw_reads)
+    pacbio_raw_reads     = norm(pacbio_raw_reads)
+    ref_seq              = norm(ref_seq)
 
     print(f"DEBUG - illumina_sra - {illumina_sra}")
     print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
@@ -113,7 +116,7 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     if os.path.exists(egap_flye_assembly_path) and os.path.getsize(egap_flye_assembly_path) > 0:
         print(f"SKIP:\tFinal Flye assembly already present: {egap_flye_assembly_path}")
         egap_flye_assembly_path, flye_stats_list, _ = qc_assessment(
-            "flye", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+            "flye", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return egap_flye_assembly_path
 
@@ -148,7 +151,7 @@ def assemble_flye(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     # QC using absolute paths
     egap_flye_assembly_path, flye_stats_list, _ = qc_assessment(
-        "flye", input_csv_abs, sample_id, output_dir_abs, cpu_threads, ram_gb
+        "flye", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
     )
 
     os.chdir(starting_work_dir)
@@ -159,6 +162,8 @@ if __name__ == "__main__":
     if len(sys.argv) != 6:
         print("Usage: python3 assemble_flye.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
+
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     egap_flye_assembly_path = assemble_flye(
         sys.argv[1],  # sample_id
