@@ -7,13 +7,18 @@ Generates an EGAP HTML summary using Jinja templates. Robust to missing
 artifacts (FastQC / NanoPlot / QUAST / BUSCO), CWD-safe, and tolerant of
 metadata quirks.
 
+Stage:
+    Final HTML Report
+
 Created on Wed Aug 16 2023
 
-Updated on Mon Sept 8 2025
+Updated on 2026-04-16
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, glob, sys
+import os
+import glob
+import sys
 import re
 from io import StringIO
 from pathlib import Path
@@ -25,23 +30,39 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-from utilities import initialize_logging_environment, log_print
-
-# Optional iNat import (process_metadata may fail due to utilities.calculate_genome_coverage)
+# Optional iNat import — process_metadata depends on geopy/requests and is
+# allowed to be absent in a minimal install.  The real implementations live in
+# bin/process_metadata.py; the stubs below preserve the (None, None, None,
+# None, None) / (None, None, None) shape that callers expect.
 _HAS_INAT = True
 try:
     from process_metadata import get_inat_obs, reverse_geocode
-except Exception as e:
-    log_print(f"WARN:\tprocess_metadata import failed ({e}); iNaturalist fields will be skipped.")
+except ImportError as e:  # optional dep missing (geopy/requests) or module absent
+    print(f"WARN:\tprocess_metadata import failed ({e}); iNaturalist fields will be skipped.")
     _HAS_INAT = False
-    def get_inat_obs(_): return (None, None, None, None, None)
-    def reverse_geocode(_, __): return (None, None, None)
+
+    def get_inat_obs(_):
+        """Stub returned when ``process_metadata`` deps are unavailable.
+
+        Returns a 5-tuple of ``None`` matching
+        :func:`process_metadata.get_inat_obs` so report rendering can
+        continue without iNaturalist enrichment.
+        """
+        return (None, None, None, None, None)
+
+    def reverse_geocode(_, __):
+        """Stub returned when ``process_metadata`` deps are unavailable.
+
+        Returns a 3-tuple of ``None`` matching
+        :func:`process_metadata.reverse_geocode`.
+        """
+        return (None, None, None)
 
 # Use the shared helper from utilities so row extraction stays consistent
 try:
-    from utilities import get_current_row_data
+    from utilities import get_current_row_data, initialize_logging_environment, to_abs
 except Exception as e:
-    log_print(f"ERROR:\tutilities.get_current_row_data not importable: {e}")
+    print(f"ERROR:\tutilities.get_current_row_data not importable: {e}")
     raise
 
 
@@ -52,7 +73,7 @@ RAW_URLS = {
     "EGAP_busco.html"  : "https://raw.githubusercontent.com/iPsychonaut/EGAP/main/resources/templates/EGAP_busco.html",
 }
 
-def _lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
+def lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
     """
     Return a lineage directory name guaranteed to end with _odbNN,
     without doubling the suffix if it's already present.
@@ -61,7 +82,7 @@ def _lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
     return s if re.search(r"_odb\d+$", s) else f"{s}_{db_version}"
 
 
-def _parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
+def parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
     """
     Parse a Compleasm/BUSCO 'full_table*.tsv' and normalize columns to a common schema:
       Required:  Busco id | Status | Sequence | Gene Start | Gene End | Strand | Score | Length
@@ -161,7 +182,7 @@ def _parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
 
     return df[ordered_cols]
 
-def _load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.DataFrame:
+def load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.DataFrame:
     """
     Locate and parse BUSCO/Compleasm 'full_table' with robust column normalization.
 
@@ -173,7 +194,7 @@ def _load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.Da
     if not busco_dir or not busco_db:
         return pd.DataFrame()
 
-    lineage = _lineage_dirname(busco_db)
+    lineage = lineage_dirname(busco_db)
 
     candidates = [
         os.path.join(busco_dir, f"run_{lineage}", "full_table.tsv"),
@@ -183,34 +204,31 @@ def _load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.Da
     for p in candidates:
         if os.path.exists(p):
             try:
-                return _parse_compleasm_full_table(p)
+                return parse_compleasm_full_table(p)
             except Exception as e:
-                log_print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {p}: {e}")
+                print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {p}: {e}")
                 return pd.DataFrame()
     return pd.DataFrame()
 
 
-def _abs(p):
-    return os.path.abspath(p) if isinstance(p, str) else p
-
-def _has_both_templates(dir_path: Path) -> bool:
+def has_both_templates(dir_path: Path) -> bool:
     return all((dir_path / fname).exists() for fname in REQUIRED_TEMPLATES)
 
-def _download_templates_to(dst_dir: Path) -> bool:
+def download_templates_to(dst_dir: Path) -> bool:
     """Try to download both templates into dst_dir. Return True if both exist afterward."""
     dst_dir.mkdir(parents=True, exist_ok=True)
     ok = True
     for name, url in RAW_URLS.items():
         out = dst_dir / name
         try:
-            log_print(f"INFO:\tDownloading template '{name}' -> {out}")
+            print(f"INFO:\tDownloading template '{name}' -> {out}")
             urllib.request.urlretrieve(url, out.as_posix())
         except Exception as e:
             ok = False
-            log_print(f"WARN:\tFailed to download {name} from {url}: {e}")
-    return ok and _has_both_templates(dst_dir)
+            print(f"WARN:\tFailed to download {name} from {url}: {e}")
+    return ok and has_both_templates(dst_dir)
 
-def _resolve_templates_dir(output_dir_abs: str) -> Optional[Path]:
+def resolve_templates_dir(output_dirto_abs: str) -> Optional[Path]:
     """
     Robustly locate a folder containing BOTH 'EGAP_summary.html' and 'EGAP_busco.html'.
     If not found, attempt to download both files into the SAME directory as html_reporter.py.
@@ -230,13 +248,13 @@ def _resolve_templates_dir(output_dir_abs: str) -> Optional[Path]:
     script_file = Path(__file__).resolve()
     script_dir  = script_file.parent
     sys_prefix  = Path(sys.prefix).resolve()
-    output_dir_p = Path(output_dir_abs).resolve()
+    output_dir_p = Path(output_dirto_abs).resolve()
 
     tried = []
 
-    def _check_and_return(p: Path):
+    def check_and_return(p: Path):
         tried.append(p)
-        if _has_both_templates(p):
+        if has_both_templates(p):
             return p
         return None
 
@@ -244,14 +262,14 @@ def _resolve_templates_dir(output_dir_abs: str) -> Optional[Path]:
     env_templates = os.environ.get("EGAP_TEMPLATES_DIR")
     if env_templates:
         p = Path(env_templates).expanduser().resolve()
-        found = _check_and_return(p)
+        found = check_and_return(p)
         if found: return found
 
     # 2) Project dir provided
     env_project = os.environ.get("EGAP_PROJECT_DIR")
     if env_project:
         p = Path(env_project).expanduser().resolve() / "resources" / "templates"
-        found = _check_and_return(p)
+        found = check_and_return(p)
         if found: return found
 
     # 3–4) Repo layouts near the script
@@ -259,13 +277,13 @@ def _resolve_templates_dir(output_dir_abs: str) -> Optional[Path]:
         script_dir.parent / "resources" / "templates",
         script_dir.parent.parent / "resources" / "templates",
     ]:
-        found = _check_and_return(p)
+        found = check_and_return(p)
         if found: return found
 
     # 5–6) Conda share
     for share_name in ("egap", "EGAP"):
         p = sys_prefix / "share" / share_name / "templates"
-        found = _check_and_return(p)
+        found = check_and_return(p)
         if found: return found
 
     # 7) site-packages scan
@@ -275,25 +293,25 @@ def _resolve_templates_dir(output_dir_abs: str) -> Optional[Path]:
             sp / "egap" / "resources" / "templates",
             sp / "resources" / "templates",
         ]:
-            found = _check_and_return(p)
+            found = check_and_return(p)
             if found: return found
 
     # 8) project-local
     p = output_dir_p / "resources" / "templates"
-    found = _check_and_return(p)
+    found = check_and_return(p)
     if found: return found
 
     # 9) Download into the SAME directory that html_reporter.py is in
-    log_print("INFO:\tTemplates not found in standard locations; attempting download into script directory.")
-    if _download_templates_to(script_dir):
-        log_print(f"PASS:\tTemplates downloaded to {script_dir}")
+    print("INFO:\tTemplates not found in standard locations; attempting download into script directory.")
+    if download_templates_to(script_dir):
+        print(f"PASS:\tTemplates downloaded to {script_dir}")
         return script_dir
 
     # Still nothing: inform and continue (return None; caller will stub).
     msg = "Templates directory with BOTH required files not found.\nTried:\n  " + "\n  ".join(str(x) for x in tried)
     msg += ("\nAlso attempted download into script directory but failed.\n"
             "A report cannot be generated unless 'EGAP_summary.html' and 'EGAP_busco.html' are available.")
-    log_print("WARN:\t" + msg)
+    print("WARN:\t" + msg)
     return None
 
 
@@ -341,7 +359,7 @@ def process_quast_folder(quast_dir):
     df.columns = ["Value"]
     return df, html
 
-def _parse_busco_summary_line(line: str) -> dict:
+def parse_busco_summary_line(line: str) -> dict:
     """
     Parse a BUSCO short_summary line like:
     "C:97.5%[S:97.3%,D:0.2%],F:0.5%,M:2.0%,n:124"
@@ -360,7 +378,7 @@ def _parse_busco_summary_line(line: str) -> dict:
         pass
     return m
 
-def _parse_compleasm_summary(path: str) -> dict:
+def parse_compleasm_summary(path: str) -> dict:
     """
     Parse Compleasm summary.txt where S:/D:/F:/M: appear on separate lines.
     - Reads percentages for S/D/F/M (keeps your original format: no '%' in strings)
@@ -452,12 +470,12 @@ def _parse_compleasm_summary(path: str) -> dict:
 
 
 
-def _find_busco_genes_table(busco_dir: str, busco_db: str) -> str:
+def find_busco_genes_table(busco_dir: str, busco_db: str) -> str:
     """
     Return the first existing BUSCO/Compleasm 'full_table' path.
     Supports both BUSCO and Compleasm layouts.
     """
-    lineage = _lineage_dirname(busco_db)
+    lineage = lineage_dirname(busco_db)
     candidates = [
         os.path.join(busco_dir, f"run_{lineage}", "full_table.tsv"),
         os.path.join(busco_dir, lineage, "full_table_busco_format.tsv"),
@@ -469,7 +487,7 @@ def _find_busco_genes_table(busco_dir: str, busco_db: str) -> str:
     return ""
 
 
-def _find_busco_svg(busco_dir: str, busco_db: str) -> str:
+def find_busco_svg(busco_dir: str, busco_db: str) -> str:
     """
     Try common SVG names emitted by your pipeline:
       - <base>_{lineage}_busco.svg
@@ -480,7 +498,7 @@ def _find_busco_svg(busco_dir: str, busco_db: str) -> str:
     try:
         if not busco_dir or not os.path.isdir(busco_dir):
             return ""
-        lineage = _lineage_dirname(busco_db)
+        lineage = lineage_dirname(busco_db)
         parent = os.path.dirname(busco_dir)
         tag = os.path.basename(busco_dir)          # e.g., sample_final_{lineage}_busco
 
@@ -505,16 +523,16 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     Returns: path to <sample_dir>/<sample_id>_EGAP_summary.html (or a stub if templates are missing)
     """
     # Resolve critical paths first (CWD-safe)
-    input_csv_abs = _abs(input_csv)
-    output_dir_abs = _abs(output_dir)
+    input_csvto_abs = to_abs(input_csv)
+    output_dirto_abs = to_abs(output_dir)
 
     # Locate or fetch templates
-    templates_dir = _resolve_templates_dir(output_dir_abs)
+    templates_dir = resolve_templates_dir(output_dirto_abs)
 
     now = datetime.now().strftime("%Y%m%d-%H:%M:%S")
 
     # Metadata row
-    input_df = pd.read_csv(input_csv_abs)
+    input_df = pd.read_csv(input_csvto_abs)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
 
@@ -541,7 +559,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             break
 
     # Build project dirs
-    species_dir = os.path.join(output_dir_abs, str(species_id))
+    species_dir = os.path.join(output_dirto_abs, str(species_id))
     sample_dir  = os.path.join(species_dir, sample_id)
     ont_dir     = os.path.join(species_dir, "ONT")
     illumina_dir= os.path.join(species_dir, "Illumina")
@@ -593,7 +611,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         sample_stats_dict["INAT_HTML"]  = inat_html
         sample_stats_dict["INAT_PHOTO"] = original_photo
     else:
-        log_print(f"SKIP:\tNo iNaturalist ID provided or iNat disabled ({inat_id}).")
+        print(f"SKIP:\tNo iNaturalist ID provided or iNat disabled ({inat_id}).")
 
     # ------------------------------ ONT NanoPlot ------------------------------
     if os.path.isdir(ont_dir):
@@ -606,13 +624,13 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             if stats_matches:
                 df_stats = parse_nanostats(stats_matches[0])
                 sample_stats_dict[f"{run_label}_ONT_NANOSTATS_DF"] = df_stats
-                log_print(f"\n=== {run_label} ONT NanoStats ===")
+                print(f"\n=== {run_label} ONT NanoStats ===")
                 try:
-                    log_print(df_stats.to_markdown(index=False))
+                    print(df_stats.to_markdown(index=False))
                 except Exception:
-                    log_print(df_stats.head())
+                    print(df_stats.head())
     else:
-        log_print(f"SKIP:\tNo ONT directory found at {ont_dir}.")
+        print(f"SKIP:\tNo ONT directory found at {ont_dir}.")
 
     # ------------------------------ Illumina FastQC ------------------------------
     if os.path.isdir(illumina_dir):
@@ -633,16 +651,16 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 try:
                     sample_stats_dict[f"{run_label}_ILLU_F_BASIC_STATS_DF"] = parse_fastqc_basic_stats(f_html)
                 except Exception as e:
-                    log_print(f"WARN:\tFailed to parse FastQC (F) {f_html}: {e}")
+                    print(f"WARN:\tFailed to parse FastQC (F) {f_html}: {e}")
             if r_html_matches:
                 r_html = r_html_matches[0]
                 sample_stats_dict[f"{run_label}_ILLU_R_FASTQC_HTML"] = r_html
                 try:
                     sample_stats_dict[f"{run_label}_ILLU_R_BASIC_STATS_DF"] = parse_fastqc_basic_stats(r_html)
                 except Exception as e:
-                    log_print(f"WARN:\tFailed to parse FastQC (R) {r_html}: {e}")
+                    print(f"WARN:\tFailed to parse FastQC (R) {r_html}: {e}")
     else:
-        log_print(f"SKIP:\tNo Illumina directory found at {illumina_dir}.")
+        print(f"SKIP:\tNo Illumina directory found at {illumina_dir}.")
 
     # ------------------------------ PacBio NanoPlot ------------------------------
     if os.path.isdir(pacbio_dir):
@@ -655,19 +673,19 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             if stats_matches:
                 df_stats = parse_nanostats(stats_matches[0])
                 sample_stats_dict[f"{run_label}_PACBIO_NANOSTATS_DF"] = df_stats
-                log_print(f"\n=== {run_label} PacBio NanoStats ===")
+                print(f"\n=== {run_label} PacBio NanoStats ===")
                 try:
-                    log_print(df_stats.to_markdown(index=False))
+                    print(df_stats.to_markdown(index=False))
                 except Exception:
-                    log_print(df_stats.head())
+                    print(df_stats.head())
     else:
-        log_print(f"SKIP:\tNo PacBio directory found at {pacbio_dir}.")
+        print(f"SKIP:\tNo PacBio directory found at {pacbio_dir}.")
 
     # ------------------------------ Per-assembler QUAST/BUSCO ------------------------------
     assembly_candidates = [masurca_dir, flye_dir, spades_dir, hifiasm_dir]
     for assembly_dir in assembly_candidates:
         if not os.path.isdir(assembly_dir):
-            log_print(f"SKIP:\tNo Assembly directory found at {assembly_dir}.")
+            print(f"SKIP:\tNo Assembly directory found at {assembly_dir}.")
             continue
 
         asm_type = os.path.basename(assembly_dir).split("_")[0].upper()  # MASURCA/FLYE/SPADES/HIFIASM
@@ -680,7 +698,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 sample_stats_dict[f"{asm_type}_QUAST_DF"]   = quast_df
                 sample_stats_dict[f"{asm_type}_QUAST_HTML"] = quast_html
             except FileNotFoundError as e:
-                log_print(f"QUAST processing failed for {quast_dir}: {e}")
+                print(f"QUAST processing failed for {quast_dir}: {e}")
 
         # BUSCO/Compleasm (skip if DB is NaN)
         for busco_index, busco_db in enumerate([first_busco_db, second_busco_db]):
@@ -692,11 +710,11 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             busco_dirs = glob.glob(os.path.join(assembly_dir, f"*_{busco_db}_busco")) + \
                          glob.glob(os.path.join(assembly_dir, f"*_{busco_db}_compleasm"))
             if not busco_dirs:
-                log_print(f"SKIP:\tNo BUSCO/Compleasm outputs for {busco_db} in {assembly_dir}")
+                print(f"SKIP:\tNo BUSCO/Compleasm outputs for {busco_db} in {assembly_dir}")
                 continue
         
             for busco_dir in busco_dirs:
-                svg_path = _find_busco_svg(busco_dir, busco_db)
+                svg_path = find_busco_svg(busco_dir, busco_db)
                 
                 # Prefer BUSCO short_summary, else Compleasm summary.txt
                 metrics = {}
@@ -705,19 +723,19 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                     with open(summary_files[0], "r") as f:
                         for line in f:
                             if "%" in line and "C:" in line:
-                                metrics = _parse_busco_summary_line(line)
+                                metrics = parse_busco_summary_line(line)
                                 break
                 else:
-                    metrics = _parse_compleasm_summary(os.path.join(busco_dir, "summary.txt"))
+                    metrics = parse_compleasm_summary(os.path.join(busco_dir, "summary.txt"))
         
                 if not metrics:
-                    log_print(f"SKIP:\tNo parsable BUSCO/Compleasm summary in {busco_dir}")
+                    print(f"SKIP:\tNo parsable BUSCO/Compleasm summary in {busco_dir}")
                     continue
         
                 metrics_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
         
                 # Genes table (optional; supports BUSCO or Compleasm layouts)
-                busco_genes_df = _load_busco_or_compleasm_genes_table(busco_dir, busco_db)
+                busco_genes_df = load_busco_or_compleasm_genes_table(busco_dir, busco_db)
         
                 outpath = os.path.join(busco_dir, f"{sample_id}_{busco_db}_EGAP_busco.html")
                 sample_stats_dict[f"{asm_type}_{busco_type}_BUSCO_DF"]        = metrics_df
@@ -725,7 +743,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
                 sample_stats_dict[f"{asm_type}_{busco_type}_BUSCO_GENES_DF"]  = busco_genes_df
 
     # ------------------------------ Final assembly QUAST/BUSCO (robust discovery) ------------------------------
-    def _first_existing(paths):
+    def first_existing(paths):
         for p in paths:
             if p and os.path.exists(p):
                 return p
@@ -752,7 +770,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         assembly_base = candidate_bases[0]
     
     assembly_fasta = (assembly_base + ".fasta") if assembly_base else ""
-    log_print(f"DEBUG - final assembly base - {assembly_base}")
+    print(f"DEBUG - final assembly base - {assembly_base}")
     
     # -------- QUAST: choose the first available report.tsv --------
     quast_dir_candidates = []
@@ -765,16 +783,16 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             break
     
     if final_quast_dir:
-        log_print(f"DEBUG - final_quast_dir - {final_quast_dir}")
+        print(f"DEBUG - final_quast_dir - {final_quast_dir}")
         try:
             final_df, final_html = process_quast_folder(final_quast_dir)
             sample_stats_dict["FINAL_QUAST_DF"]   = final_df
             sample_stats_dict["FINAL_QUAST_HTML"] = final_html
         except FileNotFoundError as e:
-            log_print(f"FINAL QUAST processing failed for {final_quast_dir}: {e}")
+            print(f"FINAL QUAST processing failed for {final_quast_dir}: {e}")
     else:
         if quast_dir_candidates:
-            log_print(f"WARN:\tNo QUAST report found for final assembly; tried: {quast_dir_candidates}")
+            print(f"WARN:\tNo QUAST report found for final assembly; tried: {quast_dir_candidates}")
     
     # -------- BUSCO/Compleasm: accept either style and any of the basenames --------
     for busco_index, busco_db in enumerate([first_busco_db, second_busco_db]):
@@ -787,35 +805,35 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             busco_dir_candidates.append(f"{base}_{busco_db}_busco")
             busco_dir_candidates.append(f"{base}_{busco_db}_compleasm")
     
-        chosen_busco_dir = _first_existing(busco_dir_candidates)
+        chosen_busco_dir = first_existing(busco_dir_candidates)
         if not chosen_busco_dir:
-            log_print(f"WARN:\tNo BUSCO/Compleasm dir found for {busco_db}. Tried: {busco_dir_candidates}")
+            print(f"WARN:\tNo BUSCO/Compleasm dir found for {busco_db}. Tried: {busco_dir_candidates}")
             continue
     
         metrics = {}
-        short_sum = _first_existing(glob.glob(os.path.join(chosen_busco_dir, "short_summary*.txt")))
+        short_sum = first_existing(glob.glob(os.path.join(chosen_busco_dir, "short_summary*.txt")))
         if short_sum:
             with open(short_sum, "r") as f:
                 for line in f:
                     if "%" in line and "C:" in line:
-                        metrics = _parse_busco_summary_line(line)
+                        metrics = parse_busco_summary_line(line)
                         break
         else:
-            metrics = _parse_compleasm_summary(os.path.join(chosen_busco_dir, "summary.txt"))
+            metrics = parse_compleasm_summary(os.path.join(chosen_busco_dir, "summary.txt"))
     
         if not metrics:
-            log_print(f"WARN:\tNo parsable BUSCO/Compleasm summary in {chosen_busco_dir}")
+            print(f"WARN:\tNo parsable BUSCO/Compleasm summary in {chosen_busco_dir}")
             continue
     
         metrics_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
     
-        genes_file = _find_busco_genes_table(chosen_busco_dir, busco_db)
+        genes_file = find_busco_genes_table(chosen_busco_dir, busco_db)
         busco_genes_df = pd.DataFrame()
         if genes_file:
             try:
-                busco_genes_df = _parse_compleasm_full_table(genes_file)
+                busco_genes_df = parse_compleasm_full_table(genes_file)
             except Exception as e:
-                log_print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {genes_file}: {e}")
+                print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {genes_file}: {e}")
     
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_DF"]        = metrics_df
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_HTML"]      = os.path.join(chosen_busco_dir, f"{sample_id}_{busco_db}_EGAP_busco.html")
@@ -842,11 +860,11 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 </body></html>"""
         with open(html_report_outpath, "w") as fh:
             fh.write(stub)
-        log_print(f"WARN:\tTemplates unavailable; wrote stub report: {html_report_outpath}")
+        print(f"WARN:\tTemplates unavailable; wrote stub report: {html_report_outpath}")
         return html_report_outpath
 
     # Templates are available: render real report
-    log_print(f"DEBUG - templates_dir - {templates_dir}")
+    print(f"DEBUG - templates_dir - {templates_dir}")
     env = Environment(
         loader=FileSystemLoader(str(templates_dir)),
         autoescape=select_autoescape(["html", "xml"])
@@ -855,7 +873,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     busco_tmpl = env.get_template("EGAP_busco.html")
 
     # Helper to coerce DataFrame -> {metric: value}
-    def _df_to_map(df):
+    def df_to_map(df):
         if df is None or (isinstance(df, pd.DataFrame) and df.empty):
             return {}
         if "Metric" in df.columns and "Value" in df.columns:
@@ -870,15 +888,15 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     inat_link      = sample_stats_dict.get("INAT_HTML")
     inat_photo     = sample_stats_dict.get("INAT_PHOTO")
     inat_thumbnail = sample_stats_dict.get("INAT_THUMBNAIL") or inat_photo
-    inat_map       = _df_to_map(inat_df)
+    inat_map       = df_to_map(inat_df)
 
     # ONT
     ont_raw_df  = sample_stats_dict.get("RAW_ONT_NANOSTATS_DF")
     ont_filt_df = sample_stats_dict.get("FILT_ONT_NANOSTATS_DF")
     ont_corr_df = sample_stats_dict.get("CORR_ONT_NANOSTATS_DF")
-    ont_raw_map  = _df_to_map(ont_raw_df)
-    ont_filt_map = _df_to_map(ont_filt_df)
-    ont_corr_map = _df_to_map(ont_corr_df)
+    ont_raw_map  = df_to_map(ont_raw_df)
+    ont_filt_map = df_to_map(ont_filt_df)
+    ont_corr_map = df_to_map(ont_corr_df)
     ont_raw_link = sample_stats_dict.get("RAW_ONT_NANOPLOT_HTML", "")
     ont_filt_link= sample_stats_dict.get("FILT_ONT_NANOPLOT_HTML", "")
     ont_corr_link= sample_stats_dict.get("CORR_ONT_NANOPLOT_HTML", "")
@@ -889,10 +907,10 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     illumina_dedup_f_df = sample_stats_dict.get("DEDUP_ILLU_F_BASIC_STATS_DF")
     illumina_dedup_r_df = sample_stats_dict.get("DEDUP_ILLU_R_BASIC_STATS_DF")
 
-    illumina_raw_f_map   = _df_to_map(illumina_raw_f_df)
-    illumina_raw_r_map   = _df_to_map(illumina_raw_r_df)
-    illumina_dedup_f_map = _df_to_map(illumina_dedup_f_df)
-    illumina_dedup_r_map = _df_to_map(illumina_dedup_r_df)
+    illumina_raw_f_map   = df_to_map(illumina_raw_f_df)
+    illumina_raw_r_map   = df_to_map(illumina_raw_r_df)
+    illumina_dedup_f_map = df_to_map(illumina_dedup_f_df)
+    illumina_dedup_r_map = df_to_map(illumina_dedup_r_df)
     illumina_raw_f_link  = sample_stats_dict.get("RAW_ILLU_F_FASTQC_HTML", "")
     illumina_raw_r_link  = sample_stats_dict.get("RAW_ILLU_R_FASTQC_HTML", "")
     illumina_dedup_f_link= sample_stats_dict.get("DEDUP_ILLU_F_FASTQC_HTML", "")
@@ -901,32 +919,32 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # PacBio
     pacbio_raw_df  = sample_stats_dict.get("RAW_PACBIO_NANOSTATS_DF")
     pacbio_filt_df = sample_stats_dict.get("FILT_PACBIO_NANOSTATS_DF")
-    pacbio_raw_map  = _df_to_map(pacbio_raw_df)
-    pacbio_filt_map = _df_to_map(pacbio_filt_df)
+    pacbio_raw_map  = df_to_map(pacbio_raw_df)
+    pacbio_filt_map = df_to_map(pacbio_filt_df)
     pacbio_raw_link = sample_stats_dict.get("RAW_PACBIO_NANOPLOT_HTML", "")
     pacbio_filt_link= sample_stats_dict.get("FILT_PACBIO_NANOPLOT_HTML", "")
 
     # Per-assembler QUAST/BUSCO maps + links
-    def _maps(prefix):
-        return (_df_to_map(sample_stats_dict.get(f"{prefix}_QUAST_DF")),
-                _df_to_map(sample_stats_dict.get(f"{prefix}_FIRST_BUSCO_DF")),
-                _df_to_map(sample_stats_dict.get(f"{prefix}_SECOND_BUSCO_DF")),
+    def maps(prefix):
+        return (df_to_map(sample_stats_dict.get(f"{prefix}_QUAST_DF")),
+                df_to_map(sample_stats_dict.get(f"{prefix}_FIRST_BUSCO_DF")),
+                df_to_map(sample_stats_dict.get(f"{prefix}_SECOND_BUSCO_DF")),
                 sample_stats_dict.get(f"{prefix}_QUAST_HTML",""),
                 sample_stats_dict.get(f"{prefix}_FIRST_BUSCO_HTML",""),
                 sample_stats_dict.get(f"{prefix}_SECOND_BUSCO_HTML",""))
 
     masurca_quast_map, masurca_first_busco_map, masurca_second_busco_map, \
-        masurca_quast_link, masurca_first_busco_link, masurca_second_busco_link = _maps("MASURCA")
+        masurca_quast_link, masurca_first_busco_link, masurca_second_busco_link = maps("MASURCA")
     flye_quast_map, flye_first_busco_map, flye_second_busco_map, \
-        flye_quast_link, flye_first_busco_link, flye_second_busco_link = _maps("FLYE")
+        flye_quast_link, flye_first_busco_link, flye_second_busco_link = maps("FLYE")
     spades_quast_map, spades_first_busco_map, spades_second_busco_map, \
-        spades_quast_link, spades_first_busco_link, spades_second_busco_link = _maps("SPADES")
+        spades_quast_link, spades_first_busco_link, spades_second_busco_link = maps("SPADES")
     hifiasm_quast_map, hifiasm_first_busco_map, hifiasm_second_busco_map, \
-        hifiasm_quast_link, hifiasm_first_busco_link, hifiasm_second_busco_link = _maps("HIFIASM")
+        hifiasm_quast_link, hifiasm_first_busco_link, hifiasm_second_busco_link = maps("HIFIASM")
 
-    final_quast_map        = _df_to_map(sample_stats_dict.get("FINAL_QUAST_DF"))
-    final_first_busco_map  = _df_to_map(sample_stats_dict.get("FINAL_FIRST_BUSCO_DF"))
-    final_second_busco_map = _df_to_map(sample_stats_dict.get("FINAL_SECOND_BUSCO_DF"))
+    final_quast_map        = df_to_map(sample_stats_dict.get("FINAL_QUAST_DF"))
+    final_first_busco_map  = df_to_map(sample_stats_dict.get("FINAL_FIRST_BUSCO_DF"))
+    final_second_busco_map = df_to_map(sample_stats_dict.get("FINAL_SECOND_BUSCO_DF"))
     final_quast_link       = sample_stats_dict.get("FINAL_QUAST_HTML","")
     final_first_busco_link = sample_stats_dict.get("FINAL_FIRST_BUSCO_HTML","")
     final_second_busco_link= sample_stats_dict.get("FINAL_SECOND_BUSCO_HTML","")
@@ -944,7 +962,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             # Extract lineage (= busco_db) from filename: <sample_id>_<busco_db>_EGAP_busco.html
             fname = os.path.basename(outpath)
             busco_db_from_name = fname.replace(f"{sample_id}_", "").replace("_EGAP_busco.html", "")
-            svg_path = _find_busco_svg(os.path.dirname(outpath), busco_db_from_name)
+            svg_path = find_busco_svg(os.path.dirname(outpath), busco_db_from_name)
 
             html = busco_tmpl.render(
                 assembly_name=os.path.basename(outpath).replace("_EGAP_busco.html", ""),
@@ -972,7 +990,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         # Extract lineage (= busco_db) from filename: <sample_id>_<busco_db>_EGAP_busco.html
         fname = os.path.basename(outpath)
         busco_db_from_name = fname.replace(f"{sample_id}_", "").replace("_EGAP_busco.html", "")
-        svg_path = _find_busco_svg(os.path.dirname(outpath), busco_db_from_name)
+        svg_path = find_busco_svg(os.path.dirname(outpath), busco_db_from_name)
 
         html = busco_tmpl.render(
             assembly_name=os.path.basename(outpath).replace("_EGAP_busco.html", ""),
@@ -1047,7 +1065,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     with open(html_report_outpath, "w") as fh:
         fh.write(html)
 
-    log_print(f"PASS:\tWrote report: {html_report_outpath}")
+    print(f"PASS:\tWrote report: {html_report_outpath}")
     return html_report_outpath
 
 
@@ -1056,8 +1074,7 @@ if __name__ == "__main__":
         print("Usage: python3 html_reporter.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    output_dir = sys.argv[3]
-    initialize_logging_environment(output_dir, sys.argv[1])
+    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     _ = html_reporter(
         sys.argv[1],              # sample_id

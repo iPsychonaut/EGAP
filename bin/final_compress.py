@@ -2,22 +2,52 @@
 """
 final_compress.py
 
-PEP 8 Documentation
+Compress every remaining FASTA/FASTQ file under a sample's output directory.
+
+Called at the very end of an EGAP run to reduce on-disk footprint once all
+analyses that require uncompressed inputs have completed. Uses pigz for
+parallel gzip compression; the sample directory is discovered from the
+input CSV's SPECIES_ID / SAMPLE_ID columns rather than a user-supplied path.
+
+Stage:
+    Final Compression
 
 Created on Fri May 16 15:52:30 2025
 
+Updated on 2026-04-16
+
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import os, sys
+import os
+import sys
 import pandas as pd
-from utilities import pigz_compress, get_current_row_data, initialize_logging_environment, log_print
+from utilities import pigz_compress, get_current_row_data
 
 
 def final_compress(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+    """Compress every ``.fasta`` and ``.fastq`` file under the sample directory.
+
+    The sample directory is resolved from the input CSV's SPECIES_ID and
+    SAMPLE_ID columns as ``{output_dir}/{species_id}/{sample_id}``. Every
+    uncompressed FASTA or FASTQ file under that tree is compressed in place
+    with pigz using the supplied thread count.
+
+    Args:
+        sample_id (str): The SAMPLE_ID value identifying which CSV row (and
+            therefore which sample directory) to compress.
+        input_csv (str): Path to the EGAP input CSV containing SPECIES_ID
+            and SAMPLE_ID columns.
+        output_dir (str): Root output directory for the EGAP run — species
+            subdirectories live directly under this path.
+        cpu_threads (int | str): Number of threads pigz may use when
+            compressing each file.
+        ram_gb (int | str): RAM budget passed for API compatibility with
+            other EGAP steps. Not currently used by this step.
+
+    Returns:
+        None: Files are compressed in place; the function has no return value.
     """
-    PEP 8 Documentation
-    """
-    log_print(f"Compressing all FASTA and FASTQ files for {sample_id}...")
+    print(f"Compressing all FASTA and FASTQ files for {sample_id}...")
 
     # Read the CSV file and filter to the row corresponding to the sample of interest
     input_df = pd.read_csv(input_csv)
@@ -29,17 +59,17 @@ def final_compress(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     species_dir = os.path.join(output_dir, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
 
-    log_print(f"DEBUG - sample_dir - {sample_dir}")
+    print(f"DEBUG - sample_dir - {sample_dir}")
 
     # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
     for root, dirs, files in os.walk(sample_dir):
         for file in files:
             if file.endswith((".fasta", ".fastq")):
                 full_path = os.path.join(root, file)
-                log_print(f"Compressing: {full_path}")
+                print(f"Compressing: {full_path}")
                 _ = pigz_compress(full_path, cpu_threads)
 
-    log_print("PASS:\tAll FASTA and FASTQ successfully compressed!")
+    print("PASS:\tAll FASTA and FASTQ successfully compressed!")
             
             
 if __name__ == "__main__":
@@ -48,9 +78,6 @@ if __name__ == "__main__":
         print("Usage: python3 final_compress.py <input_csv> "
               "<sample_id> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
-
-    output_dir = sys.argv[3]
-    initialize_logging_environment(output_dir, sys.argv[2])
 
     final_compress(sys.argv[1],       # input_csv
                    sys.argv[2],       # sample_id
