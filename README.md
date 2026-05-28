@@ -295,10 +295,6 @@ Preprocess  →  Decontaminate reads  →  Assemble  →  Compare  →  Polish  
   <img src="resources/EGAP_pipeline.png" alt="EGAP Pipeline" width="500">
 </div>
 
-<div align="center">
-  <img src="resources/EGAP_pipeline_flow.svg" alt="EGAP Pipeline Flow (detailed stage diagram)" width="800">
-</div>
-
 ## Supported Sequencing Strategies
 
 Which assemblers EGAP invokes depends entirely on which read types you supply in the input CSV. After every available assembler has produced a draft, EGAP picks the best by BUSCO + N50 + contig count.
@@ -381,9 +377,9 @@ Both launch modes support `--dry_run`.
 ### Layout
 
 ```
-┌─────────────────────────────────────┬───────────────────────────────────────┐
-│  EGAP Banner (ANSI art)             │  Pipeline Settings (auto-scrolling)   │
-├─────────────────┬───────────────────┴────────────┬──────────────────────────┤
+┌─────────────────────────────────────┬────────────────────────────────────────┐
+│  EGAP Banner (ANSI art)             │   Pipeline Settings (auto-scrolling)   │
+├─────────────────┬───────────────────┴─────────────┬──────────────────────────┤
 │  Live Log       │  Step Progress Table            │  CPU / RAM Monitor       │
 │  (streaming)    │  (per-sample, per-step)         │  (per-core history)      │
 └─────────────────┴─────────────────────────────────┴──────────────────────────┘
