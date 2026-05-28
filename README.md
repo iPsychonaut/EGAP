@@ -101,8 +101,9 @@ Optimized for fungal genomes, EGAP is adaptable to other organisms by adjusting 
 13. [Troubleshooting & FAQ](#troubleshooting--faq)
 14. [Future Improvements](#future-improvements)
 15. [References](#references)
-16. [Contribution](#contribution)
-17. [License](#license)
+16. [Changelog](#changelog)
+17. [Contribution](#contribution)
+18. [License](#license)
 
 ## Requirements
 
@@ -739,6 +740,55 @@ The example data are published in:
 > Floudas D, Bentzer J, Ahrén D, Johansson T, Persson P, Tunlid A.
 > Uncovering the hidden diversity of litter-decomposition mechanisms in mushroom-forming fungi.
 > ISME J 14, 2046–2059 (2020). [10.1038/s41396-020-0667-6](https://doi.org/10.1038/s41396-020-0667-6).
+
+## Changelog
+
+### v3.4.1 *(2026-05-27)*
+Maintenance release on top of the v3.4.0 connectivity refactor. Focused on unblocking real end-to-end runs.
+
+- **Fixes**
+  - End-to-end pipeline run unblocked: `zipfile` handling and `log_print` are now safe across working-directory changes.
+  - `ORGANISM_KARYOTE` / `ORGANISM_KINGDOM` comparisons no longer crash when the value is `pd.NA`.
+  - `preprocess_ont` and `preprocess_pacbio` pull `sample_stats_dict` out of `SampleContext` so per-sample stats survive the refactor.
+  - Stale `bin/TruSeq3-PE.fa` removed; the adapter is now copied from `resources/` as a fallback.
+- **Changes**
+  - `validate_fasta` accepts the full IUPAC nucleotide alphabet (see FAQ).
+  - `fs.py` and `sh.py` renamed to descriptive two-word names to match the rest of `bin/`.
+- **Housekeeping**
+  - Added `.gitignore`; dropped a stale stats CSV that test runs were committing.
+  - Untracked the committed `bin/__pycache__/*.pyc` files.
+  - README voice pass: dropped em-dashes and tightened phrasing.
+
+### v3.4.0 *(2026-05-24)*
+Connectivity refactor plus a new decontamination stack.
+
+- **Major additions**
+  - New Kraken2 read decontamination stage (`decontaminate_reads.py`).
+  - Kingdom-aware Tiara assembly decontamination (`decontaminate_assembly.py`).
+  - Per-sample logging and a new TUI flag.
+  - Pipeline-flow SVG diagram added to the docs.
+- **Refactors**
+  - Connectivity refactor: utilities split, `SampleContext` adopted across stages, duplicated logic removed.
+  - Logging lifted into its own `bin/log.py` module.
+  - `EGAP_TUI.py` runs from `bin/` without `PYTHONPATH` tweaks and stays in sync with `EGAP.py`'s process list.
+- **Fixes / polish**
+  - Trimmomatic adapter path lookup, null-string CSV bug, literal `'None'` in `REF_SEQ` / `GCA`, and hard-FAIL on missing tools.
+  - `run_subprocess_cmd` catches `FileNotFoundError` / `PermissionError`.
+  - Kraken2 and Tiara settings shown in the pipeline settings display.
+  - Suppressed the noisy non-fatal numpy API mismatch in the TUI log.
+- **Infra**
+  - Container builds, README, and bioconda recipe updated for the new tooling.
+
+### v3.3.9 *(2026-03-30)*
+- **Pipeline-wide logging system**: Every run now writes a timestamped log file to `<output_dir>/<output_dir_name>_log.txt`. All status, command, warning, pass, skip, and error messages from every pipeline stage are captured there in addition to being printed to the terminal with color coding.
+  - `utilities.py`: Added module-level `DEFAULT_LOG_FILE` and `ENVIRONMENT_TYPE` variables; `run_subprocess_cmd()` now routes all output through `log_print()`.
+  - `EGAP.py`: Calls `initialize_logging_environment(output_dir)` on startup; all operational progress messages routed through `log_print()`.
+  - All sub-pipeline scripts (`preprocess_*`, `assemble_*`, `compare_assemblies`, `polish_assembly`, `curate_assembly`, `qc_assessment`, `html_reporter`, `process_metadata`, `final_compress`): each initializes the logging environment independently on startup (required since they run as separate subprocesses) and routes all operational messages through `log_print()`.
+
+### v3.3.8 *(2026-02-25)*
+- Added `process_metadata.py` for SRA and assembly metadata TSV generation.
+- `html_reporter.py`: Improved template handling and robustness to missing QC artifacts.
+- `compare_assemblies.py` and `qc_assessment.py`: Stability and path-handling fixes.
 
 ## Contribution
 
