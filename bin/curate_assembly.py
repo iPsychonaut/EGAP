@@ -6,12 +6,6 @@ curate_assembly.py
 Post-polishing curation: purge duplicates, reference correction (RagTag),
 and gap closing (ONT/PacBio via TGS-GapCloser or Illumina via ABySS-Sealer).
 
-Stage:
-    Curation (purge_dups)
-    Curation (RagTag)
-    Curation (TGS-GapCloser, for long reads)
-    Curation (Abyss-Sealer, for Illumina)
-
 Created on Wed Aug 16 2023
 
 Updated on Wed Sept 3 2025
@@ -21,13 +15,40 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 
 import os
 import sys
-from typing import Optional
-
 import pandas as pd
 import shutil
 from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, initialize_logging_environment, validate_fasta, load_sample_context
+from utilities import run_subprocess_cmd, get_current_row_data
+
+
+# --------------------------------------------------------------
+# Validate FASTA file
+# --------------------------------------------------------------
+def validate_fasta(file_path):
+    if not file_path:
+        print("ERROR:\tFASTA path is empty/None")
+        return False
+    if not os.path.exists(file_path):
+        print(f"ERROR:\tFASTA file not found: {file_path}")
+        return False
+    if os.path.getsize(file_path) < 100:
+        print(f"ERROR:\tFASTA file is suspiciously small: {file_path}")
+        return False
+    try:
+        with open(file_path, "r") as f:
+            for record in SeqIO.parse(f, "fasta"):
+                if not record.seq:
+                    print(f"ERROR:\tFASTA file contains empty sequences: {file_path}")
+                    return False
+                if not all(c.upper() in "ATCGN" for c in record.seq):
+                    print(f"ERROR:\tFASTA file contains non-nucleotide sequences: {file_path}")
+                    return False
+                return True
+    except Exception as e:
+        print(f"ERROR:\tInvalid FASTA format in {file_path}: {str(e)}")
+        return False
+    return False
 
 
 # --------------------------------------------------------------
@@ -311,15 +332,10 @@ def illu_abyss_sealer(curation_dir, ragtag_ref_assembly, illu_f_dedup, illu_r_de
 # --------------------------------------------------------------
 # Orchestrate assembly curation
 # --------------------------------------------------------------
-def curate_assembly(
-    sample_id: str,
-    input_csv: str,
-    output_dir: str,
-    cpu_threads: int,
-    ram_gb: int,
-) -> Optional[str]:
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
-    current_series = ctx.current_series
+def curate_assembly(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+    input_df = pd.read_csv(input_csv)
+    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
+    current_series = current_row.iloc[0]
 
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
@@ -333,7 +349,9 @@ def curate_assembly(
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
 
-    species_dir = os.path.join(ctx.output_dir, species_id)
+    # --- ABSOLUTIZE EVERYTHING ---
+    output_dir_abs = str(Path(output_dir).resolve())
+    species_dir = os.path.join(output_dir_abs, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
     curation_out_dir = os.path.join(sample_dir, "curated_assembly")
 
@@ -354,15 +372,15 @@ def curate_assembly(
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
     # Resolve to absolute strings if present
-    def to_abs(p): return str(Path(p).resolve()) if isinstance(p, str) else p
-    species_dir = to_abs(species_dir)
-    sample_dir = to_abs(sample_dir)
-    curation_out_dir = to_abs(curation_out_dir)
-    illumina_f_raw_reads = to_abs(illumina_f_raw_reads) if pd.notna(illumina_f_raw_reads) else illumina_f_raw_reads
-    illumina_r_raw_reads = to_abs(illumina_r_raw_reads) if pd.notna(illumina_r_raw_reads) else illumina_r_raw_reads
-    ont_raw_reads = to_abs(ont_raw_reads) if pd.notna(ont_raw_reads) else ont_raw_reads
-    pacbio_raw_reads = to_abs(pacbio_raw_reads) if pd.notna(pacbio_raw_reads) else pacbio_raw_reads
-    ref_seq = to_abs(ref_seq) if pd.notna(ref_seq) else ref_seq
+    def _abs(p): return str(Path(p).resolve()) if isinstance(p, str) else p
+    species_dir = _abs(species_dir)
+    sample_dir = _abs(sample_dir)
+    curation_out_dir = _abs(curation_out_dir)
+    illumina_f_raw_reads = _abs(illumina_f_raw_reads) if pd.notna(illumina_f_raw_reads) else illumina_f_raw_reads
+    illumina_r_raw_reads = _abs(illumina_r_raw_reads) if pd.notna(illumina_r_raw_reads) else illumina_r_raw_reads
+    ont_raw_reads = _abs(ont_raw_reads) if pd.notna(ont_raw_reads) else ont_raw_reads
+    pacbio_raw_reads = _abs(pacbio_raw_reads) if pd.notna(pacbio_raw_reads) else pacbio_raw_reads
+    ref_seq = _abs(ref_seq) if pd.notna(ref_seq) else ref_seq
 
     print(f"DEBUG - illumina_sra - {illumina_sra}")
     print(f"DEBUG - illumina_f_raw_reads - {illumina_f_raw_reads}")
@@ -504,7 +522,5 @@ if __name__ == "__main__":
     if len(sys.argv) != 6:
         print("Usage: python3 curate_assembly.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     final_curated_assembly = curate_assembly(sys.argv[1], sys.argv[2], sys.argv[3], str(sys.argv[4]), str(sys.argv[5]))

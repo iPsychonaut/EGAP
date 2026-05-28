@@ -1,88 +1,22 @@
-# =============================================================================
-# Entheome Ecosystem — multi-stage Docker image
-# -----------------------------------------------------------------------------
-# Builds three conda environments used across the Entheome toolchain:
-#   * EGAP_env         — Entheome Genome Assembly Pipeline (EGAP) v3.4.1
-#   * EGEP_env         — Annotation helper tools
-#   * funannotate_env  — Funannotate for eukaryotic genome annotation
-# The final runtime image is a slim Debian layer that carries all three envs
-# plus Augustus and related runtime dependencies.
-# =============================================================================
-
+# start with miniconda3 as build environment
 FROM condaforge/mambaforge AS build
+LABEL maintainer="Ian M Bollinger <ian.bollinger@entheome.org> / <ian.michael.bollinger@gmail.com>"
 
-LABEL maintainer="Ian Bollinger <ian.bollinger@entheome.org>" \
-      version="3.4.1" \
-      description="Entheome Genome Assembly Pipeline (EGAP) v3.4.1 — multi-env Entheome ecosystem image" \
-      org.opencontainers.image.source="https://github.com/iPsychonaut/EGAP" \
-      org.opencontainers.image.version="3.4.1" \
-      org.opencontainers.image.authors="Ian Bollinger <ian.bollinger@entheome.org>"
 
-# Install mamba and conda-pack in the base env — used to build and then
-# pack per-env tarballs that are copied into the slim runtime image below.
+# docker build -t entheome_ecosystem .
+# docker run -it -v /mnt/d:/mnt/d entheome_ecosystem bash
+
+# Update, install mamba and conda-pack:
 RUN mamba install -n base --yes conda-pack
 
 ###############################################################################
 # Generate EGAP_env
 ###############################################################################
 
-# Create EGAP_env with Python 3.8 and all EGAP v3.4.1 dependencies.
-# Pinning rationale (verified against conda list on 2026-04-06):
-#   numpy=1.19.5     — tiara=1.0.3 requires numpy<1.20; do not loosen.
-#   tiara=1.0.3      — exact pin; newer solves break the numpy constraint.
-#   kraken2=2.1.6    — exact pin; tested working version.
-#   sra-tools=3.2.0  — exact pin; API changes between minor versions.
-#   trimmomatic=0.40 — exact pin; share-dir path used in adapter symlinks.
-#   flye=2.9.5       — exact pin; >=3.0 changes assembly graph format.
-RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
-    'python>=3.8,<3.9' \
-    pandas \
-    'numpy=1.19.5' \
-    'masurca=4.1.4' \
-    'quast=5.3.0' \
-    compleasm \
-    busco \
-    biopython \
-    ragtag \
-    'nanoplot=1.46.2' \
-    termcolor \
-    minimap2 \
-    bwa-mem2 \
-    samtools \
-    bamtools \
-    tgsgapcloser \
-    abyss \
-    sepp \
-    psutil \
-    beautifulsoup4 \
-    ncbi-datasets-cli \
-    matplotlib-base \
-    'trimmomatic=0.40' \
-    pilon \
-    fastqc \
-    bbmap \
-    racon \
-    kmc \
-    'spades=4.2.0' \
-    purge_dups \
-    'flye=2.9.5' \
-    pbccs \
-    'hifiasm=0.25.0' \
-    gfatools \
-    bifrost \
-    ratatosk \
-    'sra-tools=3.2.0' \
-    filtlong \
-    pyinaturalist \
-    jinja2 \
-    geopy \
-    tabulate \
-    openpyxl \
-    requests \
-    rich \
-    textual \
-    'tiara=1.0.3' \
-    'kraken2=2.1.6'
+# Create EGAP_env with Python 3.8
+# RUN conda create -c conda-forge -c bioconda -c defaults -n EGAP_env --yes python==3.8 egap
+RUN conda create -c conda-forge -c bioconda -c defaults \
+    -n EGAP_env --yes python=3.8 egap
     
 # Download required resources for quast
 RUN conda run -n EGAP_env quast-download-gridss && \
@@ -99,43 +33,11 @@ RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
     rm /tmp/EGAP_env.tar && \
     /EGAP_env/bin/conda-unpack
 
-# Download EGAP v3.4.1 scripts from GitHub into the EGAP_env.
-# Install wget (if not already available) to retrieve the files.
+# Download the latest EGAP.py from GitHub into the EGAP_env.
+# Install wget (if not already available) to retrieve the file.
 RUN apt-get update && apt-get install -y wget && \
-    EGAP_BRANCH="v3.4.1" && \
-    EGAP_RAW="https://raw.githubusercontent.com/iPsychonaut/EGAP/${EGAP_BRANCH}" && \
-    wget -O /EGAP_env/EGAP.py "${EGAP_RAW}/EGAP.py" && \
+    wget -O /EGAP_env/EGAP.py https://raw.githubusercontent.com/iPsychonaut/EGAP/master/EGAP.py && \
     chmod +x /EGAP_env/EGAP.py && \
-    mkdir -p /EGAP_env/bin && \
-    for SCRIPT in \
-        EGAP_TUI.py \
-        file_manager.py \
-        subprocess_runner.py \
-        log.py \
-        file_operations.py \
-        sample_csv.py \
-        utilities.py \
-        preprocess_illumina.py \
-        preprocess_ont.py \
-        preprocess_pacbio.py \
-        preprocess_refseq.py \
-        decontaminate_reads.py \
-        decontaminate_assembly.py \
-        assemble_masurca.py \
-        assemble_spades.py \
-        assemble_flye.py \
-        assemble_hifiasm.py \
-        compare_assemblies.py \
-        polish_assembly.py \
-        curate_assembly.py \
-        qc_assessment.py \
-        html_reporter.py \
-        process_metadata.py \
-        final_compress.py; \
-    do \
-        wget -O "/EGAP_env/bin/${SCRIPT}" "${EGAP_RAW}/bin/${SCRIPT}"; \
-    done && \
-    chmod +x /EGAP_env/bin/*.py && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a wrapper script in EGAP_env/bin called "EGAP"
@@ -236,62 +138,5 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
     FUNANNOTATE_DB="/opt/databases" \
     GENEMARK_PATH="/mnt/d/EGEP"
 
-# -----------------------------------------------------------------------------
-# EGAP v3.4.1 runtime defaults
-# -----------------------------------------------------------------------------
-# Kraken2 DB is NOT baked into the image (the standard 16 GB archive would
-# roughly double the image size). Bind-mount the database directory at runtime
-# and point KRAKEN2_DB at the mount point, e.g.:
-#
-#   docker run --rm \
-#       -e KRAKEN2_DB=/kraken2_db \
-#       -v /host/path/to/kraken2_db:/kraken2_db:ro \
-#       -v /host/data:/data \
-#       entheome_ecosystem:3.4.1 --input /data/samples.csv --output /data/out
-#
-# To provision a Kraken2 database on the host before running EGAP, either
-# build from source (authoritative, ~6-12 hrs):
-#   kraken2-build --standard --db /host/kraken2_db --threads 16 --use-ftp
-# or download the pre-built standard 16 GB index (faster, verify filename at
-# https://benlangmead.github.io/aws-indexes/k2):
-#   wget -c https://genome-idx.s3.amazonaws.com/kraken/k2_standard_16gb_20240904.tar.gz \
-#        -O /host/kraken2_db/k2_standard_16gb.tar.gz
-#   tar -xzf /host/kraken2_db/k2_standard_16gb.tar.gz -C /host/kraken2_db/
-ENV KRAKEN2_DB="" \
-    CONDA_DEFAULT_ENV=EGAP_env \
-    PYTHONUNBUFFERED=1 \
-    EGAP_DRY_RUN=0
-
-# One-time Funannotate database setup. Skipped silently if already initialised.
+# Run funannotate setup (within funannotate_env)
 RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"
-
-# -----------------------------------------------------------------------------
-# Default entrypoint — runs EGAP directly.
-# Override to enter an interactive shell:
-#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.1
-# -----------------------------------------------------------------------------
-ENTRYPOINT ["/EGAP_env/bin/EGAP"]
-CMD ["--help"]
-
-# =============================================================================
-# Usage examples
-# -----------------------------------------------------------------------------
-# Build:
-#   docker build -t entheome_ecosystem:3.4.1 .
-#
-# Show EGAP help:
-#   docker run --rm entheome_ecosystem:3.4.1
-#
-# Run EGAP with a host-mounted Kraken2 DB and data directory:
-#   docker run --rm \
-#       -e KRAKEN2_DB=/kraken2_db \
-#       -v /host/kraken2_db:/kraken2_db:ro \
-#       -v /host/data:/data \
-#       entheome_ecosystem:3.4.1 \
-#       --input-csv /data/samples.csv \
-#       --output /data/output \
-#       --threads 16 --ram 64
-#
-# Interactive shell (all three conda envs available on PATH):
-#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.1
-# =============================================================================
