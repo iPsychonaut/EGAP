@@ -173,7 +173,7 @@ def preprocess_ont(
     
         # NanoPlot Raw Reads (soft-guard)
         try:
-            sample_stats_dict = nanoplot_qc_reads(ont_raw_reads, "Raw_ONT_", cpu_threads, sample_stats_dict)
+            sample_stats_dict = nanoplot_qc_reads(ont_raw_reads, "Raw_ONT_", cpu_threads, sample_stats_dict, out_dir=ont_dir_abs)
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on raw ONT reads ({e}); continuing without NanoStats.")
     
@@ -197,7 +197,7 @@ def preprocess_ont(
     
         # NanoPlot Filtered Reads (soft-guard)
         try:
-            sample_stats_dict = nanoplot_qc_reads(filtered_ont, "Filt_ONT_", cpu_threads, sample_stats_dict)
+            sample_stats_dict = nanoplot_qc_reads(filtered_ont, "Filt_ONT_", cpu_threads, sample_stats_dict, out_dir=ont_dir_abs)
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on filtered ONT reads ({e}); continuing.")
     
@@ -225,7 +225,7 @@ def preprocess_ont(
     
         # NanoPlot Corrected Reads (soft-guard)
         try:
-            sample_stats_dict = nanoplot_qc_reads(final_corrected_ont, "Corr_ONT_", cpu_threads, sample_stats_dict)
+            sample_stats_dict = nanoplot_qc_reads(final_corrected_ont, "Corr_ONT_", cpu_threads, sample_stats_dict, out_dir=ont_dir_abs)
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on corrected ONT reads ({e}); continuing.")
     

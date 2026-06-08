@@ -143,7 +143,7 @@ def preprocess_pacbio(
 
         # NanoPlot RAW (best-effort; do not fail pipeline on plotting errors)
         try:
-            sample_stats_dict = nanoplot_qc_reads(pacbio_raw_reads, "Raw_PacBio_", cpu_threads, sample_stats_dict)
+            sample_stats_dict = nanoplot_qc_reads(pacbio_raw_reads, "Raw_PacBio_", cpu_threads, sample_stats_dict, out_dir=pacbio_dirto_abs)
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on raw PacBio reads ({e}); continuing without NanoStats.")
 
@@ -194,7 +194,7 @@ def preprocess_pacbio(
 
         # NanoPlot FILTERED (best-effort)
         try:
-            sample_stats_dict = nanoplot_qc_reads(filtered_pb, "Filt_PacBio_", cpu_threads, sample_stats_dict)
+            sample_stats_dict = nanoplot_qc_reads(filtered_pb, "Filt_PacBio_", cpu_threads, sample_stats_dict, out_dir=pacbio_dirto_abs)
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on filtered PacBio reads ({e}); continuing.")
 
