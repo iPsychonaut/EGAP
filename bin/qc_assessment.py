@@ -113,7 +113,7 @@ def run_lineage_eval(assembly_path: str,
 # --------------------------------------------------------------
 # Perform quality control on reads using NanoPlot
 # --------------------------------------------------------------
-def nanoplot_qc_reads(INPUT_READS, READS_ORIGIN, CPU_THREADS, sample_stats_dict):
+def nanoplot_qc_reads(INPUT_READS, READS_ORIGIN, CPU_THREADS, sample_stats_dict, out_dir=None):
     """Run NanoPlot to perform quality control on sequencing reads.
 
     Executes NanoPlot to generate quality metrics and updates the sample statistics
@@ -124,12 +124,19 @@ def nanoplot_qc_reads(INPUT_READS, READS_ORIGIN, CPU_THREADS, sample_stats_dict)
         READS_ORIGIN (str): Read type and stage (e.g., 'Raw_ONT_', 'Filt_ONT_').
         CPU_THREADS (int): Number of CPU threads to use.
         sample_stats_dict (dict): Dictionary to store QC metrics.
+        out_dir (str, optional): Directory under which to create the
+            ``{READS_ORIGIN}nanoplot_analysis`` folder. Defaults to the
+            directory of *INPUT_READS*. Callers should pass the canonical
+            per-sample reads directory so that raw/filtered/corrected
+            analyses all land together regardless of where the raw input
+            file physically lives (see select_long_reads).
 
     Returns:
         dict: Updated sample statistics dictionary with NanoPlot metrics.
     """
     print(f"NanoPlotting reads: {INPUT_READS}...")
-    output_dir = os.path.join(os.path.dirname(INPUT_READS), f"{READS_ORIGIN}nanoplot_analysis")
+    base_dir = out_dir if out_dir is not None else os.path.dirname(INPUT_READS)
+    output_dir = os.path.join(base_dir, f"{READS_ORIGIN}nanoplot_analysis")
     print(f"DEBUG - output_dir - {output_dir}")
     os.makedirs(output_dir, exist_ok=True)
     nanoplot_out_file = os.path.join(output_dir, f"{READS_ORIGIN}NanoStats.txt")

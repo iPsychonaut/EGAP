@@ -338,6 +338,12 @@ def analyze_nanostats(READS_ORIGIN, nanoplot_out_file, sample_stats_dict):
     dict
         The updated *sample_stats_dict* with NanoPlot metrics filled in.
     """
+    if not os.path.exists(nanoplot_out_file):
+        # NanoPlot is run as a soft-guarded best-effort step by the
+        # preprocessors, so a missing NanoStats file is not fatal here.
+        # Skip rather than crash; downstream selection falls back to defaults.
+        print(f"WARN:\tNanoStats file not found; skipping {READS_ORIGIN} stats: {nanoplot_out_file}")
+        return sample_stats_dict
     with open(nanoplot_out_file, "r") as nanostats:
         if "raw" in READS_ORIGIN.lower() and "ont" in READS_ORIGIN.lower():
             for line in nanostats:
@@ -444,16 +450,24 @@ def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
     if pd.notna(ont_raw_reads):
         print("DEBUG - PROCESSING ONT HIGHEST MEAN QUAL")
         reads_type = "ONT"
-        reads_dir = os.path.dirname(ont_raw_reads)
-        filtered_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_filtered.fastq")
-        corrected_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_corrected.fastq")
+        reads_token = reads_type.lower()
+        # NanoPlot analyses and filtered/corrected reads are written by
+        # preprocess_ont into output_dir/species_id/ONT (ont_dir_abs), NOT
+        # next to the raw input file.  Anchor here so an external
+        # ONT_RAW_READS path does not break the lookup (see issue #17).
+        reads_dir = os.path.join(output_dir, species_id, reads_type)
+        filtered_reads = os.path.join(reads_dir, f"{species_id}_{reads_token}_filtered.fastq")
+        corrected_reads = os.path.join(reads_dir, f"{species_id}_{reads_token}_corrected.fastq")
         reads_origin_list = ["Raw_ONT_", "Filt_ONT_", "Corr_ONT_"]
     elif pd.notna(pacbio_raw_reads):
         print("DEBUG - PROCESSING PACBIO HIGHEST MEAN QUAL")
         reads_type = "PacBio"
-        reads_dir = os.path.dirname(pacbio_raw_reads)
-        filtered_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_filtered.fastq")
-        corrected_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_corrected.fastq")
+        reads_token = reads_type.lower()
+        # See ONT branch: anchor to output_dir/species_id/PacBio
+        # (pacbio_dirto_abs), where preprocess_pacbio writes its artifacts.
+        reads_dir = os.path.join(output_dir, species_id, reads_type)
+        filtered_reads = os.path.join(reads_dir, f"{species_id}_{reads_token}_filtered.fastq")
+        corrected_reads = os.path.join(reads_dir, f"{species_id}_{reads_token}_corrected.fastq")
         reads_origin_list = ["Raw_PacBio_", "Filt_PacBio_"]
     else:
         print(f"ERROR:\tUNABLE TO PARSE LONG READS AS BOTH ONT AND PACBIO RAW READS ARE NONE: {ont_raw_reads} & {pacbio_raw_reads}")
@@ -464,19 +478,19 @@ def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
     if pd.notna(ont_raw_reads):
         print("Selecting Highest Mean Quality Long reads...")
         highest_mean_qual_long_reads = corrected_reads
-        if pd.notna(ont_raw_reads) and sample_stats_dict["CORRECT_ONT_MEAN_QUAL"] < sample_stats_dict["FILT_ONT_MEAN_QUAL"]:
+        if pd.notna(ont_raw_reads) and sample_stats_dict.get("CORRECT_ONT_MEAN_QUAL", 0.0) < sample_stats_dict.get("FILT_ONT_MEAN_QUAL", 0.0):
             highest_mean_qual_long_reads = filtered_reads
-            highest_mean_qual = sample_stats_dict["FILT_ONT_MEAN_QUAL"]
+            highest_mean_qual = sample_stats_dict.get("FILT_ONT_MEAN_QUAL", 0.0)
         else:
-            highest_mean_qual = sample_stats_dict["CORRECT_ONT_MEAN_QUAL"]
+            highest_mean_qual = sample_stats_dict.get("CORRECT_ONT_MEAN_QUAL", 0.0)
     if pd.notna(pacbio_raw_reads):
         print("Selecting Highest Mean Quality Long reads...")
         highest_mean_qual_long_reads = pacbio_raw_reads
-        if pd.notna(pacbio_raw_reads) and sample_stats_dict["RAW_PACBIO_MEAN_QUAL"] < sample_stats_dict["FILT_PACBIO_MEAN_QUAL"]:
+        if pd.notna(pacbio_raw_reads) and sample_stats_dict.get("RAW_PACBIO_MEAN_QUAL", 0.0) < sample_stats_dict.get("FILT_PACBIO_MEAN_QUAL", 0.0):
             highest_mean_qual_long_reads = filtered_reads
-            highest_mean_qual = sample_stats_dict["FILT_PACBIO_MEAN_QUAL"]
+            highest_mean_qual = sample_stats_dict.get("FILT_PACBIO_MEAN_QUAL", 0.0)
         else:
-            highest_mean_qual = sample_stats_dict["RAW_ONT_MEAN_QUAL"]
+            highest_mean_qual = sample_stats_dict.get("RAW_PACBIO_MEAN_QUAL", 0.0)
     print(f"Highest Mean Quality Long reads: {highest_mean_qual_long_reads}")
     print(f"Mean Quality: {highest_mean_qual}")
 
