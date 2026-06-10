@@ -82,11 +82,8 @@ def preprocess_pacbio(
     pacbio_dirto_abs  = os.path.join(species_dirto_abs, "PacBio")
     os.makedirs(pacbio_dirto_abs, exist_ok=True)
 
-    # Normalize implied paths BEFORE any chdir
-    if pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads):
-        pacbio_raw_reads = os.path.join(pacbio_dirto_abs, f"{pacbio_sra}.fastq")
-    elif isinstance(pacbio_raw_reads, str) and not os.path.isabs(pacbio_raw_reads):
-        pacbio_raw_reads = to_abs(os.path.join(ctx.output_dir, pacbio_raw_reads))
+    # PacBio input source is resolved in priority order (file > directory > SRA)
+    # inside the try block below; no pre-chdir path munging needed here.
 
     # Normalize reference FASTA if only GCA is present
     if pd.notna(ref_seq_gca) and (pd.isna(ref_seq) or not isinstance(ref_seq, str) or not ref_seq.strip()):
@@ -97,34 +94,55 @@ def preprocess_pacbio(
     prev_cwd = os.getcwd()
     os.chdir(pacbio_dirto_abs)
     try:
-        # Option 1: concatenate raw dir *.fastq
-        if isinstance(pacbio_raw_dir, str) and pacbio_raw_dir.strip():
+        # Resolve the PacBio input source in priority order:
+        #   1) explicit PACBIO_RAW_READS file, if it is real and non-empty
+        #   2) else concatenate a directory of *.fastq (PACBIO_RAW_DIR)
+        #   3) else download PACBIO_SRA
+        # Use the first source that resolves; fall through to the next otherwise.
+        resolved_reads = None
+
+        # 1) Explicit file
+        if isinstance(pacbio_raw_reads, str) and pacbio_raw_reads.strip():
+            candidate = pacbio_raw_reads if os.path.isabs(pacbio_raw_reads) else to_abs(os.path.join(ctx.output_dir, pacbio_raw_reads))
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                resolved_reads = candidate
+                print(f"NOTE:\tUsing provided PacBio reads file: {resolved_reads}")
+            else:
+                print(f"WARN:\tPACBIO_RAW_READS provided but not found/empty ({candidate}); trying directory, then SRA.")
+
+        # 2) Directory of fastqs to concatenate
+        if resolved_reads is None and isinstance(pacbio_raw_dir, str) and pacbio_raw_dir.strip():
             pb_raw_dirto_abs = pacbio_raw_dir if os.path.isabs(pacbio_raw_dir) else os.path.join(ctx.output_dir, pacbio_raw_dir)
             files = sorted(glob.glob(os.path.join(pb_raw_dirto_abs, "*.fastq")))
-            if not files:
-                print(f"ERROR:\tNo PacBio .fastq files found in {pb_raw_dirto_abs}")
-                return None
-            pacbio_raw_reads = os.path.join(pacbio_dirto_abs, f"{species_id}_pacbio_combined.fastq")
-            print(f"NOTE:\tConcatenating PacBio files from {pb_raw_dirto_abs} -> {pacbio_raw_reads}")
-            with open(pacbio_raw_reads, "wb") as w:
-                for f in files:
-                    with open(f, "rb") as r:
-                        shutil.copyfileobj(r, w)
+            if files:
+                combined = os.path.join(pacbio_dirto_abs, f"{species_id}_pacbio_combined.fastq")
+                print(f"NOTE:\tConcatenating {len(files)} PacBio file(s) from {pb_raw_dirto_abs} -> {combined}")
+                with open(combined, "wb") as w:
+                    for f in files:
+                        with open(f, "rb") as r:
+                            shutil.copyfileobj(r, w)
+                resolved_reads = combined
+            else:
+                print(f"WARN:\tPACBIO_RAW_DIR provided but no .fastq files in {pb_raw_dirto_abs}; trying SRA.")
 
-        # Option 2: SRA -> FASTQ into PacBio dir (ensure -O is used)
-        if isinstance(pacbio_sra, str) and pacbio_sra.strip():
-            if not pacbio_raw_reads or not os.path.exists(pacbio_raw_reads):
+        # 3) SRA download
+        if resolved_reads is None and isinstance(pacbio_sra, str) and pacbio_sra.strip():
+            expected = os.path.join(pacbio_dirto_abs, f"{pacbio_sra}.fastq")
+            if not os.path.exists(expected) or os.path.getsize(expected) == 0:
                 print(f"Downloading SRA {pacbio_sra} from GenBank...")
                 _ = run_subprocess_cmd(["prefetch", "--force", "yes", pacbio_sra], False)
                 _ = run_subprocess_cmd(["fasterq-dump", "--threads", str(cpu_threads), "-O", pacbio_dirto_abs, pacbio_sra], False)
-                expected = os.path.join(pacbio_dirto_abs, f"{pacbio_sra}.fastq")
-                if not os.path.exists(expected) or os.path.getsize(expected) == 0:
-                    print(f"ERROR:\tExpected FASTQ not found or empty after fasterq-dump: {expected}")
-                    return None
-                pacbio_raw_reads = expected
-                print(f"PASS:\tSRA converted to FASTQ: {pacbio_raw_reads}")
-            else:
-                print(f"SKIP:\tSRA already present as FASTQ: {pacbio_raw_reads}")
+            if not os.path.exists(expected) or os.path.getsize(expected) == 0:
+                print(f"ERROR:\tExpected FASTQ not found or empty after fasterq-dump: {expected}")
+                return None
+            resolved_reads = expected
+            print(f"PASS:\tSRA converted to FASTQ: {resolved_reads}")
+
+        if resolved_reads is None:
+            print("SKIP:\tPacBio preprocessing; no usable reads resolved from file, directory, or SRA")
+            return None
+
+        pacbio_raw_reads = resolved_reads
 
         # Validate raw reads
         if not pacbio_raw_reads or not os.path.exists(pacbio_raw_reads) or os.path.getsize(pacbio_raw_reads) == 0:
@@ -147,11 +165,8 @@ def preprocess_pacbio(
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on raw PacBio reads ({e}); continuing without NanoStats.")
 
-        # Decide filtered output path
-        if isinstance(pacbio_sra, str) and pacbio_sra.strip():
-            filtered_pb = os.path.join(pacbio_dirto_abs, os.path.basename(pacbio_raw_reads).replace(pacbio_sra, f"{species_id}_pacbio_filtered"))
-        else:
-            filtered_pb = os.path.join(pacbio_dirto_abs, f"{species_id}_pacbio_filtered.fastq")
+        # Canonical filtered name regardless of which input source resolved.
+        filtered_pb = os.path.join(pacbio_dirto_abs, f"{species_id}_pacbio_filtered.fastq")
 
         # If an old filtered file exists but is empty/suspicious, remove it to force regeneration
         if os.path.exists(filtered_pb) and not nonempty(filtered_pb):

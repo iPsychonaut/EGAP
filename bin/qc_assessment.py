@@ -678,9 +678,9 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
         # ``pd.NA == "eukaryote"`` returns ``pd.NA``, which raises
         # ``TypeError: boolean value of NA is ambiguous`` when used in an
         # ``if`` -- so we explicitly check for non-null before comparing.
-        if pd.notna(karyote_id) and karyote_id == "eukaryote":
+        if pd.notna(karyote_id) and str(karyote_id).strip().lower() == "eukaryote":
             quast_cmd.append("--eukaryote")
-        if pd.notna(kingdom_id) and kingdom_id == "Funga":
+        if pd.notna(kingdom_id) and str(kingdom_id).strip().lower() == "funga":
             quast_cmd.append("--fungus")
         if pd.notna(ref_seq) and os.path.exists(ref_seq):
             quast_cmd.extend(["-r", ref_seq])
@@ -983,9 +983,9 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         # ``pd.NA == "eukaryote"`` returns ``pd.NA``, which raises
         # ``TypeError: boolean value of NA is ambiguous`` when used in an
         # ``if`` -- so we explicitly check for non-null before comparing.
-        if pd.notna(karyote_id) and karyote_id == "eukaryote":
+        if pd.notna(karyote_id) and str(karyote_id).strip().lower() == "eukaryote":
             quast_cmd.append("--eukaryote")
-        if pd.notna(kingdom_id) and kingdom_id == "Funga":
+        if pd.notna(kingdom_id) and str(kingdom_id).strip().lower() == "funga":
             quast_cmd.append("--fungus")
         if pd.notna(ref_seq) and os.path.exists(ref_seq):
             quast_cmd.extend(["-r", ref_seq])
