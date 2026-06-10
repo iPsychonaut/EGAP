@@ -97,14 +97,8 @@ def preprocess_ont(
     ont_dir_abs = os.path.join(species_dir_abs, "ONT")
     os.makedirs(ont_dir_abs, exist_ok=True)
 
-    # Normalize ONT inputs BEFORE any chdir
-    if ont_sra is not None and ont_raw_reads is None:
-        # Expected dump location for SRA
-        ont_raw_reads = os.path.join(ont_dir_abs, f"{ont_sra}.fastq")
-    elif isinstance(ont_raw_reads, str) and not os.path.isabs(ont_raw_reads):
-        # If given a relative path, make it absolute relative to ctx.output_dir (project root),
-        # not the current cwd (prevents nested repetition)
-        ont_raw_reads = os.path.abspath(os.path.join(ctx.output_dir, ont_raw_reads))
+    # Input source is resolved in priority order (file > directory > SRA)
+    # after the chdir below.
 
     # Illumina dedup (absolute paths so downstream tools can find them regardless of cwd)
     illu_dedup_f_reads = os.path.join(species_dir_abs, "Illumina", f"{species_id}_illu_forward_dedup.fastq")
@@ -125,37 +119,56 @@ def preprocess_ont(
     os.chdir(ont_dir_abs)
     
     try:
-        # Handle Raw Data Directory (concatenate .fastq files)
-        if ont_raw_dir is not None:
-            print(f"NOTE:\tConcatenating ONT files from {ont_raw_dir}")
+        # Resolve the ONT input source in priority order:
+        #   1) explicit ONT_RAW_READS file, if it is real and non-empty
+        #   2) else concatenate a directory of *.fastq (ONT_RAW_DIR)
+        #   3) else download ONT_SRA
+        # Use the first source that resolves; fall through to the next otherwise.
+        resolved_reads = None
+
+        # 1) Explicit file
+        if ont_raw_reads is not None:
+            candidate = ont_raw_reads if os.path.isabs(ont_raw_reads) \
+                else os.path.abspath(os.path.join(ctx.output_dir, ont_raw_reads))
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                resolved_reads = candidate
+                print(f"NOTE:\tUsing provided ONT reads file: {resolved_reads}")
+            else:
+                print(f"WARN:\tONT_RAW_READS provided but not found/empty ({candidate}); trying directory, then SRA.")
+
+        # 2) Directory of fastqs to concatenate
+        if resolved_reads is None and ont_raw_dir is not None:
             ont_raw_dir_abs = ont_raw_dir if os.path.isabs(ont_raw_dir) else os.path.join(ctx.output_dir, ont_raw_dir)
             ont_files = sorted(glob.glob(os.path.join(ont_raw_dir_abs, "*.fastq")))
-            if not ont_files:
-                print(f"ERROR:\tNo ONT files found in {ont_raw_dir_abs}")
-                sys.exit(1)
-            ont_raw_reads = os.path.join(ont_dir_abs, f"{species_id}_ont_combined.fastq")
-            with open(ont_raw_reads, "wb") as w:
-                for f in ont_files:
-                    with open(f, "rb") as r:
-                        shutil.copyfileobj(r, w)
-    
-        # SRA download to the ONT directory (no relative -O that repeats the path)
-        if ont_sra is not None:
-            if not ont_raw_reads or not os.path.exists(ont_raw_reads):
+            if ont_files:
+                print(f"NOTE:\tConcatenating {len(ont_files)} ONT file(s) from {ont_raw_dir_abs}")
+                combined = os.path.join(ont_dir_abs, f"{species_id}_ont_combined.fastq")
+                with open(combined, "wb") as w:
+                    for f in ont_files:
+                        with open(f, "rb") as r:
+                            shutil.copyfileobj(r, w)
+                resolved_reads = combined
+            else:
+                print(f"WARN:\tONT_RAW_DIR provided but no .fastq files in {ont_raw_dir_abs}; trying SRA.")
+
+        # 3) SRA download
+        if resolved_reads is None and ont_sra is not None:
+            dumped = os.path.join(ont_dir_abs, f"{ont_sra}.fastq")
+            if not os.path.exists(dumped) or os.path.getsize(dumped) == 0:
                 print(f"Downloading SRA {ont_sra} from GenBank...")
                 _ = run_subprocess_cmd(["prefetch", "--force", "yes", ont_sra], False)
                 _ = run_subprocess_cmd(["fasterq-dump", "-e", str(cpu_threads), "-O", ont_dir_abs, ont_sra], False)
-                dumped = os.path.join(ont_dir_abs, f"{ont_sra}.fastq")
-                if not os.path.exists(dumped):
-                    print("ERROR:\tExpected FASTQ not found after fasterq-dump.")
-                    return None
-                if os.path.getsize(dumped) == 0:
-                    print(f"ERROR:\tDownloaded FASTQ is empty: {dumped}")
-                    return None
-                ont_raw_reads = dumped
-                print(f"PASS:\tSRA converted to FASTQ: {ont_raw_reads}")
-            else:
-                print(f"SKIP:\tSRA already exists: {ont_raw_reads}")
+            if not os.path.exists(dumped) or os.path.getsize(dumped) == 0:
+                print(f"ERROR:\tExpected FASTQ not found or empty after fasterq-dump: {dumped}")
+                return None
+            resolved_reads = dumped
+            print(f"PASS:\tSRA converted to FASTQ: {resolved_reads}")
+
+        if resolved_reads is None:
+            print("SKIP:\tONT preprocessing; no usable reads resolved from file, directory, or SRA")
+            return None
+
+        ont_raw_reads = resolved_reads
     
         # Parse estimated genome size
         m = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", str(est_size))
@@ -177,10 +190,9 @@ def preprocess_ont(
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on raw ONT reads ({e}); continuing without NanoStats.")
     
-        # Filtlong (only include Illumina if those files actually exist)
-        filtered_ont = os.path.join(ont_dir_abs,
-                                    f"{species_id}_ont_filtered.fastq" if not isinstance(ont_sra, str)
-                                    else os.path.basename(ont_raw_reads).replace(f"{ont_sra}", f"{species_id}_ont_filtered"))
+        # Filtlong (only include Illumina if those files actually exist).
+        # Canonical filtered name regardless of which input source resolved.
+        filtered_ont = os.path.join(ont_dir_abs, f"{species_id}_ont_filtered.fastq")
         coverage = 75
         target_bases = est_size_bp * coverage
         use_illumina = os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads)

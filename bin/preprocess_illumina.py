@@ -412,8 +412,36 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     illumina_dir = species_dir / "Illumina"
     illumina_dir.mkdir(parents=True, exist_ok=True)
 
-    # ---- CASE A: SRA accession provided; ensure R1/R2 exist or download ----
-    if pd.notna(illu_sra) and pd.isna(illu_raw_f_reads) and pd.isna(illu_raw_r_reads):
+    # Resolve the Illumina input source in priority order:
+    #   1) explicit ILLUMINA_RAW_F_READS + _R_READS, if both are real and non-empty
+    #   2) else combine/verify a raw directory (ILLUMINA_RAW_DIR)
+    #   3) else download ILLUMINA_SRA
+    # Use the first source that resolves; fall through to the next otherwise.
+    resolved_f, resolved_r = None, None
+
+    # 1) Explicit paired files
+    if illu_raw_f_reads is not None and illu_raw_r_reads is not None:
+        f_cand = str(illu_raw_f_reads).strip()
+        r_cand = str(illu_raw_r_reads).strip()
+        if nonempty(f_cand) and nonempty(r_cand):
+            resolved_f, resolved_r = f_cand, r_cand
+            log_print(f"NOTE:\tUsing provided Illumina paired reads: {resolved_f}, {resolved_r}")
+        else:
+            log_print(f"WARN:\tILLUMINA_RAW_F/R_READS provided but not both found/non-empty "
+                      f"(R1={f_cand}, R2={r_cand}); trying directory, then SRA.")
+
+    # 2) Raw directory; combine/verify there
+    if (resolved_f is None or resolved_r is None) and illu_raw_dir is not None:
+        log_print(f"Process Illumina Raw Directory: {illu_raw_dir}...")
+        combined_list = illumina_extract_and_check(str(illu_raw_dir), sample_id)
+        if combined_list:
+            resolved_f, resolved_r = combined_list[0], combined_list[1]
+            log_print("PASS:\tSuccessfully processed Illumina Raw Directory.")
+        else:
+            log_print(f"WARN:\tFailed to process Illumina Raw Directory for {sample_id}; trying SRA.")
+
+    # 3) SRA accession; download R1/R2 if not already present
+    if (resolved_f is None or resolved_r is None) and illu_sra is not None:
         sra_id = str(illu_sra).strip()
         r1 = illumina_dir / f"{sra_id}_1.fastq"
         r2 = illumina_dir / f"{sra_id}_2.fastq"
@@ -465,28 +493,13 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
             log_print(f"PASS:\tIllumina SRA processed: {r1}, {r2}")
 
-        illu_raw_f_reads = str(r1)
-        illu_raw_r_reads = str(r2)
+        resolved_f, resolved_r = str(r1), str(r2)
 
-    # ---- CASE B: Raw directory provided; combine/verify there ----
-    elif pd.notna(illu_raw_dir) and (pd.isna(illu_raw_f_reads) or pd.isna(illu_raw_r_reads)):
-        log_print(f"Process Illumina Raw Directory: {illu_raw_dir}...")
-        combined_list = illumina_extract_and_check(str(illu_raw_dir), sample_id)
-        if combined_list:
-            log_print("PASS:\tSuccessfully processed Illumina Raw Directory.")
-            illu_raw_f_reads, illu_raw_r_reads = combined_list[0], combined_list[1]
-            # Update the 'SRA' field logically for downstream logging (won't rewrite CSV here)
-        else:
-            log_print(f"ERROR:\tFailed to process Illumina Raw Directory for {sample_id}")
-            return None, None
+    if resolved_f is None or resolved_r is None:
+        log_print("SKIP:\tIllumina preprocessing; no usable paired reads resolved from files, directory, or SRA")
+        return None, None
 
-    # If both explicit files provided in CSV, just trust them
-    else:
-        # Normalize strings if they exist
-        if pd.notna(illu_raw_f_reads):
-            illu_raw_f_reads = str(illu_raw_f_reads).strip()
-        if pd.notna(illu_raw_r_reads):
-            illu_raw_r_reads = str(illu_raw_r_reads).strip()
+    illu_raw_f_reads, illu_raw_r_reads = resolved_f, resolved_r
 
     # Final guard: we must have both R1 and R2 paths now
     if not illu_raw_f_reads or not illu_raw_r_reads or not os.path.exists(illu_raw_f_reads) or not os.path.exists(illu_raw_r_reads):
