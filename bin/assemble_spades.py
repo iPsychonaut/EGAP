@@ -23,6 +23,8 @@ import pandas as pd
 from utilities import run_subprocess_cmd, log_print, initialize_logging_environment, load_sample_context
 from qc_assessment import qc_assessment
 from file_manager import remove_file, remove_dir
+from estimate_runtime import log_estimate_for
+from record_provenance import record_file
 
 
 # --------------------------------------------------------------
@@ -202,6 +204,7 @@ def assemble_spades(
     print(f"DEBUG - spades_path - {spades_path}")
     print(f"DEBUG - spades_cmd - {spades_cmd}")
 
+    log_estimate_for("spades", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
     _ = run_subprocess_cmd(spades_cmd, shell_check=False)
 
     if not os.path.exists(spades_path):
@@ -209,6 +212,7 @@ def assemble_spades(
         return None
 
     shutil.move(spades_path, egap_spades_assembly_path)
+    record_file("SPAdes assembly", egap_spades_assembly_path)
 
     # QC using absolute paths
     egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(

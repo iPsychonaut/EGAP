@@ -440,6 +440,16 @@ if __name__ == "__main__":
     parser.add_argument("--tui", action="store_true", default=False,
                         help="Run the pipeline through the interactive TUI instead of "
                              "plain terminal output.")
+    # Opt-out flags to skip individual assemblers. EGAP otherwise runs every
+    # assembler compatible with the supplied read types and picks the best.
+    parser.add_argument("--no-masurca", "-no_m", dest="no_masurca", action="store_true",
+                        default=False, help="Skip the MaSuRCA assembler.")
+    parser.add_argument("--no-flye", "-no_f", dest="no_flye", action="store_true",
+                        default=False, help="Skip the Flye assembler.")
+    parser.add_argument("--no-spades", "-no_s", dest="no_spades", action="store_true",
+                        default=False, help="Skip the SPAdes assembler.")
+    parser.add_argument("--no-hifiasm", "-no_h", dest="no_hifiasm", action="store_true",
+                        default=False, help="Skip the hifiasm assembler.")
 
     args = parser.parse_args()
     input_csv   = args.input_csv
@@ -465,6 +475,18 @@ if __name__ == "__main__":
         _tui_app._preloaded_args = args
         _tui_app.run()
         sys.exit(0)
+
+    # ---- Session-wide log ----
+    # The per-sample logs opened in the loop below only begin once each sample
+    # starts, so the startup banner, the full tool/pipeline configuration dump,
+    # and the launched commands would otherwise never reach disk. Tee stdout to
+    # a session log now so the entire run (banner + settings + commands) is
+    # captured. _Tee strips ANSI colour codes from the file copy.
+    _session_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    _session_log_path = os.path.join(output_dir, f"EGAP_session_{_session_stamp}_log.txt")
+    _session_log_fh = open(_session_log_path, "a", buffering=1)
+    sys.stdout = _Tee(sys.stdout, _session_log_fh)
+    print(f"NOTE:\tSession log: {_session_log_path}")
 
     # Print Banner & Parameters
     print(f"""
@@ -559,7 +581,7 @@ if __name__ == "__main__":
         \033[94mgraph kmer size                  \033[0m: auto
         \033[94muse linking mates                \033[0m: (0 if Hybrid assembly, else 1)
         \033[94mclose gaps                       \033[0m: (0 if Hybrid assembly, else 1)
-        \033[94mmega reads one pass              \033[0m: 0
+        \033[94mmega reads one pass              \033[0m: (1 if long reads present, else 0)
         \033[94mlimit jump coverage              \033[0m: 300
         \033[94mca parameters                    \033[0m: cgwErrorRate=0.15
         \033[94mjellyfish hash size              \033[0m: based on the estimated size of the genome provided
@@ -710,6 +732,22 @@ if __name__ == "__main__":
                  "assemble_masurca", "assemble_flye",
                  "assemble_spades", "assemble_hifiasm", "compare_assemblies",
                  "polish_assembly", "curate_assembly", "decontaminate_assembly"]
+
+    # Honour per-assembler skip flags (--no-masurca/-no_m, etc.). EGAP runs every
+    # assembler compatible with the read types unless explicitly disabled here.
+    _skip_assemblers = {
+        "assemble_masurca": args.no_masurca,
+        "assemble_flye":    args.no_flye,
+        "assemble_spades":  args.no_spades,
+        "assemble_hifiasm": args.no_hifiasm,
+    }
+    _disabled = [proc for proc, skip in _skip_assemblers.items() if skip]
+    if _disabled:
+        processes = [p for p in processes if p not in _disabled]
+        print(f"NOTE:\tSkipping assembler(s) by request: "
+              f"{', '.join(p.replace('assemble_', '') for p in _disabled)}")
+    if all(_skip_assemblers.values()):
+        print("WARN:\tAll assemblers were disabled; no assembly will be produced.")
 
     # Determine project root and locate the bin/ directory there
     this_file   = Path(__file__).resolve()

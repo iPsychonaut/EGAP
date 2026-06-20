@@ -27,6 +27,8 @@ from typing import Optional
 import pandas as pd
 from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context, to_abs
 from qc_assessment import qc_assessment
+from estimate_runtime import log_estimate_for
+from record_provenance import record_file
 
 
 def assemble_hifiasm(
@@ -127,6 +129,7 @@ def assemble_hifiasm(
                 highest
             ]
             print(f"CMD:\t{' '.join(hifiasm_cmd)}")
+            log_estimate_for("hifiasm", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
             rc = run_subprocess_cmd(hifiasm_cmd, shell_check=False)
             if rc != 0:
                 print(f"WARN:\thifiasm exited with code {rc}")
@@ -157,6 +160,8 @@ def assemble_hifiasm(
                 if rc != 0 or (not os.path.exists(egap_hifiasm_assembly_path)):
                     print("ERROR:\tFailed to convert GFA to FASTA.")
                     return None
+
+        record_file("hifiasm assembly", egap_hifiasm_assembly_path)
 
         # QC (absolute paths so CWD is irrelevant)
         egap_hifiasm_assembly_path, hifiasm_stats_list, _ = qc_assessment(

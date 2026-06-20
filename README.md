@@ -324,6 +324,12 @@ Which assemblers EGAP invokes depends entirely on which read types you supply in
 | `--ram_gb` | `-r` | int | `8` | RAM in GB to allocate |
 | `--dry_run` | | flag | `False` | Log all file-management actions (removals, compressions) without executing them. Equivalent to setting `EGAP_DRY_RUN=1` in the environment. |
 | `--tui` | | flag | `False` | Launch the interactive TUI instead of plain terminal output. All other flags pass through to the TUI. |
+| `--no-masurca` | `-no_m` | flag | `False` | Skip the MaSuRCA assembler. |
+| `--no-flye` | `-no_f` | flag | `False` | Skip the Flye assembler. |
+| `--no-spades` | `-no_s` | flag | `False` | Skip the SPAdes assembler. |
+| `--no-hifiasm` | `-no_h` | flag | `False` | Skip the hifiasm assembler. |
+
+> By default EGAP runs every assembler compatible with the supplied read types and picks the best by BUSCO + N50 + contig count. Use the `--no-*` flags to disable specific assemblers (for example, `-no_m` to skip MaSuRCA's slow hybrid mega-reads stage and rely on Flye).
 
 ### Example Commands
 

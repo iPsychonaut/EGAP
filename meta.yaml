@@ -35,7 +35,9 @@ requirements:
     # Pin kaleido to the Chromium-bundling 0.2.x series. kaleido v1 drops the
     # bundled browser and requires a system Chrome (with plotly >=6.1.1),
     # which breaks NanoPlot static exports on headless/HPC installs (#16).
-    - kaleido >=0.1,<0.3
+    # The conda-forge package is named python-kaleido (the bare `kaleido`
+    # name fails to solve cleanly on some installs).
+    - python-kaleido >=0.1,<0.3
     - termcolor >=2.3.0
     - minimap2 >=2.28
     - bwa-mem2 >=2.2.1

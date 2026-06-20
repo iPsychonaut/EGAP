@@ -497,15 +497,18 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             return Text("RUNNING", style="yellow")
         return Text("PENDING", style="dim")
 
-    def init_step_plan(self, samples: List[Tuple[str, str]]) -> None:
-        processes = [
-            "preprocess_refseq", "preprocess_illumina", "preprocess_ont",
-            "preprocess_pacbio", "decontaminate_reads",
-            "assemble_masurca", "assemble_flye",
-            "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-            "polish_assembly", "curate_assembly", "decontaminate_assembly",
-        ]
-    
+    def init_step_plan(self, samples: List[Tuple[str, str]], processes: Optional[List[str]] = None) -> None:
+        # Caller passes the (possibly skip-filtered) process list so the display
+        # table matches what actually runs; fall back to the full list.
+        if processes is None:
+            processes = [
+                "preprocess_refseq", "preprocess_illumina", "preprocess_ont",
+                "preprocess_pacbio", "decontaminate_reads",
+                "assemble_masurca", "assemble_flye",
+                "assemble_spades", "assemble_hifiasm", "compare_assemblies",
+                "polish_assembly", "curate_assembly", "decontaminate_assembly",
+            ]
+
         self.steps = []
         for sample_id in samples:
             for p in processes:
@@ -663,6 +666,16 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 parser.add_argument("--dry_run", action="store_true", default=False,
                                     help="Log file-management actions without executing them. "
                                          "Equivalent to EGAP_DRY_RUN=1.")
+                # Per-assembler skip flags (mirror EGAP.py so standalone TUI
+                # launches accept them too).
+                parser.add_argument("--no-masurca", "-no_m", dest="no_masurca",
+                                    action="store_true", default=False, help="Skip MaSuRCA.")
+                parser.add_argument("--no-flye", "-no_f", dest="no_flye",
+                                    action="store_true", default=False, help="Skip Flye.")
+                parser.add_argument("--no-spades", "-no_s", dest="no_spades",
+                                    action="store_true", default=False, help="Skip SPAdes.")
+                parser.add_argument("--no-hifiasm", "-no_h", dest="no_hifiasm",
+                                    action="store_true", default=False, help="Skip hifiasm.")
                 self.args = parser.parse_args()
 
             # Propagate dry_run env var regardless of how args were obtained.
@@ -702,6 +715,22 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 "polish_assembly", "curate_assembly", "decontaminate_assembly",
             ]
 
+            # Honour per-assembler skip flags (--no-masurca/-no_m, etc.), whether
+            # they arrived via EGAP.py --tui (preloaded args) or a standalone launch.
+            _skip_assemblers = {
+                "assemble_masurca": getattr(self.args, "no_masurca", False),
+                "assemble_flye":    getattr(self.args, "no_flye", False),
+                "assemble_spades":  getattr(self.args, "no_spades", False),
+                "assemble_hifiasm": getattr(self.args, "no_hifiasm", False),
+            }
+            _disabled = [proc for proc, skip in _skip_assemblers.items() if skip]
+            if _disabled:
+                processes = [p for p in processes if p not in _disabled]
+                self.log_line("NOTE:\tSkipping assembler(s) by request: "
+                              + ", ".join(p.replace("assemble_", "") for p in _disabled))
+            if all(_skip_assemblers.values()):
+                self.log_line("WARN:\tAll assemblers were disabled; no assembly will be produced.")
+
             bin_dir_candidate = egap.locate_bin_dir(processes, project_dir)
             if bin_dir_candidate is not None:
                 bin_dir = bin_dir_candidate
@@ -721,7 +750,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 samples.append((sample_id))
             
             self.log_line(f"Loaded {len(samples)} sample(s) from CSV.")
-            self.init_step_plan(samples)
+            self.init_step_plan(samples, processes)
 
             for sample_id in samples:
                 if self.shutdown_requested:

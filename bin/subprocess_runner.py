@@ -74,6 +74,13 @@ def run_subprocess_cmd(cmd_list, shell_check):
     """
     cmd_display = cmd_list if isinstance(cmd_list, str) else ' '.join(cmd_list)
     print(f"CMD:\t{cmd_display}")
+    # Best-effort provenance capture (never fatal): record the command so the
+    # HTML report can list the steps, settings, and program versions used.
+    try:
+        from record_provenance import record_command
+        record_command(cmd_list)
+    except Exception:
+        pass
     try:
         process = subprocess.Popen(cmd_list, shell=shell_check, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True)

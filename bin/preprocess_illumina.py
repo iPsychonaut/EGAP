@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pandas as pd
 from utilities import run_subprocess_cmd, md5_check, initialize_logging_environment, log_print, load_sample_context
+from record_provenance import record_file
 from decontaminate_reads import (
     get_kraken2_db,
     get_kraken_keep_domains,
@@ -515,6 +516,8 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # Short-circuit if already done
     if os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads):
         log_print(f"SKIP:\tIllumina preprocessing already completed: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
+        record_file("Illumina forward (dedup)", illu_dedup_f_reads)
+        record_file("Illumina reverse (dedup)", illu_dedup_r_reads)
         return illu_dedup_f_reads, illu_dedup_r_reads
 
     # ---------- FastQC on raw ----------
@@ -695,6 +698,8 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             log_print("WARN:\tKraken2 Illumina decontamination failed. "
                       "Continuing with unfiltered deduped reads.")
 
+    record_file("Illumina forward (dedup)", illu_dedup_f_reads)
+    record_file("Illumina reverse (dedup)", illu_dedup_r_reads)
     return illu_dedup_f_reads, illu_dedup_r_reads
 
 

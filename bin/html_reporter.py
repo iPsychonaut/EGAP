@@ -65,6 +65,48 @@ except Exception as e:
     print(f"ERROR:\tutilities.get_current_row_data not importable: {e}")
     raise
 
+# Provenance (steps / commands / versions). Optional: a minimal install or a
+# run predating provenance capture should still render the rest of the report.
+try:
+    from record_provenance import (load_provenance, pipeline_steps,
+                                    meaningful_tools, resolve_versions,
+                                    versions_from_entries)
+    _HAS_PROVENANCE = True
+except Exception as e:
+    print(f"WARN:\trecord_provenance import failed ({e}); provenance section will be skipped.")
+    _HAS_PROVENANCE = False
+
+
+# Human-readable labels for the pipeline stages recorded in provenance.
+STAGE_LABELS = {
+    "preprocess_refseq": "Reference preparation",
+    "preprocess_illumina": "Illumina read preprocessing",
+    "preprocess_ont": "ONT read preprocessing",
+    "preprocess_pacbio": "PacBio read preprocessing",
+    "decontaminate_reads": "Read decontamination (Kraken2)",
+    "assemble_masurca": "MaSuRCA assembly",
+    "assemble_flye": "Flye assembly",
+    "assemble_spades": "SPAdes assembly",
+    "assemble_hifiasm": "hifiasm assembly",
+    "compare_assemblies": "Assembly comparison / best selection",
+    "polish_assembly": "Polishing",
+    "curate_assembly": "Curation / scaffolding",
+    "decontaminate_assembly": "Assembly decontamination (Tiara)",
+    "qc_assessment": "Quality assessment (QUAST / BUSCO)",
+    "html_reporter": "Report generation",
+}
+
+
+def _file_link(path):
+    """Return ``{'name': basename, 'href': abspath}`` if *path* exists, else ``None``.
+
+    Used to surface clickable links to the actual reads/assembly files in the
+    report so a reader can trace each artefact back to disk.
+    """
+    if path and isinstance(path, str) and os.path.exists(path):
+        return {"name": os.path.basename(path), "href": os.path.abspath(path)}
+    return None
+
 
 # ------------------------------ Helpers ------------------------------
 REQUIRED_TEMPLATES = ("EGAP_summary.html", "EGAP_busco.html")
@@ -469,6 +511,70 @@ def parse_compleasm_summary(path: str) -> dict:
     }
 
 
+def extract_busco_db_info(busco_dir: str, busco_db: str) -> dict:
+    """Extract the lineage database version actually used by BUSCO/Compleasm.
+
+    The lineage name alone (e.g. ``basidiomycota``) omits the OrthoDB version
+    (``_odb10`` / ``_odb12``), which *is* the database version. This reads the
+    authoritative value from the tool's own output: the BUSCO
+    ``short_summary*.txt`` ``"The lineage dataset is:"`` line (with its creation
+    date and BUSCO version), or the Compleasm ``summary.txt`` lineage header.
+    Falls back to the normalized lineage directory name.
+
+    Parameters
+    ----------
+    busco_dir : str
+        BUSCO/Compleasm output directory.
+    busco_db : str
+        Lineage as given in the CSV (may lack the ``_odbNN`` suffix).
+
+    Returns
+    -------
+    dict
+        ``{lineage, creation_date, tool, tool_version}`` (strings; empty when
+        a field cannot be determined).
+    """
+    info = {"lineage": lineage_dirname(busco_db), "creation_date": "",
+            "tool": "", "tool_version": ""}
+    if not busco_dir or not os.path.isdir(busco_dir):
+        return info
+
+    short_summaries = glob.glob(os.path.join(busco_dir, "short_summary*.txt"))
+    if short_summaries:
+        info["tool"] = "BUSCO"
+        try:
+            with open(short_summaries[0], "r", encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    if "lineage dataset is:" in line:
+                        after = line.split("lineage dataset is:", 1)[1].strip()
+                        lineage = after.split("(")[0].strip()
+                        if lineage:
+                            info["lineage"] = lineage
+                        mdate = re.search(r"Creation date:\s*([0-9][0-9\-/]+)", line)
+                        if mdate:
+                            info["creation_date"] = mdate.group(1)
+                    elif "BUSCO version is:" in line:
+                        info["tool_version"] = line.split("BUSCO version is:", 1)[1].strip()
+        except Exception:
+            pass
+        return info
+
+    # Compleasm: no short_summary; lineage may appear in summary.txt or the dir name.
+    info["tool"] = "Compleasm" if busco_dir.endswith("_compleasm") else "BUSCO/Compleasm"
+    summary_txt = os.path.join(busco_dir, "summary.txt")
+    if os.path.exists(summary_txt):
+        try:
+            with open(summary_txt, "r", encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    m = re.search(r"lineage\s*[:=]\s*(\S+)", line, re.IGNORECASE)
+                    if m:
+                        info["lineage"] = m.group(1).strip()
+                        break
+        except Exception:
+            pass
+    return info
+
+
 
 def find_busco_genes_table(busco_dir: str, busco_db: str) -> str:
     """
@@ -795,6 +901,7 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             print(f"WARN:\tNo QUAST report found for final assembly; tried: {quast_dir_candidates}")
     
     # -------- BUSCO/Compleasm: accept either style and any of the basenames --------
+    busco_db_details = []  # resolved lineage + DB version actually used (for the report)
     for busco_index, busco_db in enumerate([first_busco_db, second_busco_db]):
         if pd.isna(busco_db):
             continue
@@ -838,6 +945,11 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_DF"]        = metrics_df
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_HTML"]      = os.path.join(chosen_busco_dir, f"{sample_id}_{busco_db}_EGAP_busco.html")
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_GENES_DF"]  = busco_genes_df
+
+        # Record the lineage database version actually used (odbNN + creation date)
+        _db_info = extract_busco_db_info(chosen_busco_dir, busco_db)
+        _db_info["slot"] = "First" if busco_type == "FIRST" else "Second"
+        busco_db_details.append(_db_info)
 
     # ------------------------------ Render or stub ------------------------------
     os.makedirs(sample_dir, exist_ok=True)
@@ -1011,9 +1123,68 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     os.makedirs(sample_dir, exist_ok=True)
     html_report_outpath = os.path.join(sample_dir, f"{sample_id}_EGAP_summary.html")
 
+    # -------- Reads / assembly file links (trace artefacts back to disk) --------
+    dedup_f_path = os.path.join(illumina_dir, f"{species_id}_illu_forward_dedup.fastq")
+    dedup_r_path = os.path.join(illumina_dir, f"{species_id}_illu_reverse_dedup.fastq")
+    ont_highest_path = os.path.join(ont_dir, f"{species_id}_ONT_highest_mean_qual_long_reads.fastq")
+    pacbio_highest_path = os.path.join(pacbio_dir, f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq")
+    reads_files = {
+        "ont_raw": _file_link(ont_raw_reads if isinstance(ont_raw_reads, str) else None),
+        "ont_highest": _file_link(ont_highest_path),
+        "illumina_raw_f": _file_link(illumina_f_raw_reads if isinstance(illumina_f_raw_reads, str) else None),
+        "illumina_raw_r": _file_link(illumina_r_raw_reads if isinstance(illumina_r_raw_reads, str) else None),
+        "illumina_dedup_f": _file_link(dedup_f_path),
+        "illumina_dedup_r": _file_link(dedup_r_path),
+        "pacbio_raw": _file_link(pacbio_raw_reads if isinstance(pacbio_raw_reads, str) else None),
+        "pacbio_highest": _file_link(pacbio_highest_path),
+    }
+    assembly_files = {
+        "masurca": _file_link(os.path.join(masurca_dir, f"{sample_id}_masurca.fasta")),
+        "flye": _file_link(os.path.join(flye_dir, f"{sample_id}_flye.fasta")),
+        "spades": _file_link(os.path.join(spades_dir, f"{sample_id}_spades.fasta")),
+        "hifiasm": _file_link(os.path.join(hifiasm_dir, f"{sample_id}_hifiasm.fasta")),
+        "final": _file_link(assembly_fasta),
+    }
+
+    # -------- Pipeline provenance: steps, commands (settings), versions --------
+    prov_source = "none"
+    prov_steps = []
+    prov_programs = []
+    prov_commands = []
+    if _HAS_PROVENANCE:
+        try:
+            prov_entries, prov_source = load_provenance(output_dirto_abs, sample_id)
+            prov_steps = [{"stage": s, "label": STAGE_LABELS.get(s, s)}
+                          for s in pipeline_steps(prov_entries)]
+            _tools = meaningful_tools(prov_entries)
+            # Prefer versions captured at run time (durable, match the run env);
+            # probe/conda-resolve only the tools missing a captured version.
+            _captured = versions_from_entries(prov_entries)
+            _missing = [t for t in _tools if t not in _captured]
+            _resolved = resolve_versions(_missing) if _missing else {}
+            prov_programs = [{"tool": t, "version": _captured.get(t) or _resolved.get(t, "unknown")}
+                             for t in _tools]
+            prov_commands = [{"stage": e.get("stage", "unknown"),
+                              "tool": e.get("tool", ""),
+                              "command": e.get("command", "")}
+                             for e in prov_entries if e.get("type") != "file"]
+        except Exception as e:
+            print(f"WARN:\tProvenance assembly failed: {e}")
+    busco_dbs = [str(db) for db in (first_busco_db, second_busco_db) if pd.notna(db)]
+
     render_ctx = {
         "sample_id": sample_id,
         "generated_time": now,
+
+        # Pipeline provenance + artefact links
+        "prov_source": prov_source,
+        "prov_steps": prov_steps,
+        "prov_programs": prov_programs,
+        "prov_commands": prov_commands,
+        "busco_dbs": busco_dbs,
+        "busco_db_details": busco_db_details,
+        "reads_files": reads_files,
+        "assembly_files": assembly_files,
 
         "inat_metrics": inat_metrics, "inat_map": inat_map,
         "inat_link": sample_stats_dict.get("INAT_HTML"), "inat_thumbnail": inat_thumbnail, "inat_photo": inat_photo,

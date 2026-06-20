@@ -98,7 +98,84 @@
   </header>
 
   <div class="content">
+    <!-- Pipeline Overview: steps, settings (commands), and program versions.
+         Expanded by default; every other section below is collapsed. -->
     <details open>
+      <summary>Pipeline Overview &mdash; Steps, Settings &amp; Versions</summary>
+      <div>
+        {% if prov_source == 'none' %}
+        <p>No provenance was captured for this run.</p>
+        {% else %}
+        <h3 style="margin-bottom:0.2em;">Pipeline steps</h3>
+        <ol>
+          {% for s in prov_steps %}<li>{{ s.label }}</li>{% endfor %}
+        </ol>
+
+        <h3 style="margin-bottom:0.2em;">Programs &amp; versions</h3>
+        {% if prov_programs %}
+        <table>
+          <thead><tr><th>Program</th><th>Version</th></tr></thead>
+          <tbody>
+            {% for p in prov_programs %}
+            <tr><td>{{ p.tool }}</td><td>{{ p.version }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p>No external programs were recorded.</p>
+        {% endif %}
+        {% if busco_db_details %}
+        <h3 style="margin-bottom:0.2em;">BUSCO / Compleasm databases</h3>
+        <table>
+          <thead><tr><th>Slot</th><th>Tool</th><th>Tool version</th><th>Lineage database (version)</th><th>Creation date</th></tr></thead>
+          <tbody>
+            {% for d in busco_db_details %}
+            <tr>
+              <td>{{ d.slot }}</td>
+              <td>{{ d.tool or '-' }}</td>
+              <td>{{ d.tool_version or '-' }}</td>
+              <td>{{ d.lineage or '-' }}</td>
+              <td>{{ d.creation_date or '-' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% elif busco_dbs %}
+        <p><strong>BUSCO / Compleasm lineage databases:</strong> {{ busco_dbs|join(', ') }}</p>
+        {% endif %}
+
+        <h3 style="margin-bottom:0.2em;">Commands (settings) per step</h3>
+        <table>
+          <thead><tr><th>Step</th><th>Program</th><th>Command</th></tr></thead>
+          <tbody>
+            {% for c in prov_commands %}
+            <tr>
+              <td>{{ c.stage }}</td>
+              <td>{{ c.tool }}</td>
+              <td><code style="white-space:pre-wrap; word-break:break-all;">{{ c.command }}</code></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% if prov_source == 'log' %}
+        <p style="font-size:0.85em; color:#619B8AFF;">
+          Reconstructed from the run log (this run predates structured provenance capture).
+        </p>
+        {% endif %}
+        {% endif %}
+
+        <h3 style="margin-bottom:0.2em;">Output assembly files</h3>
+        <ul>
+          {% if assembly_files.final %}<li>Final assembly: <a href="{{ assembly_files.final.href }}">{{ assembly_files.final.name }}</a></li>{% endif %}
+          {% if assembly_files.masurca %}<li>MaSuRCA: <a href="{{ assembly_files.masurca.href }}">{{ assembly_files.masurca.name }}</a></li>{% endif %}
+          {% if assembly_files.flye %}<li>Flye: <a href="{{ assembly_files.flye.href }}">{{ assembly_files.flye.name }}</a></li>{% endif %}
+          {% if assembly_files.spades %}<li>SPAdes: <a href="{{ assembly_files.spades.href }}">{{ assembly_files.spades.name }}</a></li>{% endif %}
+          {% if assembly_files.hifiasm %}<li>hifiasm: <a href="{{ assembly_files.hifiasm.href }}">{{ assembly_files.hifiasm.name }}</a></li>{% endif %}
+        </ul>
+      </div>
+    </details>
+
+    <details>
       <summary>iNaturalist Observation Summary</summary>
       <div style="display: flex; align-items: flex-start; gap: 20px; margin-top: 1em;">
         <!-- LEFT: thumbnail + link -->
@@ -137,6 +214,12 @@
         <details>
           <summary>ONT Reads Summary</summary>
           <div>
+            {% if reads_files.ont_raw or reads_files.ont_highest %}
+            <p><strong>Read files:</strong>
+              {% if reads_files.ont_raw %}<a href="{{ reads_files.ont_raw.href }}">{{ reads_files.ont_raw.name }}</a> (raw){% endif %}
+              {% if reads_files.ont_highest %}{% if reads_files.ont_raw %} | {% endif %}<a href="{{ reads_files.ont_highest.href }}">{{ reads_files.ont_highest.name }}</a> (highest-qual){% endif %}
+            </p>
+            {% endif %}
             <p><strong>Full reports:</strong>
               {% if ont_raw_link %}<a href="{{ ont_raw_link }}">Raw</a>{% else %}Raw{% endif %} |
               {% if ont_filt_link %}<a href="{{ ont_filt_link }}">Filtered</a>{% else %}Filtered{% endif %} |
@@ -161,9 +244,18 @@
         </details>
 
         <!-- Illumina Reads Summary -->
-        <details open>
+        <details>
           <summary>Illumina Reads Summary</summary>
           <div>
+            {% if reads_files.illumina_raw_f or reads_files.illumina_raw_r or reads_files.illumina_dedup_f or reads_files.illumina_dedup_r %}
+            <p><strong>Read files:</strong></p>
+            <ul style="margin-top:0;">
+              {% if reads_files.illumina_raw_f %}<li>Forward (raw): <a href="{{ reads_files.illumina_raw_f.href }}">{{ reads_files.illumina_raw_f.name }}</a></li>{% endif %}
+              {% if reads_files.illumina_raw_r %}<li>Reverse (raw): <a href="{{ reads_files.illumina_raw_r.href }}">{{ reads_files.illumina_raw_r.name }}</a></li>{% endif %}
+              {% if reads_files.illumina_dedup_f %}<li>Forward (dedup): <a href="{{ reads_files.illumina_dedup_f.href }}">{{ reads_files.illumina_dedup_f.name }}</a></li>{% endif %}
+              {% if reads_files.illumina_dedup_r %}<li>Reverse (dedup): <a href="{{ reads_files.illumina_dedup_r.href }}">{{ reads_files.illumina_dedup_r.name }}</a></li>{% endif %}
+            </ul>
+            {% endif %}
             <p><strong>Raw vs. Deduplicated (Forward):</strong>
               {% if illumina_raw_f_link %}<a href="{{ illumina_raw_f_link }}">Raw</a>{% else %}Raw{% endif %} |
               {% if illumina_dedup_f_link %}<a href="{{ illumina_dedup_f_link }}">Dedup</a>{% else %}Dedup{% endif %}
@@ -204,9 +296,15 @@
         </details>
 
         <!-- PacBio Reads Summary -->
-        <details open>
+        <details>
           <summary>PacBio Reads Summary</summary>
           <div>
+            {% if reads_files.pacbio_raw or reads_files.pacbio_highest %}
+            <p><strong>Read files:</strong>
+              {% if reads_files.pacbio_raw %}<a href="{{ reads_files.pacbio_raw.href }}">{{ reads_files.pacbio_raw.name }}</a> (raw){% endif %}
+              {% if reads_files.pacbio_highest %}{% if reads_files.pacbio_raw %} | {% endif %}<a href="{{ reads_files.pacbio_highest.href }}">{{ reads_files.pacbio_highest.name }}</a> (highest-qual){% endif %}
+            </p>
+            {% endif %}
             <p><strong>Full reports:</strong>
               {% if pacbio_raw_link %}<a href="{{ pacbio_raw_link }}">Raw</a>{% else %}Raw{% endif %} |
               {% if pacbio_filt_link %}<a href="{{ pacbio_filt_link }}">Filtered</a>{% else %}Filtered{% endif %}
@@ -358,7 +456,7 @@
     </details>
 
     <!-- Final Assembly -->
-    <details open>
+    <details>
       <summary>Final Assembly</summary>
           <div>
             <p><strong>QUAST Report:</strong>
