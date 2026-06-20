@@ -23,6 +23,8 @@ from typing import Optional
 import pandas as pd
 from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context, to_abs
 from qc_assessment import qc_assessment
+from estimate_runtime import log_estimate_for
+from record_provenance import record_file
 
 
 def assemble_flye(
@@ -143,11 +145,13 @@ def assemble_flye(
                     "--threads", str(cpu_threads),
                     "--iterations", "3", "--keep-haplotypes"]
 
+    log_estimate_for("flye", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
     _ = run_subprocess_cmd(flye_cmd, shell_check=False)
 
     # Move result into canonical name
     if os.path.exists(flye_path) and not os.path.exists(egap_flye_assembly_path):
         shutil.move(flye_path, egap_flye_assembly_path)
+    record_file("Flye assembly", egap_flye_assembly_path)
 
     # QC using absolute paths
     egap_flye_assembly_path, flye_stats_list, _ = qc_assessment(

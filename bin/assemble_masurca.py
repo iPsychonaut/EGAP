@@ -26,6 +26,9 @@ from pathlib import Path
 from utilities import run_subprocess_cmd, log_print, initialize_logging_environment, load_sample_context
 from qc_assessment import qc_assessment
 from file_manager import remove_file, remove_dir
+from monitor_assembly import AssemblyMonitor
+from estimate_runtime import log_estimate_for
+from record_provenance import record_file
 
 # --------------------------------------------------------------
 # Locate MaSuRCA CA folder
@@ -531,12 +534,20 @@ def masurca_config_gen(
         config_lines.append(f"REFERENCE={ref_seq}\n")
     config_lines.append("END\n")
 
+    # When long reads are present, MaSuRCA builds "mega-reads" via create_mega_reads.
+    # The default two-pass mode (MEGA_READS_ONE_PASS=0) runs an iterative refinement
+    # that can hang pathologically on noisy/over-long ONT input (a single core pegged
+    # at 100% with no output progress for hours). One-pass mode skips that refinement:
+    # it is faster and far less prone to the stall, at the cost of a slightly less
+    # contiguous mega-read set. EGAP compares all assemblers and keeps the best, so a
+    # completing-but-slightly-rougher MaSuRCA is strictly better than one that hangs.
+    has_long_reads = pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads)
     config_lines += [
         "PARAMETERS\n",
         "GRAPH_KMER_SIZE=auto\n",
-        f"USE_LINKING_MATES={0 if (pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads)) else 1}\n",
-        f"CLOSE_GAPS={0 if (pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads)) else 1}\n",
-        "MEGA_READS_ONE_PASS=0\n",
+        f"USE_LINKING_MATES={0 if has_long_reads else 1}\n",
+        f"CLOSE_GAPS={0 if has_long_reads else 1}\n",
+        f"MEGA_READS_ONE_PASS={1 if has_long_reads else 0}\n",
         "LIMIT_JUMP_COVERAGE=300\n",
         "CA_PARAMETERS=cgwErrorRate=0.15\n",
         f"NUM_THREADS={cpu_threads}\n",
@@ -583,9 +594,17 @@ def masurca_config_gen(
         real_flye = shutil.which("flye")
         print(f"DEBUG - flye on PATH - {real_flye}")
         
-        # Run
-        rc = run_subprocess_cmd(["bash", os.path.basename(modified_assemble)], False)
-        
+        # Print a pre-flight runtime estimate for this assembler given the
+        # available resources and read volume.
+        log_estimate_for("masurca", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
+
+        # Run under a non-lethal runtime monitor. It reports elapsed time and
+        # output throughput and warns if growth flatlines (the create_mega_reads
+        # hang signature: CPU busy, zero progress) but never kills the assembler
+        # -- the operator decides whether to keep waiting.
+        with AssemblyMonitor(masurca_out_dir, label=f"{sample_id} masurca"):
+            rc = run_subprocess_cmd(["bash", os.path.basename(modified_assemble)], False)
+
         # Try to salvage even if assemble.sh returned non-zero
         ca_dir = Path(find_ca_folder(str(masurca_out_dir))).resolve()
         primary_genome_scf = ca_dir / "primary.genome.scf.fasta"
@@ -606,6 +625,7 @@ def masurca_config_gen(
         else:
             log_print("ERROR:\tNo assembly file found in CA output.")
             return None
+        record_file("MaSuRCA assembly", str(egap_masurca_assembly_path))
 
         print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path}")
         os.chdir(prev_cwd)

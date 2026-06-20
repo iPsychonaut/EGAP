@@ -34,6 +34,7 @@ from typing import Optional
 import pandas as pd
 from utilities import run_subprocess_cmd, select_long_reads, initialize_logging_environment, load_sample_context, to_abs
 from qc_assessment import nanoplot_qc_reads
+from record_provenance import record_file
 
 
 def nonempty(fp, min_bytes=1024) -> bool:
@@ -233,6 +234,7 @@ def preprocess_pacbio(
                         canonical = best_long_reads  # fall back to original
 
         print(f"PASS:\tPreprocessed PacBio reads for {sample_id}: {canonical}")
+        record_file("PacBio highest-quality long reads", canonical)
         return canonical
     finally:
         os.chdir(prev_cwd)

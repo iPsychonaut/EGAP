@@ -27,6 +27,7 @@ from typing import Optional
 import pandas as pd
 from utilities import run_subprocess_cmd, select_long_reads, initialize_logging_environment, load_sample_context
 from qc_assessment import nanoplot_qc_reads
+from record_provenance import record_file
 
 # String values written by older pipeline runs (na_rep="None") that must be
 # treated as missing/null rather than real file paths or accessions.
@@ -251,7 +252,8 @@ def preprocess_ont(
         os.chdir(prev_cwd)
 
     print(f"PASS:\tPreprocessed Raw ONT Reads for {sample_id}: {highest_mean_qual_long_reads}.")
-    
+
+    record_file("ONT highest-quality long reads", highest_mean_qual_long_reads)
     return highest_mean_qual_long_reads
 
 
