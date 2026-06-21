@@ -159,8 +159,18 @@ def pilon_polish(best_assembly, second_racon_assembly, pilon_bam, assembly_out_d
     if os.path.exists(pilon_assembly):
         print(f"SKIP:\tPilon Polished Assembly already exists: {pilon_assembly}.")
     else:
+        # Pilon runs on the JVM, which needs memory beyond its heap (metaspace,
+        # GC, thread stacks) plus room for the OS and any concurrent tools.
+        # Passing the full ram_gb as -Xmx claimed nearly all RAM and triggered
+        # the Linux OOM killer mid-polish on constrained hosts (e.g. a 56 GB
+        # WSL2 VM where -Xmx52g was killed). Cap the heap at 80% of the budget
+        # (minimum 4 GB) so the JVM and everything else have headroom.
+        try:
+            pilon_xmx_gb = max(4, int(float(ram_gb) * 0.8))
+        except (TypeError, ValueError):
+            pilon_xmx_gb = 4
         pilon_cmd = [
-            "pilon", f"-Xmx{ram_gb}g",
+            "pilon", f"-Xmx{pilon_xmx_gb}g",
             "--genome", second_racon_assembly,
             "--frags", pilon_bam,
             "--output", pilon_out_prefix,
