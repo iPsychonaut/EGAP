@@ -84,7 +84,7 @@ def run_filtered(cmd: list) -> int:
 # --------------------------------------------------------------
 # Establish Global Pipeline Settings (i.e. command variables)
 # --------------------------------------------------------------
-VERSION = "3.4.1"
+VERSION = "3.4.2"
 
 TRIMMOMATIC_SETTINGS = {
     "mode": "-PE",
