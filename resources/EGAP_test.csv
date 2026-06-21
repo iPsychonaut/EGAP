@@ -1,6 +1,6 @@
-ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,SAMPLE_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,BUSCO_1,BUSCO_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
-None,None,None,SRR30663514,None,None,None,None,None,None,Psilocybe_wayanedensis,Psilocybe_wayanedensis-DeconTest,Funga,eukaryote,fungi,basidiomycota,75m,None,None
-None,None,None,None,None,None,None,None,None,None,Escherichia_coli-RefSeq,Escherichia_coli-RefSeqTest,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,None,GCA_000005845.2,None
-None,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-Illu-RefSeq,Escherichia_coli-IlluminaTest,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,GCA_000005845.2,None
-SRR32405433,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-ONT-Illu,Escherichia_coli-HybridTest,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,None,None
-None,None,None,None,None,None,None,SRR31460895,None,None,Escherichia_coli-PacBio,Escherichia_coli-PacBioTest,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,None,None
+ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,SAMPLE_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,PLOIDY,BUSCO_1,BUSCO_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
+None,None,None,SRR30663514,None,None,None,None,None,None,Psilocybe_wayanedensis,Psilocybe_wayanedensis-DeconTest,Funga,eukaryote,2,fungi,basidiomycota,75m,None,None
+None,None,None,None,None,None,None,None,None,None,Escherichia_coli-RefSeq,Escherichia_coli-RefSeqTest,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,None,GCA_000005845.2,None
+None,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-Illu-RefSeq,Escherichia_coli-IlluminaTest,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,GCA_000005845.2,None
+SRR32405433,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-ONT-Illu,Escherichia_coli-HybridTest,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,None,None
+None,None,None,None,None,None,None,SRR31460895,None,None,Escherichia_coli-PacBio,Escherichia_coli-PacBioTest,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,None,None

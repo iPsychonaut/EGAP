@@ -309,6 +309,37 @@ def illu_abyss_sealer(curation_dir, ragtag_ref_assembly, illu_f_dedup, illu_r_de
 
 
 # --------------------------------------------------------------
+# Ploidy helper
+# --------------------------------------------------------------
+def is_haploid(ploidy_value):
+    """Return ``True`` when *ploidy_value* denotes a haploid (1n) individual.
+
+    Accepts an integer/float (``1``), a numeric string (``"1"``), or a word
+    (``"haploid"``, ``"monoploid"``, ``"n"``, ``"1n"``). Anything else --
+    including ``None``, blank, ``NaN``, ``2``, ``"diploid"`` -- returns
+    ``False`` so the default (purge_dups runs) is preserved for existing CSVs
+    that omit the column.
+
+    Haploid assemblies have no second haplotype, so purge_dups' haplotig
+    removal can strip genuine sequence; haploid samples therefore skip it.
+    """
+    if ploidy_value is None:
+        return False
+    try:
+        if pd.isna(ploidy_value):
+            return False
+    except (TypeError, ValueError):
+        pass
+    text = str(ploidy_value).strip().lower()
+    if text in ("1", "1n", "n", "haploid", "monoploid"):
+        return True
+    try:
+        return int(float(text)) == 1
+    except (TypeError, ValueError):
+        return False
+
+
+# --------------------------------------------------------------
 # Orchestrate assembly curation
 # --------------------------------------------------------------
 def curate_assembly(
@@ -332,6 +363,8 @@ def curate_assembly(
     ref_seq = current_series["REF_SEQ"]
     species_id = current_series["SPECIES_ID"]
     est_size = current_series["EST_SIZE"]
+    ploidy = current_series.get("PLOIDY")  # optional column; None when absent
+    sample_is_haploid = is_haploid(ploidy)
 
     species_dir = os.path.join(ctx.output_dir, species_id)
     sample_dir = os.path.join(species_dir, sample_id)
@@ -421,9 +454,14 @@ def curate_assembly(
     os.chdir(curation_out_dir)
     print(f"DEBUG - CWD (curation_out_dir) - {os.getcwd()}")
 
-    # 1) Purge duplicates (if long reads)
+    # 1) Purge duplicates (if long reads AND not haploid)
     print(f"DEBUG - Starting purge duplicates for {sample_id}")
-    if pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads):
+    print(f"DEBUG - ploidy - {ploidy} (haploid={sample_is_haploid})")
+    if sample_is_haploid:
+        print(f"SKIP:\tPurge Duplicates; sample is haploid (PLOIDY={ploidy}), "
+              f"no second haplotype to purge.")
+        dup_purged_assembly = polished_assembly
+    elif pd.notna(ont_raw_reads) or pd.notna(pacbio_raw_reads):
         print("Purging Haplotigs using Long Reads (ONT or PacBio)...")
         dup_purged_assembly = long_reads_purge_dups(curation_out_dir,
                                                     polished_assembly,

@@ -525,10 +525,10 @@ It is necessary to provide a CSV file containing the necessary information for e
 
 The CSV file should have the following header and columns:
 
-| ONT_SRA | ONT_RAW_DIR | ONT_RAW_READS | ILLUMINA_SRA | ILLUMINA_RAW_DIR | ILLUMINA_RAW_F_READS | ILLUMINA_RAW_R_READS | PACBIO_SRA | PACBIO_RAW_DIR | PACBIO_RAW_READS | SPECIES_ID | SAMPLE_ID | ORGANISM_KINGDOM | ORGANISM_KARYOTE | BUSCO_1 | BUSCO_2 | EST_SIZE | REF_SEQ_GCA | REF_SEQ | KRAKEN2_DB |
-|---------|-------------|---------------|--------------|------------------|----------------------|----------------------|------------|----------------|-----------------|------------|-----------|-----------------|-----------------|---------|---------|----------|-------------|---------|------------|
-| None | None | None | SRA00000001 | None | None | None | None | None | None | Ab_sample1 | Ab_sample1 | Funga | Eukaryote | basidiomycota | agaricales | 55m | GCA00000001.1 | None | None |
-| None | None | /path/to/ONT/sample.fastq | None | None | /path/to/Illumina/s_1.fastq | /path/to/Illumina/s_2.fastq | None | None | None | Ab_sample2 | Ab_sample2_ONT | Funga | Eukaryote | basidiomycota | agaricales | 60m | None | None | /path/to/kraken2_db |
+| ONT_SRA | ONT_RAW_DIR | ONT_RAW_READS | ILLUMINA_SRA | ILLUMINA_RAW_DIR | ILLUMINA_RAW_F_READS | ILLUMINA_RAW_R_READS | PACBIO_SRA | PACBIO_RAW_DIR | PACBIO_RAW_READS | SPECIES_ID | SAMPLE_ID | ORGANISM_KINGDOM | ORGANISM_KARYOTE | PLOIDY | BUSCO_1 | BUSCO_2 | EST_SIZE | REF_SEQ_GCA | REF_SEQ | KRAKEN2_DB |
+|---------|-------------|---------------|--------------|------------------|----------------------|----------------------|------------|----------------|-----------------|------------|-----------|-----------------|-----------------|--------|---------|---------|----------|-------------|---------|------------|
+| None | None | None | SRA00000001 | None | None | None | None | None | None | Ab_sample1 | Ab_sample1 | Funga | Eukaryote | 2 | basidiomycota | agaricales | 55m | GCA00000001.1 | None | None |
+| None | None | /path/to/ONT/sample.fastq | None | None | /path/to/Illumina/s_1.fastq | /path/to/Illumina/s_2.fastq | None | None | None | Ab_sample2 | Ab_sample2_ONT | Funga | Eukaryote | 1 | basidiomycota | agaricales | 60m | None | None | /path/to/kraken2_db |
 
 ### Column Descriptions
 
@@ -546,6 +546,7 @@ The CSV file should have the following header and columns:
 - **SAMPLE_ID**: Sample ID formatted as `<full species name>-<other identifiers>` (e.g., `Escherichia_coli-Illu-SRR32496875`).
 - **ORGANISM_KINGDOM**: Kingdom of the organism (`Bacteria`, `Archaea`, `Flora`, `Funga`, or `Fauna`). Used by both Kraken2 and Tiara decontamination.
 - **ORGANISM_KARYOTE**: Karyote type of the organism (e.g., `Eukaryote`, `Prokaryote`).
+- **PLOIDY** *(optional)*: Ploidy of the individual as an integer (`1` = haploid, `2` = diploid, etc.; the words `haploid`/`diploid` are also accepted). Haploid samples (`1`) **skip the purge_dups haplotig-removal step**, since there is no second haplotype to purge and purging could strip genuine sequence. Leave blank, `None`, or `2`+ to run purge_dups as before. Omitting the column entirely is safe and keeps the previous behaviour.
 - **BUSCO_1**: Name of the first Compleasm/BUSCO database (e.g., `basidiomycota`).
 - **BUSCO_2**: Name of the second Compleasm/BUSCO database (e.g., `agaricales`).
 - **EST_SIZE**: Estimated genome size (e.g., `55m` for 55 Mbp, `5g` for 5 Gbp).
@@ -568,11 +569,11 @@ The CSV file should have the following header and columns:
 `EGAP_test.csv` is included in this repository to run test examples. Running all four files takes about 24 hours on a 16-thread, 64 GB system.
 
 ```csv
-ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SAMPLE_ID,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,BUSCO_1,BUSCO_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ,KRAKEN2_DB
-None,None,None,None,None,None,None,None,None,None,Escherichia_coli-RefSeq,Escherichia_coli,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,None,GCA_000005845.2,None,None
-None,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-Illu-RefSeq,Escherichia_coli,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,GCA_000005845.2,None,None
-SRR32405433,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-ONT-Illu,Escherichia_coli,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,None,None,/path/to/kraken2_db
-None,None,None,None,None,None,None,SRR31460895,None,None,Escherichia_coli-PacBio,Escherichia_coli,Bacteria,prokaryote,gammaproteobacteria,enterobacterales,5m,None,None,None
+ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SAMPLE_ID,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,PLOIDY,BUSCO_1,BUSCO_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ,KRAKEN2_DB
+None,None,None,None,None,None,None,None,None,None,Escherichia_coli-RefSeq,Escherichia_coli,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,None,GCA_000005845.2,None,None
+None,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-Illu-RefSeq,Escherichia_coli,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,GCA_000005845.2,None,None
+SRR32405433,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-ONT-Illu,Escherichia_coli,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,None,None,/path/to/kraken2_db
+None,None,None,None,None,None,None,SRR31460895,None,None,Escherichia_coli-PacBio,Escherichia_coli,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,None,None,None
 ```
 
 ### Local Data
