@@ -29,7 +29,7 @@
 
 ## Overview
 
-EGAP (Entheome Genome Assembly Pipeline) v3.4.1 is a versatile bioinformatics pipeline for hybrid genome assembly using Oxford Nanopore (ONT), Illumina, and PacBio data. It evaluates assemblies based on BUSCO Completeness (Single + Duplicated), Assembly Contig Count, and N50, with additional metrics like L50 and GC-content available via QUAST.
+EGAP (Entheome Genome Assembly Pipeline) v3.4.2 is a versatile bioinformatics pipeline for hybrid genome assembly using Oxford Nanopore (ONT), Illumina, and PacBio data. It evaluates assemblies based on BUSCO Completeness (Single + Duplicated), Assembly Contig Count, and N50, with additional metrics like L50 and GC-content available via QUAST.
 
 1. **Preprocess & QC Reads**
    - Merges multiple FASTQ files (`ont_combine_fastq_gz`, `illumina_extract_and_check`).
@@ -546,7 +546,7 @@ The CSV file should have the following header and columns:
 - **SAMPLE_ID**: Sample ID formatted as `<full species name>-<other identifiers>` (e.g., `Escherichia_coli-Illu-SRR32496875`).
 - **ORGANISM_KINGDOM**: Kingdom of the organism (`Bacteria`, `Archaea`, `Flora`, `Funga`, or `Fauna`). Used by both Kraken2 and Tiara decontamination.
 - **ORGANISM_KARYOTE**: Karyote type of the organism (e.g., `Eukaryote`, `Prokaryote`).
-- **PLOIDY** *(optional)*: Ploidy of the individual as an integer (`1` = haploid, `2` = diploid, etc.; the words `haploid`/`diploid` are also accepted). Haploid samples (`1`) **skip the purge_dups haplotig-removal step**, since there is no second haplotype to purge and purging could strip genuine sequence. Leave blank, `None`, or `2`+ to run purge_dups as before. Omitting the column entirely is safe and keeps the previous behaviour.
+- **PLOIDY** *(optional, new in v3.4.2)*: Ploidy of the individual as an integer (`1` = haploid, `2` = diploid, etc.; the words `haploid`/`diploid` are also accepted). Haploid samples (`1`) **skip the purge_dups haplotig-removal step**, since there is no second haplotype to purge and purging could strip genuine sequence. Leave blank, `None`, or `2`+ to run purge_dups as before. Omitting the column entirely is safe and keeps the previous behaviour.
 - **BUSCO_1**: Name of the first Compleasm/BUSCO database (e.g., `basidiomycota`).
 - **BUSCO_2**: Name of the second Compleasm/BUSCO database (e.g., `agaricales`).
 - **EST_SIZE**: Estimated genome size (e.g., `55m` for 55 Mbp, `5g` for 5 Gbp).
@@ -745,6 +745,22 @@ The example data are published in:
 > ISME J 14, 2046–2059 (2020). [10.1038/s41396-020-0667-6](https://doi.org/10.1038/s41396-020-0667-6).
 
 ## Changelog
+
+### v3.4.2 *(2026-06-20)*
+Reliability, provenance, and run-control release.
+
+- **Major additions**
+  - Per-assembler skip flags (`--no-masurca`/`-no_m`, `--no-flye`/`-no_f`, `--no-spades`/`-no_s`, `--no-hifiasm`/`-no_h`) honoured by both the CLI and the TUI.
+  - New optional `PLOIDY` CSV column; haploid samples (`1`) skip the `purge_dups` haplotig-removal step.
+  - Pre-flight per-assembler runtime estimator (`bin/estimate_runtime.py`) using available resources and read volume.
+  - Step-by-step provenance capture (`bin/record_provenance.py`): every command, its program version, and key file paths are written to the log and a `<sample_id>_provenance.json` as the run progresses.
+- **Fixes**
+  - MaSuRCA hybrid hang resolved: `MEGA_READS_ONE_PASS=1` on the long-read path avoids the stalling `create_mega_reads` refinement, wrapped in a non-lethal progress/stall monitor (`bin/monitor_assembly.py`).
+  - `meta.yaml`: use the conda-forge package name `python-kaleido`.
+- **Report / logging**
+  - HTML report gains an expanded "Pipeline Overview" (steps, programs + versions, per-step commands); other sections collapse by default.
+  - Reads and assembly files are shown as links to the local files; BUSCO/Compleasm now report the lineage database version actually used (with `_odbNN`) and creation date.
+  - A session-wide log captures the startup banner, full configuration, and commands.
 
 ### v3.4.1 *(2026-05-27)*
 Maintenance release on top of the v3.4.0 connectivity refactor. Focused on unblocking real end-to-end runs.
