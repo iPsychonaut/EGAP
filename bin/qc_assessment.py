@@ -47,6 +47,46 @@ USE_COMPLEASM = True
 # or produces no metrics (recommended so downstream code always has data).
 FALLBACK_TO_BUSCO_ON_FAIL = True
 
+# One shared Compleasm lineage library for the whole run, so each lineage is
+# downloaded once and reused instead of re-downloading into a per-working-dir
+# "mb_downloads" for every assembler (which collided on the shared placement
+# lock and made BUSCO/Compleasm fail). Override with EGAP_COMPLEASM_LIB.
+COMPLEASM_LIB = os.environ.get(
+    "EGAP_COMPLEASM_LIB",
+    os.path.join(os.path.expanduser("~"), ".egap", "compleasm_lib"),
+)
+
+# Lineages for which completeness could NOT be measured (both Compleasm AND
+# BUSCO failed) during this process. The "final" QC entry point fails loudly
+# when this is non-empty, instead of silently reporting no completeness.
+_COMPLETENESS_FAILURES = []
+
+
+def _clear_compleasm_locks():
+    """Remove stale Compleasm placement-file locks that block fresh downloads.
+
+    A download interrupted by a network hiccup leaves a ``placement_files.tmp``
+    lock behind; every later Compleasm run then aborts with "another process is
+    downloading". Clearing it lets a retry proceed.
+    """
+    import glob as _glob
+    try:
+        os.makedirs(COMPLEASM_LIB, exist_ok=True)
+    except OSError:
+        pass
+    home = os.path.expanduser("~")
+    patterns = [
+        os.path.join(home, "compleasm_lineages_*", "placement_files.tmp"),
+        os.path.join(COMPLEASM_LIB, "**", "placement_files.tmp"),
+    ]
+    for pat in patterns:
+        for f in _glob.glob(pat, recursive=True):
+            try:
+                os.remove(f)
+                print(f"NOTE:\tCleared stale Compleasm lock: {f}")
+            except OSError:
+                pass
+
 def lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
     """
     Return a lineage directory name guaranteed to end with _odbNN, without doubling
@@ -74,41 +114,53 @@ def run_lineage_eval(assembly_path: str,
                      busco_count: str,       # "first" or "second"
                      busco_odb: str,
                      assembly_type: str,
-                     cpu_threads) -> str:
+                     cpu_threads) -> bool:
     """
     Single entry point for BUSCO-like evaluation.
     Respects USE_COMPLEASM and will optionally fall back to BUSCO.
+
+    Returns ``True`` when completeness was measured (by Compleasm or BUSCO) and
+    ``False`` when both failed for this lineage (also recorded in
+    ``_COMPLETENESS_FAILURES`` so the final QC can fail loudly).
     """
+    up = busco_count.upper()
+
+    def _have_metrics():
+        # Completeness counts as measured if we have C, or both S and D.
+        return (f"{up}_BUSCO_C" in sample_stats_dict or
+                (f"{up}_BUSCO_S" in sample_stats_dict and f"{up}_BUSCO_D" in sample_stats_dict))
+
     if USE_COMPLEASM:
         print("INFO:\tUsing Compleasm for BUSCO-like analysis.")
         try:
             compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
                                busco_count, busco_odb, assembly_type, cpu_threads)
             normalize_busco_keycase(sample_stats_dict, busco_count)
-
-            # Did we actually get metrics? Accept C or (S and D)
-            up = busco_count.upper()
-            got_any = (
-                f"{up}_BUSCO_C" in sample_stats_dict or
-                (f"{up}_BUSCO_S" in sample_stats_dict and f"{up}_BUSCO_D" in sample_stats_dict)
-            )
-            if not got_any and FALLBACK_TO_BUSCO_ON_FAIL:
-                print("WARN:\tCompleasm produced no metrics; falling back to BUSCO.")
-                busco_assembly(assembly_path, sample_id, sample_stats_dict,
-                               busco_count, busco_odb, assembly_type, cpu_threads)
-
         except Exception as e:
             print(f"WARN:\tCompleasm raised an exception: {e}")
-            if FALLBACK_TO_BUSCO_ON_FAIL:
-                print("WARN:\tFalling back to BUSCO.")
+        if not _have_metrics() and FALLBACK_TO_BUSCO_ON_FAIL:
+            print("WARN:\tCompleasm produced no metrics; falling back to BUSCO.")
+            try:
                 busco_assembly(assembly_path, sample_id, sample_stats_dict,
                                busco_count, busco_odb, assembly_type, cpu_threads)
+            except Exception as e:
+                print(f"WARN:\tBUSCO fallback raised an exception: {e}")
     else:
         print("INFO:\tUsing BUSCO for completeness analysis.")
-        busco_assembly(assembly_path, sample_id, sample_stats_dict,
-                       busco_count, busco_odb, assembly_type, cpu_threads)
+        try:
+            busco_assembly(assembly_path, sample_id, sample_stats_dict,
+                           busco_count, busco_odb, assembly_type, cpu_threads)
+        except Exception as e:
+            print(f"WARN:\tBUSCO raised an exception: {e}")
 
-    return assembly_path
+    # Fail loudly (recorded for the final QC) only when BOTH tools failed and we
+    # have no completeness number at all -- never a silent skip.
+    got = _have_metrics()
+    if not got:
+        print(f"ERROR:\tCompleteness could NOT be measured for lineage "
+              f"'{busco_odb}' ({busco_count}); both Compleasm and BUSCO failed.")
+        _COMPLETENESS_FAILURES.append(f"{busco_count}:{busco_odb}")
+    return got
 
 # --------------------------------------------------------------
 # Perform quality control on reads using NanoPlot
@@ -553,15 +605,26 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
     if os.path.exists(compleasm_summary):
         print(f"SKIP:\tCompleasm Summary already exists: {compleasm_summary}.")
     else:
+        # Share one lineage library (-L) so the lineage downloads once and is
+        # reused, and clear any stale placement lock before running.
+        _clear_compleasm_locks()
         compleasm_cmd = ["compleasm", "run",
                          "-a", assembly_path,
                          "-o", compleasm_dir,           # NOTE: writes into _c dir
                          "--lineage", busco_odb,
+                         "-L", COMPLEASM_LIB,
                          "-t", str(cpu_threads)]
         print(f"DEBUG - Running Compleasm: {' '.join(compleasm_cmd)}")
         result = run_subprocess_cmd(compleasm_cmd, shell_check=False)
-        if result != 0:
-            print(f"WARN:\tCompleasm failed with return code {result}. Skipping Compleasm metrics.")
+        if result != 0 or not os.path.exists(compleasm_summary):
+            # The common failure is a transient lineage/placement download that
+            # leaves a lock blocking reruns; clear it and retry once.
+            print(f"WARN:\tCompleasm returned {result}; clearing locks and retrying once.")
+            _clear_compleasm_locks()
+            result = run_subprocess_cmd(compleasm_cmd, shell_check=False)
+        if result != 0 or not os.path.exists(compleasm_summary):
+            print(f"ERROR:\tCompleasm failed (rc={result}) for lineage {busco_odb}; "
+                  f"no completeness from Compleasm.")
             return assembly_path
     
     # Clean up downloaded lineage archives now that extraction is confirmed
@@ -1130,6 +1193,14 @@ if __name__ == "__main__":
                                                             sys.argv[4],       # output_dir
                                                             str(sys.argv[5]),  # cpu_threads
                                                             str(sys.argv[6]))  # ram_gb
+        # Fail loudly if the final assembly's completeness could not be measured
+        # for one or more lineages (both Compleasm and BUSCO failed) -- never a
+        # silent skip.
+        if _COMPLETENESS_FAILURES:
+            print("ERROR:\tFinal QC could not measure completeness for: "
+                  + ", ".join(_COMPLETENESS_FAILURES)
+                  + ". Check the Compleasm/BUSCO lineage downloads above.")
+            sys.exit(1)
     else:
         assembly_path, sample_stats_list, sample_stats_dict = qc_assessment(sys.argv[1],       # assembly_type
                                                                             sys.argv[2],       # input_csv

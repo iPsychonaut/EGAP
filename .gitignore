@@ -8,3 +8,8 @@ graphify-out/
 
 # Large reference databases (e.g. Kraken2 tarballs dropped into resources/)
 resources/*.tar.gz
+
+# Pipeline run outputs (never commit assemblies/intermediates/logs)
+egap_test_out/
+*_egap_out/
+
