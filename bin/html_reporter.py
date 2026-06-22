@@ -858,6 +858,13 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # Candidate basenames (without extension) we can accept
     candidate_bases = []
     if pd.notna(ref_seq) and pd.isna(est_size):
+        # QC-only mode: qc_assessment runs QUAST/BUSCO/Compleasm on the fetched
+        # reference and writes them next to it, named
+        # <sample_id>_EGAP_assembly_* in the reference's directory. Prefer that
+        # base so the report finds the QC that actually ran; keep the
+        # reference's own basename as a fallback.
+        ref_dir = os.path.dirname(str(ref_seq))
+        candidate_bases.append(os.path.join(ref_dir, f"{sample_id}_EGAP_assembly"))
         candidate_bases.append(os.path.splitext(ref_seq)[0])
     candidate_bases += [
         os.path.join(sample_dir, f"{sample_id}_final_EGAP_assembly"),

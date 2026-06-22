@@ -415,6 +415,35 @@ def locate_bin_dir(required_scripts, search_root):
 # --------------------------------------------------------------
 # Orchestrate the Entheome Genome Assembly Pipeline
 # --------------------------------------------------------------
+def _cell_has_value(row, col):
+    """True when *row[col]* is present and not a blank/``None`` placeholder."""
+    if col not in row:
+        return False
+    val = row[col]
+    return pd.notna(val) and str(val).strip() not in ("", "None", "nan")
+
+
+def sample_is_qc_only(row):
+    """Return ``True`` for a QC-only sample: a reference but no reads/EST_SIZE.
+
+    The documented QC-only mode assesses an existing assembly: provide
+    ``REF_SEQ`` / ``REF_SEQ_GCA`` (plus BUSCO dbs) with no reads and no
+    ``EST_SIZE``. Such samples only need the reference fetched, then QC and the
+    report; the assembly-building steps (preprocess reads, decontaminate reads,
+    assemble, compare, polish, curate, decontaminate assembly) do not apply.
+
+    This is mode dispatch, not skip-on-failure: read-based samples still run
+    every applicable step and fail loudly on error.
+    """
+    has_ref = _cell_has_value(row, "REF_SEQ") or _cell_has_value(row, "REF_SEQ_GCA")
+    read_cols = ("ILLUMINA_SRA", "ILLUMINA_RAW_DIR", "ILLUMINA_RAW_F_READS",
+                 "ILLUMINA_RAW_R_READS", "ONT_SRA", "ONT_RAW_DIR", "ONT_RAW_READS",
+                 "PACBIO_SRA", "PACBIO_RAW_DIR", "PACBIO_RAW_READS")
+    has_reads = any(_cell_has_value(row, c) for c in read_cols)
+    has_est_size = _cell_has_value(row, "EST_SIZE")
+    return has_ref and not has_reads and not has_est_size
+
+
 if __name__ == "__main__":
     # Parse command-line arguments for pipeline configuration
     parser = argparse.ArgumentParser(description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{VERSION}")
@@ -766,6 +795,17 @@ if __name__ == "__main__":
             raise FileNotFoundError("Could not locate a single folder containing all of: "
                                     + ", ".join(f"{p}.py" for p in processes))
 
+    # ---- Fail-fast environment preflight (tools on PATH, RAM sanity) ----
+    if str(bin_dir) not in sys.path:
+        sys.path.insert(0, str(bin_dir))
+    try:
+        from preflight_checks import run_preflight
+        run_preflight(ram_gb)
+    except SystemExit:
+        raise  # a failed check aborts the run loudly, as intended
+    except Exception as _pf_exc:
+        print(f"WARN:\tPre-flight checks could not run ({_pf_exc}); continuing.")
+
     # Load the Sample Table and correct any ".fq" -> ".fastq"
     input_csv_df = preprocess_csv(input_csv)
 
@@ -796,8 +836,19 @@ if __name__ == "__main__":
 
         sample_step_failed = False
 
+        # QC-only samples (reference, no reads, no EST_SIZE) only need the
+        # reference fetched; QC + report run afterward. The assembly-building
+        # steps do not apply -- mode dispatch, not skip-on-failure. Read-based
+        # samples run every step in `processes` and fail loudly on error.
+        if sample_is_qc_only(row):
+            sample_processes = [p for p in processes if p == "preprocess_refseq"]
+            print("NOTE:\tQC-only sample (reference, no reads, no EST_SIZE): "
+                  "running reference fetch + QC + report only.")
+        else:
+            sample_processes = processes
+
         # ---- Pipeline steps ----
-        for proc in processes:
+        for proc in sample_processes:
             script = bin_dir / f"{proc}.py"
             if not script.exists():
                 print(f"\nERROR:\tMissing script: {script}")

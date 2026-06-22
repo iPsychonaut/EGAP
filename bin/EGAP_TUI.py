@@ -497,9 +497,12 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             return Text("RUNNING", style="yellow")
         return Text("PENDING", style="dim")
 
-    def init_step_plan(self, samples: List[Tuple[str, str]], processes: Optional[List[str]] = None) -> None:
+    def init_step_plan(self, samples: List[Tuple[str, str]], processes: Optional[List[str]] = None,
+                       sample_processes_map: Optional[Dict[str, List[str]]] = None) -> None:
         # Caller passes the (possibly skip-filtered) process list so the display
         # table matches what actually runs; fall back to the full list.
+        # *sample_processes_map* overrides per-sample (e.g. QC-only samples) so
+        # the plan only lists the steps each sample will actually run.
         if processes is None:
             processes = [
                 "preprocess_refseq", "preprocess_illumina", "preprocess_ont",
@@ -508,10 +511,11 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 "assemble_spades", "assemble_hifiasm", "compare_assemblies",
                 "polish_assembly", "curate_assembly", "decontaminate_assembly",
             ]
+        sample_processes_map = sample_processes_map or {}
 
         self.steps = []
         for sample_id in samples:
-            for p in processes:
+            for p in sample_processes_map.get(sample_id, processes):
                 self.steps.append(StepStatus(sample_id=sample_id, step=p, status="PENDING"))
             self.steps.append(StepStatus(sample_id=sample_id, step="qc_assessment(final)", status="PENDING"))
             self.steps.append(StepStatus(sample_id=sample_id, step="html_reporter", status="PENDING"))
@@ -742,15 +746,43 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             else:
                 raise FileNotFoundError("Could not locate bin directory containing EGAP step scripts.")
 
+            # ---- Fail-fast environment preflight (tools on PATH, RAM sanity) ----
+            try:
+                from preflight_checks import run_preflight
+                _pf_problems = run_preflight(ram_gb, abort=False)
+            except Exception as _pf_exc:
+                self.log_line(f"WARN:\tPre-flight checks could not run ({_pf_exc}); continuing.")
+                _pf_problems = []
+            if _pf_problems:
+                for _p in _pf_problems:
+                    self.log_line("ERROR:\t" + _p)
+                self.log_line("ERROR:\tAborting run; fix the above and relaunch.")
+                return
+
             input_df = egap.preprocess_csv(input_csv)
-                        
+
             samples: List[Tuple[str, str]] = []
             for _, r in input_df.iterrows():
                 sample_id = str(r["SAMPLE_ID"]).strip()
                 samples.append((sample_id))
-            
+
+            # QC-only samples (reference, no reads, no EST_SIZE) run only the
+            # reference fetch; QC + report run afterward. Build a per-sample
+            # process map so both the execution loop and the step-plan display
+            # reflect what actually runs.
+            sample_proc_map = {}
+            for _sid in samples:
+                try:
+                    _row = input_df[input_df["SAMPLE_ID"].astype(str).str.strip() == _sid].iloc[0]
+                    _qc_only = egap.sample_is_qc_only(_row)
+                except Exception:
+                    _qc_only = False
+                sample_proc_map[_sid] = (
+                    [p for p in processes if p == "preprocess_refseq"] if _qc_only else processes
+                )
+
             self.log_line(f"Loaded {len(samples)} sample(s) from CSV.")
-            self.init_step_plan(samples, processes)
+            self.init_step_plan(samples, processes, sample_proc_map)
 
             for sample_id in samples:
                 if self.shutdown_requested:
@@ -772,7 +804,12 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
 
                 sample_step_failed = False
 
-                for proc_name in processes:
+                sample_processes = sample_proc_map.get(sample_id, processes)
+                if sample_processes is not processes:
+                    self.log_line("NOTE:\tQC-only sample (reference, no reads, no EST_SIZE): "
+                                  "running reference fetch + QC + report only.")
+
+                for proc_name in sample_processes:
                     if self.shutdown_requested:
                         return
 
