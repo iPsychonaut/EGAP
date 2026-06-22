@@ -87,14 +87,40 @@ def _normalize_tool(token):
 
 
 def _derive_tool(cmd_list):
-    """Best-effort program name from a command (list or shell string)."""
+    """Best-effort program name from a command (list or shell string).
+
+    Skips leading shell noise that would otherwise be mistaken for the program:
+    environment-variable assignments (``TMPDIR='...' fasterq-dump ...``) and a
+    ``cd <dir> &&`` prefix (``cd '...' && datasets ...``), so the recorded tool
+    is ``fasterq-dump`` / ``datasets`` rather than ``Illumina'`` / ``cd``.
+    """
     if isinstance(cmd_list, str):
-        parts = cmd_list.split()
-        token = parts[0] if parts else ""
+        try:
+            import shlex
+            tokens = shlex.split(cmd_list)
+        except (ValueError, ImportError):
+            tokens = cmd_list.split()
     elif cmd_list:
-        token = cmd_list[0]
+        tokens = [str(t) for t in cmd_list]
     else:
-        token = ""
+        tokens = []
+
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok == "cd":
+            # Skip 'cd <dir> ... &&' and resume at the real command after it.
+            while i < len(tokens) and tokens[i] != "&&":
+                i += 1
+            i += 1  # step past '&&'
+            continue
+        # Skip a leading VAR=value environment assignment.
+        if "=" in tok and tok.split("=", 1)[0].isidentifier():
+            i += 1
+            continue
+        break
+
+    token = tokens[i] if i < len(tokens) else (tokens[0] if tokens else "")
     return _normalize_tool(token)
 
 
