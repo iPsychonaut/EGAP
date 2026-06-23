@@ -10,6 +10,8 @@ source:
     sha256: c55568828315dff4dbefe24b619ac4adefd85a9630105d88e9d99516fd10ee7f
   - url: https://github.com/iPsychonaut/runner/archive/refs/tags/v0.0.0.tar.gz
     sha256: 4e67bb1e970dadb86425cb2698e0e2e34f70d78cbf77a32f73c13f66dffb55fc
+  - url: https://github.com/iPsychonaut/tiara-entheome/archive/refs/tags/v1.0.0.tar.gz
+    sha256: a5fe19d4d77eda6fd6608cce25b1a70a06a999fae7d35e98bb1b5a96ae228dee
 
 build:
   noarch: python
@@ -76,11 +78,6 @@ requirements:
     - textual >=0.4.2
     - kraken2 >=2.1.6
     - pigz >=2.8
-    # Assembly decontamination. tiara-entheome is a modernised fork of Tiara
-    # with numpy >=1.21 / numba >=0.56 pins, so it does not hold the env at
-    # numpy 1.19.5 the way upstream tiara 1.0.3 did -- which had broken BUSCO's
-    # numpy-compiled import. (Requires tiara-entheome on bioconda to build.)
-    - tiara-entheome >=1.0.0
 
 test:
   requires:
