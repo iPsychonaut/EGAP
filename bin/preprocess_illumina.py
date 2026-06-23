@@ -28,6 +28,30 @@ from pathlib import Path
 import pandas as pd
 from utilities import run_subprocess_cmd, md5_check, initialize_logging_environment, log_print, load_sample_context
 from record_provenance import record_file
+
+
+def ploidy_is_multi(ploidy_value):
+    """Return ``True`` when PLOIDY is explicitly diploid or higher (>1).
+
+    Diploid+ individuals skip read deduplication so allelic coverage from the
+    multiple haplotypes is preserved. Haploid (``1``), blank, ``None``, or an
+    unparseable value returns ``False`` (deduplication runs, as before).
+    Scales to any ploidy: 2 (diploid), 3 (triploid), 4 (tetraploid), etc.
+    """
+    if ploidy_value is None:
+        return False
+    text = str(ploidy_value).strip().lower()
+    if text in ("", "none", "nan"):
+        return False
+    if text in ("haploid", "monoploid", "n", "1n"):
+        return False
+    if text in ("diploid", "triploid", "tetraploid", "pentaploid",
+                "hexaploid", "polyploid"):
+        return True
+    try:
+        return int(float(text)) >= 2
+    except (TypeError, ValueError):
+        return False
 from decontaminate_reads import (
     get_kraken2_db,
     get_kraken_keep_domains,
@@ -649,16 +673,27 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             "tpe", "tbo", "qtrim=rl", "trimq=20"
         ], False)
 
-    # ---------- Clumpify (dedupe) ----------
+    # ---------- Clumpify (dedupe, unless diploid+) ----------
+    # Haploid (or unspecified) samples deduplicate reads. Diploid-or-higher
+    # samples skip dedup to preserve allelic coverage from the multiple
+    # haplotypes; clumpify still runs (to produce the canonical output files),
+    # just without the dedupe flag.
     if os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads):
-        log_print(f"SKIP:\tClumpify deduplicated files exist: {illu_dedup_f_reads} & {illu_dedup_r_reads}.")
+        log_print(f"SKIP:\tClumpify output files exist: {illu_dedup_f_reads} & {illu_dedup_r_reads}.")
     else:
-        run_subprocess_cmd([
+        _ploidy = current_series.get("PLOIDY")
+        clumpify_cmd = [
             "clumpify.sh",
             f"in={bbduk_f_map}", f"in2={bbduk_r_map}",
             f"out={illu_dedup_f_reads}", f"out2={illu_dedup_r_reads}",
-            "dedupe"
-        ], False)
+        ]
+        if ploidy_is_multi(_ploidy):
+            log_print(f"NOTE:\tPLOIDY={_ploidy} (diploid or higher): skipping read "
+                      f"deduplication to preserve allelic coverage (clumpify runs "
+                      f"without dedupe).")
+        else:
+            clumpify_cmd.append("dedupe")
+        run_subprocess_cmd(clumpify_cmd, False)
 
     log_print(f"PASS:\tPreprocessed Raw Illumina Reads for {species_id}: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
 

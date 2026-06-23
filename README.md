@@ -546,7 +546,11 @@ The CSV file should have the following header and columns:
 - **SAMPLE_ID**: Sample ID formatted as `<full species name>-<other identifiers>` (e.g., `Escherichia_coli-Illu-SRR32496875`).
 - **ORGANISM_KINGDOM**: Kingdom of the organism (`Bacteria`, `Archaea`, `Flora`, `Funga`, or `Fauna`). Used by both Kraken2 and Tiara decontamination.
 - **ORGANISM_KARYOTE**: Karyote type of the organism (e.g., `Eukaryote`, `Prokaryote`).
-- **PLOIDY** *(optional, new in v3.4.2)*: Ploidy of the individual as an integer (`1` = haploid, `2` = diploid, etc.; the words `haploid`/`diploid` are also accepted). Haploid samples (`1`) **skip the purge_dups haplotig-removal step**, since there is no second haplotype to purge and purging could strip genuine sequence. Leave blank, `None`, or `2`+ to run purge_dups as before. Omitting the column entirely is safe and keeps the previous behaviour.
+- **PLOIDY** *(optional, new in v3.4.2)*: Ploidy of the individual as an integer (`1` = haploid, `2` = diploid, `3` = triploid, `4` = tetraploid, …; the words `haploid`/`diploid`/`triploid`/etc. are also accepted). Two ploidy-aware behaviours:
+  - **Haploid (`1`)** skips the `purge_dups` haplotig-removal step — there is no second haplotype to purge, and purging could strip genuine sequence.
+  - **Diploid or higher (`>1`)** skips read deduplication (clumpify `dedupe`) so allelic coverage from the multiple haplotypes is preserved.
+
+  Leave the column blank or `None` to keep the previous behaviour (both `purge_dups` and read deduplication run). Scales to any ploidy value.
 - **BUSCO_1**: Name of the first Compleasm/BUSCO database (e.g., `basidiomycota`).
 - **BUSCO_2**: Name of the second Compleasm/BUSCO database (e.g., `agaricales`).
 - **EST_SIZE**: Estimated genome size (e.g., `55m` for 55 Mbp, `5g` for 5 Gbp).

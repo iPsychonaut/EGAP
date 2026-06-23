@@ -112,7 +112,7 @@ BBDUK_SETTINGS = {
 }
 
 CLUMPIFY_SETTINGS = {
-    "settings": "default",
+    "remove duplicate reads": "-dedupe (haploid / unspecified PLOIDY only; skipped for diploid+, PLOIDY>1, to preserve allelic coverage)",
 }
 
 FILTLONG_SETTINGS = {
@@ -585,7 +585,7 @@ if __name__ == "__main__":
         \033[94mtrimq                            \033[0m: 20
 
     \033[92mclumpify settings
-        \033[94mremove duplicate reads           \033[0m: -dedupe
+        \033[94mremove duplicate reads           \033[0m: -dedupe (haploid/unspecified; skipped for diploid+ PLOIDY>1)
 
     \033[96m-----------------------------------------------------------------------\033[0m
     """)
