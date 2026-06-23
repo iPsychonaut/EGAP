@@ -50,10 +50,13 @@ FALLBACK_TO_BUSCO_ON_FAIL = True
 # One shared Compleasm lineage library for the whole run, so each lineage is
 # downloaded once and reused instead of re-downloading into a per-working-dir
 # "mb_downloads" for every assembler (which collided on the shared placement
-# lock and made BUSCO/Compleasm fail). Override with EGAP_COMPLEASM_LIB.
+# lock and made BUSCO/Compleasm fail). Default to Compleasm's own standard
+# location so an already-populated library (with a working placement_files.done)
+# is reused -- a fresh empty library forces a re-download that can hit a parse
+# bug in Compleasm 0.2.7's placement handling. Override with EGAP_COMPLEASM_LIB.
 COMPLEASM_LIB = os.environ.get(
     "EGAP_COMPLEASM_LIB",
-    os.path.join(os.path.expanduser("~"), ".egap", "compleasm_lib"),
+    os.path.join(os.path.expanduser("~"), "compleasm_lineages_odb12"),
 )
 
 # Lineages for which completeness could NOT be measured (both Compleasm AND

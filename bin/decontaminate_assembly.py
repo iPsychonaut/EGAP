@@ -139,6 +139,17 @@ def write_done_marker(marker_path, input_assembly, kept_count, removed_count,
 # --------------------------------------------------------------
 # Run Tiara and return path to its classification output file
 # --------------------------------------------------------------
+def _tiara_binary():
+    """Resolve the Tiara executable.
+
+    Prefer ``tiara-entheome`` -- the modernised fork (numpy >=1.21, numba
+    >=0.56) that, unlike upstream ``tiara`` 1.0.3 (numpy <1.20), does not pin
+    the environment below what BUSCO needs. Fall back to upstream ``tiara`` when
+    only that is installed, so this stays drop-in during the transition.
+    """
+    return "tiara-entheome" if shutil.which("tiara-entheome") else "tiara"
+
+
 def run_tiara(input_assembly, decontam_dir, cpu_threads):
     """Run Tiara on *input_assembly* and return the path to the output TSV.
 
@@ -156,7 +167,7 @@ def run_tiara(input_assembly, decontam_dir, cpu_threads):
         return tiara_out
 
     tiara_cmd = (
-        f"tiara -i {input_assembly} "
+        f"{_tiara_binary()} -i {input_assembly} "
         f"-o {tiara_out} "
         f"--threads {cpu_threads} "
         f"--probabilities"
@@ -254,14 +265,14 @@ def decontaminate_assembly(
     # ----------------------------------------------------------
     # Section 3: Check tiara is available on PATH
     # ----------------------------------------------------------
-    # tiara must be installed in the active conda environment.
-    # A missing binary is a hard failure -- the pipeline must not silently
-    # skip decontamination just because the wrong environment is active.
-    if shutil.which("tiara") is None:
+    # tiara-entheome (preferred) or tiara must be installed in the active conda
+    # environment. A missing binary is a hard failure -- the pipeline must not
+    # silently skip decontamination just because the wrong environment is active.
+    if shutil.which(_tiara_binary()) is None:
         log_print(
-            "ERROR:\ttiara is not on PATH. Cannot run assembly decontamination. "
-            "Activate the conda environment that has tiara installed "
-            "(e.g. conda activate EGAP_tiara_test) and re-run."
+            "ERROR:\tNeither tiara-entheome nor tiara is on PATH. Cannot run "
+            "assembly decontamination. Install tiara-entheome (preferred) into "
+            "the active conda environment (e.g. conda activate EGAP_env) and re-run."
         )
         sys.exit(1)
 
