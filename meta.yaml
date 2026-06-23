@@ -76,6 +76,11 @@ requirements:
     - textual >=0.4.2
     - kraken2 >=2.1.6
     - pigz >=2.8
+    # Assembly decontamination. tiara-entheome is a modernised fork of Tiara
+    # with numpy >=1.21 / numba >=0.56 pins, so it does not hold the env at
+    # numpy 1.19.5 the way upstream tiara 1.0.3 did -- which had broken BUSCO's
+    # numpy-compiled import. (Requires tiara-entheome on bioconda to build.)
+    - tiara-entheome >=1.0.0
 
 test:
   requires:
