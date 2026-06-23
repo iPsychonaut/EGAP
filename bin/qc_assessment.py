@@ -66,11 +66,12 @@ _COMPLETENESS_FAILURES = []
 
 
 def _clear_compleasm_locks():
-    """Remove stale Compleasm placement-file locks that block fresh downloads.
+    """Remove stale Compleasm download locks that block fresh downloads.
 
-    A download interrupted by a network hiccup leaves a ``placement_files.tmp``
-    lock behind; every later Compleasm run then aborts with "another process is
-    downloading". Clearing it lets a retry proceed.
+    A download interrupted by a network hiccup leaves a ``.tmp`` lock behind --
+    both ``placement_files.tmp`` and per-lineage ``<lineage>_odb*.tmp`` -- and
+    every later Compleasm run then aborts with "another process is downloading".
+    Clearing all stale ``.tmp`` locks lets a retry proceed.
     """
     import glob as _glob
     try:
@@ -79,8 +80,9 @@ def _clear_compleasm_locks():
         pass
     home = os.path.expanduser("~")
     patterns = [
-        os.path.join(home, "compleasm_lineages_*", "placement_files.tmp"),
-        os.path.join(COMPLEASM_LIB, "**", "placement_files.tmp"),
+        os.path.join(home, "compleasm_lineages_*", "*.tmp"),
+        os.path.join(COMPLEASM_LIB, "*.tmp"),
+        os.path.join(COMPLEASM_LIB, "**", "*.tmp"),
     ]
     for pat in patterns:
         for f in _glob.glob(pat, recursive=True):
