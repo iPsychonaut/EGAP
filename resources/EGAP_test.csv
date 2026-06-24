@@ -1,5 +1,5 @@
 ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SPECIES_ID,SAMPLE_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,PLOIDY,BUSCO_1,BUSCO_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ
-,,,SRR30663514,,,,,,,Psilocybe_wayanedensis,Psilocybe_wayanedensis-DeconTest,Funga,eukaryote,2,fungi,basidiomycota,75m,,
+,,,SRR30663514,,,,,,,Psilocybe_wayanedensis,Psilocybe_wayanedensis-DeconTest,Funga,eukaryote,2,agaricales,basidiomycota,75m,,
 ,,,,,,,,,,Escherichia_coli-RefSeq,Escherichia_coli-RefSeqTest,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,,GCA_000005845.2,
 ,,,SRR32496875,,,,,,,Escherichia_coli-Illu-RefSeq,Escherichia_coli-IlluminaTest,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,GCA_000005845.2,
 SRR32405433,,,SRR32496875,,,,,,,Escherichia_coli-ONT-Illu,Escherichia_coli-HybridTest,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,,

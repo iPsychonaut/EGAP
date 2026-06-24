@@ -40,7 +40,7 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     'numpy=1.19.5' \
     'masurca=4.1.4' \
     'quast=5.3.0' \
-    compleasm \
+    'compleasm>=0.2.8' \
     busco \
     biopython \
     ragtag \
