@@ -370,6 +370,44 @@ def _masurca_vendor_flye_patch_check(assembly_sh_path: str) -> str:
     return assembly_sh_path
 
 
+def clear_stale_overlap_store(masurca_out_dir) -> None:
+    """Remove an orphaned CABOG ``*.ovlStore.BUILDING`` left by an interrupted run.
+
+    CABOG's ``overlapStoreBuild`` writes the overlap store into
+    ``<name>.ovlStore.BUILDING`` and only renames it to the final
+    ``<name>.ovlStore`` once the build completes. If that build is killed
+    mid-flight (for example the controlling terminal sends SIGHUP), the partial
+    ``.BUILDING`` directory survives. Every later ``runCA`` then aborts with
+    "is a valid overlap store, will not overwrite", so MaSuRCA can never finish
+    on a re-run into the same output directory. This preflight clears such an
+    orphan (and its stale ``*.ovlStore.list``) when there is no completed sibling
+    store, so the next attempt rebuilds the overlap store cleanly. A completed
+    ``*.ovlStore`` is never touched.
+    """
+    base = Path(masurca_out_dir)
+    if not base.exists():
+        return
+    for building in base.rglob("*.ovlStore.BUILDING"):
+        if not building.is_dir():
+            continue
+        completed = building.with_suffix("")  # drop the trailing ".BUILDING"
+        if completed.exists():
+            # A finished store sits alongside the orphan; leave both alone.
+            continue
+        try:
+            shutil.rmtree(building)
+            log_print(f"NOTE:\tCleared stale CABOG overlap store: {building}")
+        except OSError as e:
+            log_print(f"WARN:\tCould not remove stale overlap store {building}: {e}")
+        stale_list = Path(f"{completed}.list")
+        if stale_list.exists():
+            try:
+                stale_list.unlink()
+                log_print(f"NOTE:\tCleared stale overlap store list: {stale_list}")
+            except OSError as e:
+                log_print(f"WARN:\tCould not remove {stale_list}: {e}")
+
+
 # --------------------------------------------------------------
 # Generate and run MaSuRCA assembly
 # --------------------------------------------------------------
@@ -597,6 +635,12 @@ def masurca_config_gen(
         # Print a pre-flight runtime estimate for this assembler given the
         # available resources and read volume.
         log_estimate_for("masurca", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
+
+        # Preflight: an interrupted prior run (e.g. SIGHUP during the overlap
+        # build) can leave a partial CABOG *.ovlStore.BUILDING that blocks every
+        # retry with "will not overwrite". Clear any such orphan with no completed
+        # sibling before assemble.sh runs, so the overlap store rebuilds cleanly.
+        clear_stale_overlap_store(masurca_out_dir)
 
         # Run under a non-lethal runtime monitor. It reports elapsed time and
         # output throughput and warns if growth flatlines (the create_mega_reads

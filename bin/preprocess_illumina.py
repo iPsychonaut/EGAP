@@ -646,7 +646,13 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
             f"out1={bbduk_f_map}",  f"out2={bbduk_r_map}",
             "ref=adapters",
             "ktrim=r", "k=23", "mink=11", "hdist=1",
-            "tpe", "tbo", "qtrim=rl", "trimq=20"
+            "tpe", "tbo", "qtrim=rl", "trimq=20",
+            # BBDuk runs after Trimmomatic's MINLEN:125 but its own adapter
+            # (ktrim=r) and quality (qtrim=rl) trimming shortens reads further.
+            # Without an explicit floor BBDuk only drops reads below its default
+            # minlen=10, leaving 10-120 bp fragments that hurt assembly. Hold the
+            # floor at 100 bp so post-BBDuk reads stay usable.
+            "minlen=100"
         ], False)
 
     # ---------- Clumpify (dedupe) ----------
