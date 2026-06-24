@@ -77,7 +77,7 @@ From: debian:buster
                  'numpy=1.19.5' \
                  'masurca=4.1.4' \
                  'quast=5.3.0' \
-                 compleasm \
+                 'compleasm>=0.2.8' \
                  busco \
                  biopython \
                  ragtag \
@@ -135,7 +135,7 @@ From: debian:buster
     # Create EGEP_env (aux env)
     # -----------------------------
     /bin/bash -c "conda create -n EGEP_env --yes python>=3.10 glib=2.64.6 \
-                  mafft iqtree ete3 'compleasm>=0.2.7' trimal pandas biopython psutil \
+                  mafft iqtree ete3 'compleasm>=0.2.8' trimal pandas biopython psutil \
                   gffutils pysam matplotlib scipy clinker-py packaging meson" || { echo "Failed to create EGEP_env"; exit 1; }
 
     # Debug: Check GLib installation

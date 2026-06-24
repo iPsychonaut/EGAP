@@ -29,7 +29,7 @@ requirements:
     - numpy >=1.24.3
     - masurca >=4.1.2
     - quast >=5.2.0
-    - compleasm >=0.2.7
+    - compleasm >=0.2.8
     - busco >=5.8.2
     - biopython >=1.81
     - ragtag >=2.1.0
