@@ -23,7 +23,7 @@ import glob
 import pandas as pd
 from pathlib import Path
 from collections import Counter
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, validate_fasta
+from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, validate_fasta, read_sample_table
 from Bio import SeqIO
 from qc_assessment import run_lineage_eval
 
@@ -207,7 +207,7 @@ def discover_hifiasm(sample_dir, sample_id):
     return dst
 
 
-def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def compare_assemblies(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """Compare assemblies and select the best based on BUSCO and Quast metrics.
 
     Evaluates MaSuRCA, SPAdes, Flye, and Hifiasm assemblies using BUSCO completeness,
@@ -215,7 +215,7 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     Args:
         sample_id (str): Sample identifier.
-        input_csv (str): Path to metadata CSV file.
+        input_tsv (str): Path to metadata TSV file.
         output_dir (str): Directory for output files.
         cpu_threads (int): Number of CPU threads to use.
         ram_gb (int): Available RAM in GB.
@@ -223,11 +223,11 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     Returns:
         str: Path to the selected best assembly FASTA (gzipped).
     """
-    input_df = pd.read_csv(input_csv)
+    input_df = read_sample_table(input_tsv)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]  # Convert to Series (single row)
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
     illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -387,14 +387,14 @@ def compare_assemblies(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 compare_assemblies.py <sample_id> <input_csv> "
+        print("Usage: python3 compare_assemblies.py <sample_id> <input_tsv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
     initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     best_assembly = compare_assemblies(sys.argv[1],       # sample_id
-                                      sys.argv[2],       # input_csv
+                                      sys.argv[2],       # input_tsv
                                       sys.argv[3],       # output_dir
                                       str(sys.argv[4]),  # cpu_threads
                                       str(sys.argv[5]))  # ram_gb

@@ -317,7 +317,7 @@ def is_haploid(ploidy_value):
     Accepts an integer/float (``1``), a numeric string (``"1"``), or a word
     (``"haploid"``, ``"monoploid"``, ``"n"``, ``"1n"``). Anything else --
     including ``None``, blank, ``NaN``, ``2``, ``"diploid"`` -- returns
-    ``False`` so the default (purge_dups runs) is preserved for existing CSVs
+    ``False`` so the default (purge_dups runs) is preserved for existing TSVs
     that omit the column.
 
     Haploid assemblies have no second haplotype, so purge_dups' haplotig
@@ -344,12 +344,12 @@ def is_haploid(ploidy_value):
 # --------------------------------------------------------------
 def curate_assembly(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
 ) -> Optional[str]:
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -540,7 +540,7 @@ def curate_assembly(
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 curate_assembly.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+        print("Usage: python3 curate_assembly.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
     initialize_logging_environment(sys.argv[3], sys.argv[1])

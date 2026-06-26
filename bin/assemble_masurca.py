@@ -413,7 +413,7 @@ def clear_stale_overlap_store(masurca_out_dir) -> None:
 # --------------------------------------------------------------
 def masurca_config_gen(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
@@ -427,9 +427,9 @@ def masurca_config_gen(
     Parameters
     ----------
     sample_id : str
-        Sample identifier used to look up the row in *input_csv*.
-    input_csv : str
-        Path to the metadata CSV file.
+        Sample identifier used to look up the row in *input_tsv*.
+    input_tsv : str
+        Path to the metadata TSV file.
     output_dir : str
         Root output directory; per-species subdirectories are created here.
     cpu_threads : int
@@ -443,12 +443,12 @@ def masurca_config_gen(
         Absolute path to the final MaSuRCA assembly FASTA, or ``None``
         if the assembly could not be completed.
     """
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
-    print(f"DEBUG - input_csv - {ctx.input_csv}")
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    print(f"DEBUG - input_tsv - {ctx.input_tsv}")
     print(f"DEBUG - output_dir - {ctx.output_dir}")
     current_series = ctx.current_series
 
-    # CSV fields
+    # TSV fields
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
     illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -472,7 +472,7 @@ def masurca_config_gen(
         log_print(f"SKIP:\tFinal MaSuRCA assembly already present: {expected_final}")
         # Re-run QC on the existing assembly/output structure
         egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment(
-            "masurca", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
+            "masurca", ctx.input_tsv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return str(egap_masurca_assembly_path)
 
@@ -634,7 +634,7 @@ def masurca_config_gen(
         
         # Print a pre-flight runtime estimate for this assembler given the
         # available resources and read volume.
-        log_estimate_for("masurca", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
+        log_estimate_for("masurca", sample_id, ctx.input_tsv, ctx.output_dir, cpu_threads, ram_gb)
 
         # Preflight: an interrupted prior run (e.g. SIGHUP during the overlap
         # build) can leave a partial CABOG *.ovlStore.BUILDING that blocks every
@@ -674,7 +674,7 @@ def masurca_config_gen(
         print(f"DEBUG: Final assembly path: {egap_masurca_assembly_path}")
         os.chdir(prev_cwd)
         egap_masurca_assembly_path, masurca_stats_list, _ = qc_assessment(
-            "masurca", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
+            "masurca", ctx.input_tsv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
 
         # --- Cleanup MaSuRCA intermediates once final assembly is confirmed ---
@@ -702,14 +702,14 @@ def masurca_config_gen(
 if __name__ == "__main__":
     # Provide a usage message if the correct number of arguments is not supplied.
     if len(sys.argv) != 6:
-        print("Usage: python3 assemble_masurca.py <sample_id> <input_csv> "
+        print("Usage: python3 assemble_masurca.py <sample_id> <input_tsv> "
             "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
     initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     egap_masurca_assembly_path = masurca_config_gen(sys.argv[1],       # sample_id
-                                                    sys.argv[2],       # input_csv
+                                                    sys.argv[2],       # input_tsv
                                                     sys.argv[3],       # output_dir
                                                     str(sys.argv[4]),  # cpu_threads
                                                     str(sys.argv[5]))  # ram_gb

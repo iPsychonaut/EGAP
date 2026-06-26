@@ -41,7 +41,7 @@ def to_abs(path):
     """Return an absolute filesystem path, leaving non-strings unchanged.
 
     Many pipeline call sites pass values that may be ``str`` paths or
-    ``None``/``pandas.NA``/``float('nan')`` (when the corresponding CSV cell
+    ``None``/``pandas.NA``/``float('nan')`` (when the corresponding TSV cell
     is empty).  Wrapping the value with this helper keeps the
     ``isinstance(p, str)`` guard centralized so callers can do
     ``to_abs(maybe_path)`` without first checking the type themselves.

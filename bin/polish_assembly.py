@@ -198,13 +198,13 @@ def pilon_polish(best_assembly, second_racon_assembly, pilon_bam, assembly_out_d
 # --------------------------------------------------------------
 def polish_assembly(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
 ) -> Optional[str]:
     """Polish an assembly by running Racon (two rounds with long reads) and Pilon."""
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -421,7 +421,7 @@ def polish_assembly(
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 polish_assembly.py <sample_id> <input_csv> "
+        print("Usage: python3 polish_assembly.py <sample_id> <input_tsv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
@@ -429,7 +429,7 @@ if __name__ == "__main__":
 
     final_polished_assembly = polish_assembly(
         sys.argv[1],       # sample_id
-        sys.argv[2],       # input_csv
+        sys.argv[2],       # input_tsv
         sys.argv[3],       # output_dir
         str(sys.argv[4]),  # cpu_threads
         str(sys.argv[5])   # ram_gb

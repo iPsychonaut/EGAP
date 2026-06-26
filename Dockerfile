@@ -113,7 +113,7 @@ RUN apt-get update && apt-get install -y wget && \
         subprocess_runner.py \
         log.py \
         file_operations.py \
-        sample_csv.py \
+        sample_tsv.py \
         utilities.py \
         preprocess_illumina.py \
         preprocess_ont.py \
@@ -247,7 +247,7 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
 #       -e KRAKEN2_DB=/kraken2_db \
 #       -v /host/path/to/kraken2_db:/kraken2_db:ro \
 #       -v /host/data:/data \
-#       entheome_ecosystem:3.4.1 --input /data/samples.csv --output /data/out
+#       entheome_ecosystem:3.4.1 --input /data/samples.tsv --output /data/out
 #
 # To provision a Kraken2 database on the host before running EGAP, either
 # build from source (authoritative, ~6-12 hrs):
@@ -288,7 +288,7 @@ CMD ["--help"]
 #       -v /host/kraken2_db:/kraken2_db:ro \
 #       -v /host/data:/data \
 #       entheome_ecosystem:3.4.1 \
-#       --input-csv /data/samples.csv \
+#       --input-tsv /data/samples.tsv \
 #       --output /data/output \
 #       --threads 16 --ram 64
 #

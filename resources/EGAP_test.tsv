@@ -1,0 +1,8 @@
+SPECIES_ID	SAMPLE_ID	ORGANISM_KINGDOM	ORGANISM_KARYOTE	PLOIDY	EST_SIZE	BUSCO	ONT_SRA	ONT_RAW_DIR	ONT_RAW_READS	ILLUMINA_SRA	ILLUMINA_RAW_DIR	ILLUMINA_RAW_READS	PACBIO_SRA	PACBIO_RAW_DIR	PACBIO_RAW_READS	REF_SEQ_GCA	REF_SEQ	NT_ASSEMBLY_GCA	NT_ASSEMBLY_PATH	TX_EVI_GCA	TX_EVI_PATH	PT_EVI_GCA	 
+Psilocybe_wayanedensis	Psilocybe_wayanedensis-DeconTest	Funga	eukaryote	2	75m	"agaricales,basidiomycota"				SRR30663514													
+Escherichia_coli-RefSeq	Escherichia_coli-RefSeqTest	Bacteria	prokaryote	1		"gammaproteobacteria,enterobacterales"										GCA_000005845.2							
+Escherichia_coli-Illu-RefSeq	Escherichia_coli-IlluminaTest	Bacteria	prokaryote	1	5m	"gammaproteobacteria,enterobacterales"				SRR32496875						GCA_000005845.2							
+Escherichia_coli-ONT-Illu	Escherichia_coli-HybridTest	Bacteria	prokaryote	1	5m	"gammaproteobacteria,enterobacterales"	SRR32405433			SRR32496875													
+Escherichia_coli-PacBio	Escherichia_coli-PacBioTest	Bacteria	prokaryote	1	5m	"gammaproteobacteria,enterobacterales"							SRR31460895										
+Flammulina_filiformis	Flammulina_filiformis-Jin13	Funga	eukaryote	2		"agaricales,basidiomycota"												GCA_048987785.1					
+Flammulina_velutipes	Flammulina_velutipes-6-3	Funga	eukaryote	2		"agaricales,basidiomycota"												GCA_011800155.1					

@@ -29,7 +29,7 @@ from record_provenance import record_file
 
 def assemble_flye(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
@@ -39,10 +39,10 @@ def assemble_flye(
     Returns:
         str or None: Path to the Flye assembly FASTA, or None if no long reads are provided.
     """
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
     illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -68,7 +68,7 @@ def assemble_flye(
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
-    # If CSV had relative paths, anchor them to ctx.output_dir
+    # If TSV had relative paths, anchor them to ctx.output_dir
     def norm(p):
         if isinstance(p, str) and not os.path.isabs(p):
             return to_abs(os.path.join(ctx.output_dir, p))
@@ -118,7 +118,7 @@ def assemble_flye(
     if os.path.exists(egap_flye_assembly_path) and os.path.getsize(egap_flye_assembly_path) > 0:
         print(f"SKIP:\tFinal Flye assembly already present: {egap_flye_assembly_path}")
         egap_flye_assembly_path, flye_stats_list, _ = qc_assessment(
-            "flye", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
+            "flye", ctx.input_tsv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return egap_flye_assembly_path
 
@@ -145,7 +145,7 @@ def assemble_flye(
                     "--threads", str(cpu_threads),
                     "--iterations", "3", "--keep-haplotypes"]
 
-    log_estimate_for("flye", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
+    log_estimate_for("flye", sample_id, ctx.input_tsv, ctx.output_dir, cpu_threads, ram_gb)
     _ = run_subprocess_cmd(flye_cmd, shell_check=False)
 
     # Move result into canonical name
@@ -155,7 +155,7 @@ def assemble_flye(
 
     # QC using absolute paths
     egap_flye_assembly_path, flye_stats_list, _ = qc_assessment(
-        "flye", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
+        "flye", ctx.input_tsv, sample_id, ctx.output_dir, cpu_threads, ram_gb
     )
 
     os.chdir(starting_work_dir)
@@ -164,14 +164,14 @@ def assemble_flye(
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 assemble_flye.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+        print("Usage: python3 assemble_flye.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
     initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     egap_flye_assembly_path = assemble_flye(
         sys.argv[1],  # sample_id
-        sys.argv[2],  # input_csv
+        sys.argv[2],  # input_tsv
         sys.argv[3],  # output_dir
         str(sys.argv[4]),  # cpu_threads
         str(sys.argv[5])   # ram_gb

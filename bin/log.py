@@ -151,7 +151,7 @@ def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     sample_id : str, optional
         When provided, the log file is written per-sample as
         ``<INPUT_FOLDER>/<sample_id>_log.txt`` so that each sample in
-        a multi-sample CSV run gets its own log file.
+        a multi-sample TSV run gets its own log file.
     """
     global DEFAULT_LOG_FILE, ENVIRONMENT_TYPE
     print(INPUT_FOLDER)

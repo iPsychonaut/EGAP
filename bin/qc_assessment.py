@@ -669,7 +669,7 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
 # --------------------------------------------------------------
 # Perform quality control assessment
 # --------------------------------------------------------------
-def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, ram_gb):
+def qc_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_threads, ram_gb):
     """Perform quality control on an assembly using BUSCO, QUAST, and coverage.
 
     Executes BUSCO and QUAST, calculates coverage, classifies assembly quality,
@@ -677,7 +677,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
 
     Args:
         assembly_type (str): Descriptor for the assembly (e.g., 'final').
-        input_csv (str): Path to metadata CSV file.
+        input_tsv (str): Path to metadata TSV file.
         sample_id (str): Sample identifier.
         output_dir (str): Directory for output files.
         cpu_threads (int or str): Number of CPU threads to use.
@@ -686,11 +686,11 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
     Returns:
         tuple: (path to compressed assembly, list of key statistics, updated stats dictionary).
     """
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
     sample_stats_dict = ctx.sample_stats_dict
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths, reference, and BUSCO lineage info from TSV
     ont_raw_reads = current_series["ONT_RAW_READS"]
     illu_raw_f_reads = current_series["ILLUMINA_RAW_F_READS"]
     illu_raw_r_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -710,7 +710,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
 
-    print(f"Parsing assembly for index {ctx.current_index} from {ctx.input_csv}:\n{ctx.current_row}")
+    print(f"Parsing assembly for index {ctx.current_index} from {ctx.input_tsv}:\n{ctx.current_row}")
 
     # Ensure working directory is sample_dir
     os.makedirs(sample_dir, exist_ok=True)
@@ -742,7 +742,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
         print(f"SKIP:\tQUAST Report already exists: {quast_report_tsv}.")
     else:
         quast_cmd = ["quast", "--threads", str(cpu_threads)]
-        # Guard against ``pd.NA`` / ``None`` in the CSV columns: comparing
+        # Guard against ``pd.NA`` / ``None`` in the TSV columns: comparing
         # ``pd.NA == "eukaryote"`` returns ``pd.NA``, which raises
         # ``TypeError: boolean value of NA is ambiguous`` when used in an
         # ``if`` -- so we explicitly check for non-null before comparing.
@@ -862,7 +862,7 @@ def qc_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, 
 # --------------------------------------------------------------
 # Perform final assembly assessment
 # --------------------------------------------------------------
-def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_threads, ram_gb):
+def final_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_threads, ram_gb):
     """Perform final quality control and assessment of an assembly.
 
     Decompresses the assembly, runs BUSCO and QUAST, calculates coverage,
@@ -870,7 +870,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
 
     Args:
         assembly_type (str): Descriptor for the assembly (e.g., 'final').
-        input_csv (str): Path to metadata CSV file.
+        input_tsv (str): Path to metadata TSV file.
         sample_id (str): Sample identifier.
         output_dir (str): Directory for output files.
         cpu_threads (int or str): Number of CPU threads to use.
@@ -880,15 +880,15 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         tuple: (path to compressed assembly, path to final stats CSV).
     """
     print(f"DEBUG: assembly_type - {assembly_type}")
-    print(f"DEBUG: input_csv - {input_csv}")
+    print(f"DEBUG: input_tsv - {input_tsv}")
     print(f"DEBUG: sample_id - {sample_id}")
     print(f"DEBUG: output_dir - {output_dir}")
 
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
     sample_stats_dict = ctx.sample_stats_dict
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
     illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -919,6 +919,23 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         ref_seq_gz = ref_seq + ".gz"
         if os.path.exists(ref_seq_gz) and not os.path.exists(ref_seq):
             _ = pigz_decompress(ref_seq_gz, cpu_threads)
+
+    # Annotation-pipeline assembly: when no REF_SEQ was supplied, QC the
+    # NT_ASSEMBLY instead. preprocess_refseq has already fetched a GCA or
+    # normalized a provided path into <species>/NtAssembly/; reconstruct the
+    # same canonical path here (naming must match place_assembly()).
+    nt_assembly_gca = current_series.get("NT_ASSEMBLY_GCA")
+    nt_assembly_path = current_series.get("NT_ASSEMBLY_PATH")
+    if pd.isna(ref_seq) and pd.isna(ref_seq_gca):
+        nt_dir = os.path.join(species_dir, "NtAssembly")
+        if pd.notna(nt_assembly_gca):
+            ref_seq = os.path.join(nt_dir, f"{species_id}_{nt_assembly_gca}_NtAssembly.fasta")
+        elif pd.notna(nt_assembly_path):
+            ref_seq = os.path.join(nt_dir, f"{species_id}_NtAssembly.fasta")
+        if isinstance(ref_seq, str):
+            ref_seq_gz = ref_seq + ".gz"
+            if os.path.exists(ref_seq_gz) and not os.path.exists(ref_seq):
+                _ = pigz_decompress(ref_seq_gz, cpu_threads)
 
     # Set Illumina deduplicated read paths only if Illumina reads are present
     illu_dedup_f_reads = None
@@ -1030,7 +1047,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         print(f"ERROR:\tInvalid assembly after promotion: {assembly_path}")
         return None, None
     
-    print(f"Parsing final assembly for index {ctx.current_index} from {ctx.input_csv}:\n{ctx.current_row}")
+    print(f"Parsing final assembly for index {ctx.current_index} from {ctx.input_tsv}:\n{ctx.current_row}")
     
     # -------- Compleasm/BUSCO (now runs on the final-labeled path) --------
     run_lineage_eval(assembly_path, sample_id, sample_stats_dict,
@@ -1047,7 +1064,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
         print(f"SKIP:\tQUAST Report already exists: {quast_report_tsv}.")
     else:
         quast_cmd = ["quast", "--threads", str(cpu_threads)]
-        # Guard against ``pd.NA`` / ``None`` in the CSV columns: comparing
+        # Guard against ``pd.NA`` / ``None`` in the TSV columns: comparing
         # ``pd.NA == "eukaryote"`` returns ``pd.NA``, which raises
         # ``TypeError: boolean value of NA is ambiguous`` when used in an
         # ``if`` -- so we explicitly check for non-null before comparing.
@@ -1185,7 +1202,7 @@ def final_assessment(assembly_type, input_csv, sample_id, output_dir, cpu_thread
 if __name__ == "__main__":
     # Handle command-line arguments
     if len(sys.argv) != 7:
-        print("Usage: python3 qc_assessment.py <assembly_type> <input_csv> "
+        print("Usage: python3 qc_assessment.py <assembly_type> <input_tsv> "
               "<sample_id> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
@@ -1193,7 +1210,7 @@ if __name__ == "__main__":
 
     if sys.argv[1] == "final":
         labeled_assembly, final_stats_csv = final_assessment(sys.argv[1],       # assembly_type
-                                                            sys.argv[2],       # input_csv
+                                                            sys.argv[2],       # input_tsv
                                                             sys.argv[3],       # sample_id
                                                             sys.argv[4],       # output_dir
                                                             str(sys.argv[5]),  # cpu_threads
@@ -1208,7 +1225,7 @@ if __name__ == "__main__":
             sys.exit(1)
     else:
         assembly_path, sample_stats_list, sample_stats_dict = qc_assessment(sys.argv[1],       # assembly_type
-                                                                            sys.argv[2],       # input_csv
+                                                                            sys.argv[2],       # input_tsv
                                                                             sys.argv[3],       # sample_id
                                                                             sys.argv[4],       # output_dir
                                                                             str(sys.argv[5]),  # cpu_threads

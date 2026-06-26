@@ -14,13 +14,13 @@ Layout goals:
 - Streaming pipeline logs on the left
 
 This script mirrors EGAP.py orchestration:
-- preprocess_csv()
+- preprocess_tsv()
 - locate_bin_dir()
 - processes list
 - per-sample/per-process execution, then qc_assessment, then html_reporter
 
 
-python EGAP_TUI.py -csv /mnt/c/Users/theda/OneDrive/Desktop/EGAP/EGAP_TUI_test.csv -o /mnt/c/Users/theda/OneDrive/Desktop/EGAP/EGAP_TUI_test -t 10 -r 24
+python EGAP_TUI.py -tsv /mnt/c/Users/theda/OneDrive/Desktop/EGAP/EGAP_TUI_test.tsv -o /mnt/c/Users/theda/OneDrive/Desktop/EGAP/EGAP_TUI_test -t 10 -r 24
 
 Created on Sun Feb 22 14:56:27 2026
 
@@ -588,7 +588,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             current_moment=current_moment,
             ram_gb=a.ram_gb,
             cpu_threads=a.cpu_threads,
-            input_csv=a.input_csv,
+            input_tsv=a.input_tsv,
             output_dir=a.output_dir,
         )
     
@@ -653,7 +653,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             #      parsed argparse.Namespace as self._preloaded_args so we never
             #      re-parse sys.argv (which still contains --tui, --dry_run, etc.
             #      that this inner parser doesn't know about).
-            #   2. Standalone launch (`python EGAP_TUI.py -csv ...`) → parse
+            #   2. Standalone launch (`python EGAP_TUI.py -tsv ...`) → parse
             #      sys.argv the normal way.
             # ----------------------------------------------------------------
             preloaded = getattr(self, "_preloaded_args", None)
@@ -663,7 +663,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 parser = argparse.ArgumentParser(
                     description=f"Run EGAP with TUI (v{getattr(egap, 'VERSION', 'unknown')})"
                 )
-                parser.add_argument("--input_csv", "-csv", type=str, required=True)
+                parser.add_argument("--input_tsv", "-tsv", type=str, required=True)
                 parser.add_argument("--output_dir", "-o", type=str, required=True)
                 parser.add_argument("--cpu_threads", "-t", type=int, default=1)
                 parser.add_argument("--ram_gb", "-r", type=int, default=8)
@@ -693,7 +693,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 current_moment=self.pipeline_start_time,
                 ram_gb=self.args.ram_gb,
                 cpu_threads=self.args.cpu_threads,
-                input_csv=self.args.input_csv,
+                input_tsv=self.args.input_tsv,
                 output_dir=self.args.output_dir,
             )
             self.log_line("\nFULL PIPELINE SETTINGS:")
@@ -702,7 +702,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 for k, v in kv.items():
                     self.log_line(f"  {k}: {v}")
 
-            input_csv = self.args.input_csv
+            input_tsv = self.args.input_tsv
             output_dir = self.args.output_dir
             cpu_threads = self.args.cpu_threads
             ram_gb = self.args.ram_gb
@@ -759,7 +759,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 self.log_line("ERROR:\tAborting run; fix the above and relaunch.")
                 return
 
-            input_df = egap.preprocess_csv(input_csv)
+            input_df = egap.preprocess_tsv(input_tsv)
 
             samples: List[Tuple[str, str]] = []
             for _, r in input_df.iterrows():
@@ -781,7 +781,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                     [p for p in processes if p == "preprocess_refseq"] if _qc_only else processes
                 )
 
-            self.log_line(f"Loaded {len(samples)} sample(s) from CSV.")
+            self.log_line(f"Loaded {len(samples)} sample(s) from TSV.")
             self.init_step_plan(samples, processes, sample_proc_map)
 
             for sample_id in samples:
@@ -830,7 +830,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                         sys.executable,
                         str(script),
                         sample_id,
-                        input_csv,
+                        input_tsv,
                         output_dir,
                         str(cpu_threads),
                         str(ram_gb),
@@ -873,7 +873,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                         sys.executable,
                         str(qc_script),
                         "final",
-                        input_csv,
+                        input_tsv,
                         sample_id,
                         output_dir,
                         str(cpu_threads),
@@ -905,7 +905,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                         sys.executable,
                         str(html_script),
                         sample_id,
-                        input_csv,
+                        input_tsv,
                         output_dir,
                         str(cpu_threads),
                         str(ram_gb),

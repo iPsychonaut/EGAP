@@ -10,7 +10,7 @@ def version = "3.3"
 // Define Parameters
 //
 params.no_file     = "$projectDir/assets/NO_FILE"
-params.input_csv   = "/mnt/d/EGAP_Nextflow/EGAP_test.csv"
+params.input_tsv   = "/mnt/d/EGAP_Nextflow/EGAP_test.tsv"
 params.output_dir  = "/mnt/d/TESTING_SPACE/nextflow_test"
 params.cpu_threads = 12
 params.ram_gb      = 40
@@ -18,11 +18,11 @@ params.ram_gb      = 40
 //
 // Resolve to absolute paths once (so all processes get stable paths)
 //
-def INPUT_CSV_ABS   = file(params.input_csv).toAbsolutePath()
+def INPUT_TSV_ABS   = file(params.input_tsv).toAbsolutePath()
 def OUTPUT_DIR_ABS  = file(params.output_dir).toAbsolutePath()
 
-// For containerized runs, bind the CSV's parent and the output dir so Python can read/write there.
-def INPUT_BIND_DIR  = INPUT_CSV_ABS.parent
+// For containerized runs, bind the TSV's parent and the output dir so Python can read/write there.
+def INPUT_BIND_DIR  = INPUT_TSV_ABS.parent
 def OUTPUT_BIND_DIR = OUTPUT_DIR_ABS
 def NF_CONTAINER_OPTS = "--bind ${INPUT_BIND_DIR}:${INPUT_BIND_DIR} --bind ${OUTPUT_BIND_DIR}:${OUTPUT_BIND_DIR}"
 
@@ -63,7 +63,7 @@ log.info("""
         \033[94mcontainer                        \033[0m: ${workflow.containerEngine}:${workflow.container}
         \033[94mRAM GB                           \033[0m: ${params.ram_gb}
         \033[94mCPU threads                      \033[0m: ${params.cpu_threads}
-        \033[94minput csv                        \033[0m: ${INPUT_CSV_ABS}
+        \033[94minput tsv                        \033[0m: ${INPUT_TSV_ABS}
         \033[94moutput to                        \033[0m: ${OUTPUT_DIR_ABS}
 
     \033[96m-----------------------------------------------------------------------\033[0m""")
@@ -247,13 +247,13 @@ process preprocess_refseq {
     conda activate EGAP_env
         
     echo "DEBUG: sample_id=${sample_id}"
-    echo "DEBUG: input_csv=${INPUT_CSV_ABS}"
+    echo "DEBUG: input_tsv=${INPUT_TSV_ABS}"
     echo "DEBUG: output_dir=${OUTPUT_DIR_ABS}"
     echo "DEBUG: cpu_threads=${params.cpu_threads}"
     echo "DEBUG: ram_gb=${params.ram_gb}"
     
     python3 "${workflow.projectDir}/bin/preprocess_refseq.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -281,13 +281,13 @@ process preprocess_illumina {
     conda activate EGAP_env
         
     echo "DEBUG: sample_id=${sample_id}"
-    echo "DEBUG: input_csv=${INPUT_CSV_ABS}"
+    echo "DEBUG: input_tsv=${INPUT_TSV_ABS}"
     echo "DEBUG: output_dir=${OUTPUT_DIR_ABS}"
     echo "DEBUG: cpu_threads=${params.cpu_threads}"
     echo "DEBUG: ram_gb=${params.ram_gb}"
     
     python3 "${workflow.projectDir}/bin/preprocess_illumina.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -315,13 +315,13 @@ process preprocess_ont {
     conda activate EGAP_env
     
     echo "DEBUG: sample_id=${sample_id}"
-    echo "DEBUG: input_csv=${INPUT_CSV_ABS}"
+    echo "DEBUG: input_tsv=${INPUT_TSV_ABS}"
     echo "DEBUG: output_dir=${OUTPUT_DIR_ABS}"
     echo "DEBUG: cpu_threads=${params.cpu_threads}"
     echo "DEBUG: ram_gb=${params.ram_gb}"
     
     python3 "${workflow.projectDir}/bin/preprocess_ont.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -349,13 +349,13 @@ process preprocess_pacbio {
     conda activate EGAP_env
     
     echo "DEBUG: sample_id=${sample_id}"
-    echo "DEBUG: input_csv=${INPUT_CSV_ABS}"
+    echo "DEBUG: input_tsv=${INPUT_TSV_ABS}"
     echo "DEBUG: output_dir=${OUTPUT_DIR_ABS}"
     echo "DEBUG: cpu_threads=${params.cpu_threads}"
     echo "DEBUG: ram_gb=${params.ram_gb}"
     
     python3 "${workflow.projectDir}/bin/preprocess_pacbio.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -388,7 +388,7 @@ process masurca_assemble {
     export MPLCONFIGDIR=/tmp/matplotlib-cache
 
     python3 "${workflow.projectDir}/bin/assemble_masurca.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -417,7 +417,7 @@ process spades_assemble {
     export MPLCONFIGDIR=/tmp/matplotlib-cache
 
     python3 "${workflow.projectDir}/bin/assemble_spades.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -446,7 +446,7 @@ process flye_assemble {
     export MPLCONFIGDIR=/tmp/matplotlib-cache
 
     python3 "${workflow.projectDir}/bin/assemble_flye.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -475,7 +475,7 @@ process hifiasm_assemble {
     export MPLCONFIGDIR=/tmp/matplotlib-cache
 
     python3 "${workflow.projectDir}/bin/assemble_hifiasm.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -502,7 +502,7 @@ process compare_assemblies {
     conda activate EGAP_env
 
     python3 "${workflow.projectDir}/bin/compare_assemblies.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -528,7 +528,7 @@ process polish_assembly{
     conda activate EGAP_env
 
     python3 "${workflow.projectDir}/bin/polish_assembly.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -554,7 +554,7 @@ process curate_assembly{
     conda activate EGAP_env
 
     python3 "${workflow.projectDir}/bin/curate_assembly.py" \
-        "${sample_id}" "${INPUT_CSV_ABS}" "${OUTPUT_DIR_ABS}" \
+        "${sample_id}" "${INPUT_TSV_ABS}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -580,7 +580,7 @@ process final_assembly_qc {
     export FC_CACHEDIR=\$PWD/.temp/fontconfig
 
     python3 "${workflow.projectDir}/bin/qc_assessment.py" \
-        final "${INPUT_CSV_ABS}" "${sample_id}" "${OUTPUT_DIR_ABS}" \
+        final "${INPUT_TSV_ABS}" "${sample_id}" "${OUTPUT_DIR_ABS}" \
         "${params.cpu_threads.toInteger()}" "${params.ram_gb.toInteger()}"
     """
 }
@@ -591,10 +591,10 @@ process final_assembly_qc {
 //
 workflow {
 // Input-Setup
-    // Parse the input CSV into sample channels (i.e. one sample_id per row)
+    // Parse the input TSV into sample channels (i.e. one sample_id per row)
     def all_samples_ch = Channel
-        .fromPath(INPUT_CSV_ABS)
-        .splitCsv(header: true)
+        .fromPath(INPUT_TSV_ABS)
+        .splitCsv(sep: '\t', header: true)
         .map { row ->
             [
                 row.ONT_SRA              ?: "None",  // [0]

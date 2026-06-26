@@ -46,14 +46,14 @@ def nonempty(fp, min_bytes=1024) -> bool:
 
 def preprocess_pacbio(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
 ) -> Optional[str]:
     print(f"Preprocessing PacBio reads for {sample_id}...")
 
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current = ctx.current_series
     # IMPORTANT: also pull sample_stats_dict out of the context, otherwise the
     # later ``sample_stats_dict = nanoplot_qc_reads(..., sample_stats_dict)``
@@ -215,7 +215,7 @@ def preprocess_pacbio(
             print(f"WARN:\tNanoPlot failed on filtered PacBio reads ({e}); continuing.")
 
         # Select best long reads via shared helper (absolute paths)
-        best_long_reads = select_long_reads(ctx.output_dir, ctx.input_csv, sample_id, cpu_threads)
+        best_long_reads = select_long_reads(ctx.output_dir, ctx.input_tsv, sample_id, cpu_threads)
         if not best_long_reads or not os.path.exists(best_long_reads):
             best_long_reads = filtered_pb
 
@@ -245,7 +245,7 @@ if __name__ == "__main__":
     print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
 
     if len(sys.argv) != 6:
-        print("Usage: python3 preprocess_pacbio.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+        print("Usage: python3 preprocess_pacbio.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
     initialize_logging_environment(sys.argv[3], sys.argv[1])
@@ -254,7 +254,7 @@ if __name__ == "__main__":
         print(f"DEBUG: sys.argv[{i}] = '{arg}'")
 
     sample_id  = sys.argv[1]
-    input_csv  = sys.argv[2]
+    input_tsv  = sys.argv[2]
     output_dir = sys.argv[3]
 
     # Robust parsing
@@ -268,9 +268,9 @@ if __name__ == "__main__":
         ram_gb = 8
 
     print(f"DEBUG: Parsed sample_id = '{sample_id}'")
-    print(f"DEBUG: Parsed input_csv = '{input_csv}'")
+    print(f"DEBUG: Parsed input_tsv = '{input_tsv}'")
     print(f"DEBUG: Parsed output_dir = '{output_dir}'")
     print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' (converted to {cpu_threads})")
     print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' (converted to {ram_gb})")
 
-    best = preprocess_pacbio(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    best = preprocess_pacbio(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
