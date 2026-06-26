@@ -4,7 +4,7 @@
 process_metadata.py
 
 Generates metadata for genome assemblies and Sequence Read Archive (SRA) submissions.
-Processes sample data from a CSV to create TSV files with assembly metadata and SRA metadata,
+Processes sample data from a TSV to create TSV files with assembly metadata and SRA metadata,
 and retrieves iNaturalist observation data with reverse geocoding for location details.
 
 Stage:
@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
-from utilities import get_current_row_data, calculate_genome_coverage
+from utilities import get_current_row_data, calculate_genome_coverage, read_sample_table
 
 
 # ignore only the Data Validation extension warning from openpyxl
@@ -111,14 +111,14 @@ def get_inat_obs(search_id):
 # --------------------------------------------------------------
 # Generate assembly metadata TSV
 # --------------------------------------------------------------
-def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, cpu_threads):
+def gen_assembly_metadata_tsv(input_tsv, sample_id, output_dir, templates_dir, cpu_threads):
     """Generate a TSV file with metadata for a genome assembly.
 
     Creates a TSV file containing assembly metadata (e.g., date, method, coverage)
-    based on sample data from a CSV and the final assembly FASTA.
+    based on sample data from a TSV and the final assembly FASTA.
 
     Args:
-        input_csv (str): Path to the input CSV with sample metadata.
+        input_tsv (str): Path to the input TSV with sample metadata.
         sample_id (str): Sample identifier.
         output_dir (str): Directory for output files.
 
@@ -127,12 +127,12 @@ def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, c
     """
     print(f"Generating Assembly Metadata TSV entry for {sample_id}...")
 
-    # Load the input_csv into dataframe and collect current sample_id information
-    input_df = pd.read_csv(input_csv)
+    # Load the input_tsv into dataframe and collect current sample_id information
+    input_df = read_sample_table(input_tsv)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]  # Convert to Series (single row)
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
     illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -213,7 +213,7 @@ def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, c
           reference_genome,
           assembly_name]
 
-    output_filename = f"{os.path.basename(input_csv).replace('.csv','')}_EGAP_Assembly_metadata.tsv"
+    output_filename = f"{os.path.basename(input_tsv).replace('.tsv','')}_EGAP_Assembly_metadata.tsv"
     assembly_metadata_path = os.path.join(output_dir, output_filename)
     genome_df.to_csv(assembly_metadata_path, sep="\t", index=False)
     
@@ -225,14 +225,14 @@ def gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, c
 # --------------------------------------------------------------
 # Generate SRA metadata TSV
 # --------------------------------------------------------------
-def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
+def gen_sra_metadata_xlsx(input_tsv, sample_id, output_dir, templates_dir):
     """Generate a TSV file with metadata for SRA submission.
 
     Creates a TSV file with SRA metadata (e.g., library details, read files) based on
-    sample data from a CSV, supporting Illumina, ONT, and PacBio reads.
+    sample data from a TSV, supporting Illumina, ONT, and PacBio reads.
 
     Args:
-        input_csv (str): Path to the input CSV with sample metadata.
+        input_tsv (str): Path to the input TSV with sample metadata.
         sample_id (str): Sample identifier.
         output_dir (str): Directory for output files.
 
@@ -241,12 +241,12 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
     """
     print("Generating SRA Metadata TSV entry...")
     
-    # Load the input_csv into dataframe and collect current sample_id information
-    input_df = pd.read_csv(input_csv)
+    # Load the input_tsv into dataframe and collect current sample_id information
+    input_df = read_sample_table(input_tsv)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]  # Convert to Series (single row)
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]
     illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
     illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
@@ -267,7 +267,7 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
         print("SKIP:\tNo SRA Metadata processing performed, missing SEQUENCING_METHODOLOGY: {library_strategy}.")
     else:        
         # Generate SRA Metadata Dataframe from either template or existing files
-        existing_sra_metadata = os.path.join(os.path.dirname(input_csv), f"{os.path.basename(input_csv).replace('.csv','')}_EGAP_SRA_metadata.xlsx")
+        existing_sra_metadata = os.path.join(os.path.dirname(input_tsv), f"{os.path.basename(input_tsv).replace('.tsv','')}_EGAP_SRA_metadata.xlsx")
         if os.path.exists(existing_sra_metadata):
             base_file_path = existing_sra_metadata
         else:
@@ -338,7 +338,7 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
 
         
         # Save the new SRA metadata workbook
-        output_filename = f"{os.path.basename(input_csv).replace('.csv','')}_EGAP_SRA_metadata.tsv"
+        output_filename = f"{os.path.basename(input_tsv).replace('.tsv','')}_EGAP_SRA_metadata.tsv"
         sra_metadata_path = os.path.join(output_dir, output_filename)
         
         # Write single‐sheet TSV
@@ -349,19 +349,19 @@ def gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir):
         return sra_metadata_path
 
 
-def process_metadata(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def process_metadata(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """Generate NCBI SRA and assembly metadata TSVs for a single sample.
 
     Resolves the sample's species directory, locates the metadata templates
     bundled in ``resources/templates``, and emits two spreadsheets: an SRA
     submission metadata file and an assembly metadata file. iNaturalist
     location data is retrieved and reverse-geocoded when an INATRUALIST_ID
-    column is present on the sample's CSV row.
+    column is present on the sample's TSV row.
 
     Args:
-        sample_id (str): The SAMPLE_ID value identifying which CSV row to
+        sample_id (str): The SAMPLE_ID value identifying which TSV row to
             process.
-        input_csv (str): Path to the EGAP input CSV.
+        input_tsv (str): Path to the EGAP input TSV.
         output_dir (str): Root output directory for the EGAP run. Species
             subdirectories live directly beneath this path.
         cpu_threads (int | str): Number of threads available for computations
@@ -374,12 +374,12 @@ def process_metadata(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         tuple[str, str]: A pair of ``(sra_output_path, assembly_metadata_path)``
         pointing at the two TSVs generated for the sample.
     """
-    # Load input CSV and extract sample data
-    input_df = pd.read_csv(input_csv)
+    # Load input TSV and extract sample data
+    input_df = read_sample_table(input_tsv)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
 
-    # Extract read paths and metadata from CSV
+    # Extract read paths and metadata from TSV
     species_id = current_series["SPECIES_ID"]
     search_id = current_series["INATRUALIST_ID"]
     species_dir = os.path.join(output_dir, species_id)
@@ -396,12 +396,12 @@ def process_metadata(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - templates_dir - {templates_dir}")
 
     # Generate SRA metadata TSV
-    sra_output_path = gen_sra_metadata_xlsx(input_csv, sample_id, output_dir, templates_dir)
+    sra_output_path = gen_sra_metadata_xlsx(input_tsv, sample_id, output_dir, templates_dir)
 
     print("PASS:\tSuccessfully generated NCBI SRA Metadata TSV: {sra_output_path}.")
     
     # Generate assembly metadata TSV
-    assembly_metadata_path = gen_assembly_metadata_tsv(input_csv, sample_id, output_dir, templates_dir, cpu_threads)
+    assembly_metadata_path = gen_assembly_metadata_tsv(input_tsv, sample_id, output_dir, templates_dir, cpu_threads)
 
     print("PASS:\tSuccessfully generated NCBI Assembly Metadata TSV: {assembly_metadata_path}.")
         
@@ -410,12 +410,12 @@ def process_metadata(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 process_metadata.py <sample_id> <input_csv> "
+        print("Usage: python3 process_metadata.py <sample_id> <input_tsv> "
             "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
         
     sra_output_path, assembly_metadata_path = process_metadata(sys.argv[1],       # sample_id
-                                                               sys.argv[2],       # input_csv
+                                                               sys.argv[2],       # input_tsv
                                                                sys.argv[3],       # output_dir
                                                                str(sys.argv[4]),  # cpu_threads
                                                                str(sys.argv[5]))  # ram_gb

@@ -5,7 +5,7 @@ preprocess_illumina.py
 
 This script preprocesses Illumina reads with FastQC, Trimmomatic, BBDuk, and Clumpify,
 then optionally decontaminates with Kraken2.
-Reads input from a CSV file, processes all Illumina datasets, and updates the CSV
+Reads input from a TSV file, processes all Illumina datasets, and updates the TSV
 with declumpified FASTQ file paths in ${params.output_dir}/${sample_prefix}/Illumina/.
 
 Stage:
@@ -348,7 +348,7 @@ def decontaminate_illumina_paired(f_reads, r_reads, kraken_dir, kraken2_db,
 # --------------------------------------------------------------
 # Preprocess Illumina sequencing reads
 # --------------------------------------------------------------
-def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """Preprocess Illumina reads with FastQC, Trimmomatic, BBDuk, Clumpify, and Kraken2.
 
     Creates ``<output_dir>/<SPECIES_ID>/Illumina/`` if absent, then runs the
@@ -358,9 +358,9 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     Parameters
     ----------
     sample_id : str
-        Sample identifier used to look up the row in *input_csv*.
-    input_csv : str
-        Path to the metadata CSV file.
+        Sample identifier used to look up the row in *input_tsv*.
+    input_tsv : str
+        Path to the metadata TSV file.
     output_dir : str
         Root output directory; per-species subdirectories are created here.
     cpu_threads : int
@@ -386,12 +386,12 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
     log_print(f"Preprocessing Illumina reads for {sample_id.split('-')[0]}...")
 
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
     log_print(f"DEBUG - current_series - {current_series}")
 
-    # Identify read paths/reference info from CSV
+    # Identify read paths/reference info from TSV
     illu_sra = clean(current_series["ILLUMINA_SRA"])
     illu_raw_f_reads = clean(current_series["ILLUMINA_RAW_F_READS"])
     illu_raw_r_reads = clean(current_series["ILLUMINA_RAW_R_READS"])
@@ -685,7 +685,7 @@ def preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     kraken2_db = get_kraken2_db(current_series)
     if kraken2_db is None:
         log_print("WARN:\tNo Kraken2 database found (set KRAKEN2_DB env var or "
-                  "add a KRAKEN2_DB column to the CSV). Skipping Illumina decontamination.")
+                  "add a KRAKEN2_DB column to the TSV). Skipping Illumina decontamination.")
     elif shutil.which("kraken2") is None:
         log_print("WARN:\tkraken2 is not on PATH. Skipping Illumina decontamination.")
     else:
@@ -714,7 +714,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 6:
         print(f"ERROR: Expected 5 arguments (plus script name), got {len(sys.argv)-1}: {sys.argv[1:]}",
               file=sys.stderr)
-        print("Usage: python3 preprocess_illumina.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>",
+        print("Usage: python3 preprocess_illumina.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>",
               file=sys.stderr)
         sys.exit(1)
 
@@ -729,15 +729,15 @@ if __name__ == "__main__":
         log_print(f"DEBUG: sys.argv[{i}] = '{arg}'")
 
     sample_id = sys.argv[1]
-    input_csv = sys.argv[2]
+    input_tsv = sys.argv[2]
     output_dir = sys.argv[3]
     cpu_threads = int(sys.argv[4])
     ram_gb = int(sys.argv[5]) if sys.argv[5] != " " else 8
 
     log_print(f"DEBUG: Parsed sample_id = '{sample_id}' {type(sample_id)}")
-    log_print(f"DEBUG: Parsed input_csv = '{input_csv}' {type(input_csv)}")
+    log_print(f"DEBUG: Parsed input_tsv = '{input_tsv}' {type(input_tsv)}")
     log_print(f"DEBUG: Parsed output_dir = '{output_dir}' {type(output_dir)}")
     log_print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' {sys.argv[4]} (converted to {cpu_threads}) {type(cpu_threads)}")
     log_print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' {sys.argv[5]} (converted to {ram_gb}) {type(ram_gb)}")
 
-    illu_dedup_f_reads, illu_dedup_r_reads = preprocess_illumina(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    illu_dedup_f_reads, illu_dedup_r_reads = preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)

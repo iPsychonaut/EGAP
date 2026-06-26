@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-sample_csv.py
+sample_tsv.py
 
-Per-sample CSV-row helpers, statistics dictionary, NanoPlot parsers,
+Per-sample TSV-row helpers, statistics dictionary, NanoPlot parsers,
 long-read selection logic, and the typed ``SampleContext`` /
 ``AssemblerStage`` contracts.
 
 Extracted from :mod:`utilities` in v3.4.1.  Hosts everything that
-operates on a single row of the master sample-driver CSV.  Depends on
+operates on a single row of the master sample-driver TSV.  Depends on
 :mod:`file_operations` for :func:`to_abs`.
 
 Stage:
@@ -139,7 +139,7 @@ def get_current_row_data(input_df, sample_id):
     Parameters
     ----------
     input_df : pandas.DataFrame
-        Full metadata DataFrame loaded from the input CSV.
+        Full metadata DataFrame loaded from the input TSV.
     sample_id : str
         Sample identifier to filter on the ``SAMPLE_ID`` column.
 
@@ -154,7 +154,7 @@ def get_current_row_data(input_df, sample_id):
     current_row = input_df[input_df["SAMPLE_ID"] == sample_id].copy()
 
     # Replace literal string "None" with actual NaN so downstream pd.isna()
-    # checks work correctly (some CSV editors write "None" instead of leaving
+    # checks work correctly (some TSV editors write "None" instead of leaving
     # cells empty).
     current_row = current_row.replace(to_replace="None", value=pd.NA)
 
@@ -173,7 +173,7 @@ class SampleContext:
 
     Bundles the artefacts that every ``bin/assemble_*.py`` and
     ``bin/preprocess_*.py`` module currently re-derives from the master
-    sample-driver CSV: the single-row DataFrame, its first row as a
+    sample-driver TSV: the single-row DataFrame, its first row as a
     ``pandas.Series``, the index list, and the initialized statistics
     dictionary.  Centralising the bundle behind a typed container makes
     the assembler/preprocessor contract checkable by tools like
@@ -182,9 +182,9 @@ class SampleContext:
     Attributes
     ----------
     sample_id : str
-        Sample identifier (matches ``SAMPLE_ID`` in *input_csv*).
-    input_csv : str
-        Absolute path to the master sample-driver CSV.
+        Sample identifier (matches ``SAMPLE_ID`` in *input_tsv*).
+    input_tsv : str
+        Absolute path to the master sample-driver TSV.
     output_dir : str
         Absolute path to the top-level results directory.
     cpu_threads : int
@@ -204,7 +204,7 @@ class SampleContext:
     """
 
     sample_id: str
-    input_csv: str
+    input_tsv: str
     output_dir: str
     cpu_threads: int
     ram_gb: int
@@ -214,9 +214,95 @@ class SampleContext:
     sample_stats_dict: Dict[str, Any] = field(default_factory=dict)
 
 
+# Columns every per-stage accessor expects to read off a row. The collapsed
+# TSV combines some of these into comma-separated cells; ``read_sample_table``
+# re-expands them so the ~12 modules that read ``current_series["BUSCO_1"]``,
+# ``["ILLUMINA_RAW_F_READS"]`` etc. keep working unchanged. The trailing
+# annotation-pipeline (ANOQI) columns are listed so QC-only dispatch and the
+# accessors can read them without ``KeyError`` on a sparse or older table.
+_LEGACY_COLUMNS = (
+    "ONT_SRA", "ONT_RAW_DIR", "ONT_RAW_READS",
+    "ILLUMINA_SRA", "ILLUMINA_RAW_DIR",
+    "ILLUMINA_RAW_F_READS", "ILLUMINA_RAW_R_READS",
+    "PACBIO_SRA", "PACBIO_RAW_DIR", "PACBIO_RAW_READS",
+    "SPECIES_ID", "SAMPLE_ID", "ORGANISM_KINGDOM", "ORGANISM_KARYOTE",
+    "PLOIDY", "BUSCO_1", "BUSCO_2", "EST_SIZE",
+    "REF_SEQ_GCA", "REF_SEQ",
+    "NT_ASSEMBLY_GCA", "NT_ASSEMBLY_PATH",
+)
+
+
+def _split_collapsed_cell(value):
+    """Split a comma-joined TSV cell into a list of stripped tokens.
+
+    Returns ``[]`` for a blank/``NaN``/``None`` cell. A single value yields a
+    one-element list.
+    """
+    if value is None:
+        return []
+    if isinstance(value, float) and pd.isna(value):
+        return []
+    text = str(value).strip()
+    if text == "" or text.lower() in ("none", "nan"):
+        return []
+    return [tok.strip() for tok in text.split(",") if tok.strip() != ""]
+
+
+def _expand_collapsed_pair(df, source_col, first_col, second_col):
+    """Expand a collapsed ``source_col`` (``a,b``) into two legacy columns.
+
+    Fills *first_col*/*second_col* from *source_col* only when the legacy
+    columns are absent, so a table already shipping the expanded columns is
+    left untouched. The collapsed column is dropped afterward.
+    """
+    if source_col not in df.columns:
+        return df
+    firsts, seconds = [], []
+    for value in df[source_col]:
+        tokens = _split_collapsed_cell(value)
+        firsts.append(tokens[0] if len(tokens) >= 1 else pd.NA)
+        seconds.append(tokens[1] if len(tokens) >= 2 else pd.NA)
+    if first_col not in df.columns:
+        df[first_col] = firsts
+    if second_col not in df.columns:
+        df[second_col] = seconds
+    return df.drop(columns=[source_col])
+
+
+def read_sample_table(input_path):
+    """Read the tab-separated sample-driver table into a normalized DataFrame.
+
+    EGAP's sample table moved from TSV to TSV: two fields are stored collapsed
+    as comma-separated lists -- ``ILLUMINA_RAW_READS`` (forward,reverse) and
+    ``BUSCO`` (lineage1,lineage2). This loader re-expands them into the legacy
+    ``ILLUMINA_RAW_F_READS``/``_R_READS`` and ``BUSCO_1``/``BUSCO_2`` columns
+    every downstream stage reads, and guarantees the full legacy/annotation
+    column set is present, so the rest of the pipeline is untouched by the
+    format change.
+
+    Parameters
+    ----------
+    input_path : str
+        Path to the master sample-driver TSV.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Normalized table with the legacy per-stage column names present.
+    """
+    df = pd.read_csv(input_path, sep="\t")
+    df = _expand_collapsed_pair(df, "ILLUMINA_RAW_READS",
+                                "ILLUMINA_RAW_F_READS", "ILLUMINA_RAW_R_READS")
+    df = _expand_collapsed_pair(df, "BUSCO", "BUSCO_1", "BUSCO_2")
+    for col in _LEGACY_COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.NA
+    return df
+
+
 def load_sample_context(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
@@ -224,16 +310,16 @@ def load_sample_context(
     """Load and normalize the per-sample context expected by every stage.
 
     Performs the canonical first 6 lines of every assembler/preprocessor
-    module: absolute-path normalization for *input_csv* / *output_dir*,
+    module: absolute-path normalization for *input_tsv* / *output_dir*,
     ``pandas.read_csv`` of the driver, ``get_current_row_data`` lookup,
     and ``current_row.iloc[0]`` extraction.
 
     Parameters
     ----------
     sample_id : str
-        Sample identifier matching the ``SAMPLE_ID`` column of *input_csv*.
-    input_csv : str
-        Path to the master sample-driver CSV (will be normalized to
+        Sample identifier matching the ``SAMPLE_ID`` column of *input_tsv*.
+    input_tsv : str
+        Path to the master sample-driver TSV (will be normalized to
         absolute).
     output_dir : str
         Path to the top-level results directory (will be normalized to
@@ -248,14 +334,14 @@ def load_sample_context(
     SampleContext
         Fully populated context dataclass.
     """
-    input_csv_abs = to_abs(input_csv)
+    input_tsv_abs = to_abs(input_tsv)
     output_dir_abs = to_abs(output_dir)
-    input_df = pd.read_csv(input_csv_abs)
+    input_df = read_sample_table(input_tsv_abs)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
     return SampleContext(
         sample_id=sample_id,
-        input_csv=input_csv_abs,
+        input_tsv=input_tsv_abs,
         output_dir=output_dir_abs,
         cpu_threads=cpu_threads,
         ram_gb=ram_gb,
@@ -288,9 +374,9 @@ class AssemblerStage(Protocol):
     Parameters (of ``__call__``)
     ----------------------------
     sample_id : str
-        Identifier matching ``SAMPLE_ID`` in *input_csv*.
-    input_csv : str
-        Path to the master sample-driver CSV.
+        Identifier matching ``SAMPLE_ID`` in *input_tsv*.
+    input_tsv : str
+        Path to the master sample-driver TSV.
     output_dir : str
         Top-level results directory; implementations anchor under it.
     cpu_threads : int
@@ -308,7 +394,7 @@ class AssemblerStage(Protocol):
     def __call__(
         self,
         sample_id: str,
-        input_csv: str,
+        input_tsv: str,
         output_dir: str,
         cpu_threads: int,
         ram_gb: int,
@@ -401,7 +487,7 @@ def analyze_nanostats(READS_ORIGIN, nanoplot_out_file, sample_stats_dict):
 # --------------------------------------------------------------
 # Select highest quality long reads
 # --------------------------------------------------------------
-def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
+def select_long_reads(output_dir, input_tsv, sample_id, cpu_threads):
     """Select the highest-mean-quality long reads from ONT or PacBio data.
 
     Parses NanoPlot statistics to compare quality across raw, filtered, and
@@ -412,10 +498,10 @@ def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
     ----------
     output_dir : str
         Root output directory containing per-species subdirectories.
-    input_csv : str
-        Path to the metadata CSV file.
+    input_tsv : str
+        Path to the metadata TSV file.
     sample_id : str
-        Sample identifier used to look up the row in *input_csv*.
+        Sample identifier used to look up the row in *input_tsv*.
     cpu_threads : int
         Number of threads available for compression tasks.
 
@@ -425,11 +511,11 @@ def select_long_reads(output_dir, input_csv, sample_id, cpu_threads):
         Absolute path to the selected highest-quality reads file, or
         ``None`` if no suitable file can be found.
     """
-    input_df = pd.read_csv(input_csv)
+    input_df = read_sample_table(input_tsv)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]  # Convert to Series (single row)
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths, reference, and BUSCO lineage info from TSV
     ont_sra = current_series["ONT_SRA"]
     ont_raw_reads = current_series["ONT_RAW_READS"]
     pacbio_raw_reads = current_series["PACBIO_RAW_READS"]

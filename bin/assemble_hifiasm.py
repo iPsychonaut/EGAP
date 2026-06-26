@@ -4,7 +4,7 @@
 assemble_hifiasm.py
 
 Run hifiasm on PacBio HiFi reads (FASTQ/FASTA, gz ok). CWD-safe and resilient:
-- Uses absolute paths for CSV/output.
+- Uses absolute paths for TSV/output.
 - Prefers preprocessed highest-mean-quality PacBio reads when present.
 - Stable output prefix (<sample_id>) so downstream paths are predictable.
 - Tolerant to hifiasm output filename variants.
@@ -33,7 +33,7 @@ from record_provenance import record_file
 
 def assemble_hifiasm(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
@@ -43,10 +43,10 @@ def assemble_hifiasm(
     Returns:
         str or None: Path to <sample_id>_hifiasm.fasta or None on failure/skip.
     """
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
-    # CSV fields
+    # TSV fields
     pacbio_sra = current_series["PACBIO_SRA"]
     pacbio_raw_reads = current_series["PACBIO_RAW_READS"]
     ref_seq_gca = current_series["REF_SEQ_GCA"]
@@ -58,7 +58,7 @@ def assemble_hifiasm(
     # Normalize implied PacBio path if only SRA is provided
     if (pd.notna(pacbio_sra) and pd.isna(pacbio_raw_reads)):
         pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
-    # If CSV had a relative path, anchor it under the project
+    # If TSV had a relative path, anchor it under the project
     if isinstance(pacbio_raw_reads, str) and not os.path.isabs(pacbio_raw_reads):
         pacbio_raw_reads = to_abs(os.path.join(ctx.output_dir, pacbio_raw_reads))
 
@@ -83,7 +83,7 @@ def assemble_hifiasm(
     # Validate input reads
     if not highest or not os.path.exists(highest) or os.path.getsize(highest) == 0:
         print(f"ERROR:\tPacBio reads not found or empty: {highest}")
-        print("HINT:\tRun preprocess_pacbio first, or check your CSV paths.")
+        print("HINT:\tRun preprocess_pacbio first, or check your TSV paths.")
         return None
 
     # Output dirs/files
@@ -99,7 +99,7 @@ def assemble_hifiasm(
     if os.path.exists(egap_hifiasm_assembly_path) and os.path.getsize(egap_hifiasm_assembly_path) > 0:
         print(f"SKIP:\tHiFi assembly already present: {egap_hifiasm_assembly_path}")
         egap_hifiasm_assembly_path, hifiasm_stats_list, _ = qc_assessment(
-            "hifiasm", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
+            "hifiasm", ctx.input_tsv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return egap_hifiasm_assembly_path
 
@@ -129,7 +129,7 @@ def assemble_hifiasm(
                 highest
             ]
             print(f"CMD:\t{' '.join(hifiasm_cmd)}")
-            log_estimate_for("hifiasm", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
+            log_estimate_for("hifiasm", sample_id, ctx.input_tsv, ctx.output_dir, cpu_threads, ram_gb)
             rc = run_subprocess_cmd(hifiasm_cmd, shell_check=False)
             if rc != 0:
                 print(f"WARN:\thifiasm exited with code {rc}")
@@ -165,7 +165,7 @@ def assemble_hifiasm(
 
         # QC (absolute paths so CWD is irrelevant)
         egap_hifiasm_assembly_path, hifiasm_stats_list, _ = qc_assessment(
-            "hifiasm", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
+            "hifiasm", ctx.input_tsv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return egap_hifiasm_assembly_path
     finally:
@@ -174,14 +174,14 @@ def assemble_hifiasm(
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 assemble_hifiasm.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+        print("Usage: python3 assemble_hifiasm.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
     initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     egap_hifiasm_assembly_path = assemble_hifiasm(
         sys.argv[1],              # sample_id
-        sys.argv[2],              # input_csv
+        sys.argv[2],              # input_tsv
         sys.argv[3],              # output_dir
         str(sys.argv[4]),         # cpu_threads
         str(sys.argv[5])          # ram_gb

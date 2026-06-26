@@ -150,7 +150,7 @@ def _first_existing(*paths):
     return fallback
 
 
-def collect_metrics(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def collect_metrics(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """Resolve genome size, resources, and per-technology read volume for a sample.
 
     Mirrors the read-path conventions used by the ``assemble_*`` modules
@@ -166,7 +166,7 @@ def collect_metrics(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
         read types), ``coverage`` (per type), and ``sources`` (how each volume
         was derived).
     """
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     s = ctx.current_series
     species_id = s["SPECIES_ID"]
     species_dir = os.path.join(ctx.output_dir, str(species_id))
@@ -408,14 +408,14 @@ def format_table(metrics, estimates):
     return "\n".join(lines)
 
 
-def log_estimate_for(assembler, sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def log_estimate_for(assembler, sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """Compute and log a single assembler's estimate (for use inside assemble_*.py).
 
     Never raises: any failure is logged as a NOTE and swallowed so the estimate
     can never block an assembly.
     """
     try:
-        metrics = collect_metrics(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+        metrics = collect_metrics(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
         est = estimate_one(assembler, metrics)
         log_print(f"NOTE:\t[runtime estimate] {format_estimate_line(est)}")
         for n in est["notes"]:
@@ -429,7 +429,7 @@ def log_estimate_for(assembler, sample_id, input_csv, output_dir, cpu_threads, r
 # --------------------------------------------------------------
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 estimate_runtime.py <sample_id> <input_csv> "
+        print("Usage: python3 estimate_runtime.py <sample_id> <input_tsv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 

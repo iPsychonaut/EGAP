@@ -26,7 +26,7 @@ target-organism reads whose taxonomy doesn't resolve cleanly.
 
 The Kraken2 database path is resolved in this order:
   1. KRAKEN2_DB environment variable
-  2. A 'KRAKEN2_DB' column in the input CSV (if present)
+  2. A 'KRAKEN2_DB' column in the input TSV (if present)
   If neither is available the step is skipped with a WARN rather than
   aborting the pipeline.
 
@@ -85,7 +85,7 @@ def get_kraken_keep_domains(kingdom_id):
     Parameters
     ----------
     kingdom_id : str or None
-        Value of the ``ORGANISM_KINGDOM`` column from the metadata CSV.
+        Value of the ``ORGANISM_KINGDOM`` column from the metadata TSV.
         Comparison is case-insensitive.
 
     Returns
@@ -120,12 +120,12 @@ def get_kraken2_db(current_series):
 
     Checks (in order):
       1. KRAKEN2_DB environment variable
-      2. 'KRAKEN2_DB' column in the CSV row (if it exists)
+      2. 'KRAKEN2_DB' column in the TSV row (if it exists)
 
     Parameters
     ----------
     current_series : pandas.Series
-        One row from the metadata CSV.
+        One row from the metadata TSV.
 
     Returns
     -------
@@ -446,7 +446,7 @@ def decontaminate_one(reads_path, reads_type, kraken_dir, kraken2_db,
 # --------------------------------------------------------------
 # Main entry point
 # --------------------------------------------------------------
-def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def decontaminate_reads(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """Kraken2 read-level decontamination for ONT and PacBio long reads.
 
     Runs after preprocessing (filtering/correction) and before assembly.
@@ -456,9 +456,9 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     Parameters
     ----------
     sample_id : str
-        Sample identifier used to look up the row in *input_csv*.
-    input_csv : str
-        Path to the metadata CSV file.
+        Sample identifier used to look up the row in *input_tsv*.
+    input_tsv : str
+        Path to the metadata TSV file.
     output_dir : str
         Root output directory; per-species subdirectories are read from here.
     cpu_threads : int
@@ -477,7 +477,7 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     # ----------------------------------------------------------
     # Section 1: Load per-sample context
     # ----------------------------------------------------------
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
     species_id       = current_series["SPECIES_ID"]
@@ -511,7 +511,7 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     kraken2_db = get_kraken2_db(current_series)
     if kraken2_db is None:
         log_print("WARN:\tNo Kraken2 database found (set KRAKEN2_DB env var or "
-                  "add a KRAKEN2_DB column to the CSV). Skipping read decontamination.")
+                  "add a KRAKEN2_DB column to the TSV). Skipping read decontamination.")
         return True  # non-fatal skip -- tool is present but DB is optional
 
     log_print(f"NOTE:\tKraken2 database: {kraken2_db}")
@@ -598,7 +598,7 @@ def decontaminate_reads(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 # --------------------------------------------------------------
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 decontaminate_reads.py <sample_id> <input_csv> "
+        print("Usage: python3 decontaminate_reads.py <sample_id> <input_tsv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
@@ -606,7 +606,7 @@ if __name__ == "__main__":
 
     success = decontaminate_reads(
         sys.argv[1],   # sample_id
-        sys.argv[2],   # input_csv
+        sys.argv[2],   # input_tsv
         sys.argv[3],   # output_dir
         sys.argv[4],   # cpu_threads
         sys.argv[5],   # ram_gb

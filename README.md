@@ -96,7 +96,7 @@ Optimized for fungal genomes, EGAP is adaptable to other organisms by adjusting 
 8.  [File Management & Storage Optimization](#file-management--storage-optimization)
 9.  [Per-Sample Logging](#per-sample-logging)
 10. [Decontamination](#decontamination)
-11. [CSV Generation](#csv-generation)
+11. [TSV Generation](#tsv-generation)
 12. [Quality Control Output Review](#quality-control-output-review)
 13. [Troubleshooting & FAQ](#troubleshooting--faq)
 14. [Future Improvements](#future-improvements)
@@ -196,7 +196,7 @@ docker run --rm \
     -v /path/to/kraken2_db:/kraken2_db:ro \
     -v /path/to/data:/data \
     entheome_ecosystem:3.4.1 \
-    --input_csv /data/samples.csv \
+    --input_tsv /data/samples.tsv \
     --output_dir /data/output \
     --cpu_threads 16 --ram_gb 64
 ```
@@ -297,7 +297,7 @@ Preprocess  →  Decontaminate reads  →  Assemble  →  Compare  →  Polish  
 
 ## Supported Sequencing Strategies
 
-Which assemblers EGAP invokes depends entirely on which read types you supply in the input CSV. After every available assembler has produced a draft, EGAP picks the best by BUSCO + N50 + contig count.
+Which assemblers EGAP invokes depends entirely on which read types you supply in the input TSV. After every available assembler has produced a draft, EGAP picks the best by BUSCO + N50 + contig count.
 
 | Input | Assemblers run | Best pick scored on |
 |-------|----------------|---------------------|
@@ -318,7 +318,7 @@ Which assemblers EGAP invokes depends entirely on which read types you supply in
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--input_csv` | `-csv` | str | *(required)* | Path to CSV with sample data |
+| `--input_tsv` | `-tsv` | str | *(required)* | Path to TSV with sample data |
 | `--output_dir` | `-o` | str | *(required)* | Path to the desired output directory |
 | `--cpu_threads` | `-t` | int | `1` | Number of CPU threads to use |
 | `--ram_gb` | `-r` | int | `8` | RAM in GB to allocate |
@@ -335,22 +335,22 @@ Which assemblers EGAP invokes depends entirely on which read types you supply in
 
 Standard run:
 ```bash
-EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64
+EGAP -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64
 ```
 
 Run with the interactive TUI:
 ```bash
-EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64 --tui
+EGAP -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64 --tui
 ```
 
 Audit what would be cleaned up without deleting anything:
 ```bash
-EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64 --dry_run
+EGAP -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64 --dry_run
 ```
 
 Audit in TUI mode:
 ```bash
-EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64 --tui --dry_run
+EGAP -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64 --tui --dry_run
 ```
 
 ### Environment Variables
@@ -358,7 +358,7 @@ EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64 --tui --dry_run
 | Variable | Description |
 |----------|-------------|
 | `EGAP_DRY_RUN=1` | Enable dry-run mode (equivalent to `--dry_run`). Checked at each file-management call so it can be set after import. |
-| `KRAKEN2_DB=/path/to/db` | Path to a Kraken2 database for read decontamination. Alternatively, supply a `KRAKEN2_DB` column in the CSV. If neither is set, the decontamination step is skipped with a warning. |
+| `KRAKEN2_DB=/path/to/db` | Path to a Kraken2 database for read decontamination. Alternatively, supply a `KRAKEN2_DB` column in the TSV. If neither is set, the decontamination step is skipped with a warning. |
 
 ## TUI Interface
 
@@ -370,12 +370,12 @@ The TUI can be started in two ways:
 
 **Via the `--tui` flag on `EGAP.py` (recommended).** All arguments pass through automatically:
 ```bash
-EGAP -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64 --tui
+EGAP -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64 --tui
 ```
 
 **Standalone** (from the `bin/` directory):
 ```bash
-python EGAP_TUI.py -csv /path/to/input.csv -o /path/to/output_dir -t 16 -r 64
+python EGAP_TUI.py -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64
 ```
 
 Both launch modes support `--dry_run`.
@@ -425,11 +425,11 @@ To audit exactly what would be deleted/compressed without touching any files:
 
 ```bash
 # Via CLI flag
-EGAP -csv input.csv -o output/ -t 16 -r 64 --dry_run
+EGAP -tsv input.tsv -o output/ -t 16 -r 64 --dry_run
 
 # Via environment variable (also works for subprocesses)
 export EGAP_DRY_RUN=1
-EGAP -csv input.csv -o output/ -t 16 -r 64
+EGAP -tsv input.tsv -o output/ -t 16 -r 64
 ```
 
 Every planned action is logged with the size that would be freed:
@@ -446,7 +446,7 @@ DRY_RUN:    Would remove directory (10.8 GB): /path/to/sample/masurca_assembly/C
 
 ## Per-Sample Logging
 
-Each row in the input CSV gets its own log file written in real time throughout the run:
+Each row in the input TSV gets its own log file written in real time throughout the run:
 
 ```
 {output_dir}/{sample_id}_log.txt
@@ -475,7 +475,7 @@ Runs after ONT/PacBio preprocessing and before assembly. Classifies every read a
 
 **Configuring the Kraken2 database** (in priority order):
 1. `KRAKEN2_DB` environment variable
-2. `KRAKEN2_DB` column in the input CSV
+2. `KRAKEN2_DB` column in the input TSV
 
 If neither is set the step is skipped with a `WARN` and the pipeline continues; it is non-fatal.
 
@@ -517,64 +517,81 @@ The final decontaminated assembly is written to `{sample_dir}/{sample_id}_decont
 
 A warning is issued if more than 50% of sequences are removed, which may indicate an incorrect kingdom assignment or an unexpected Tiara result.
 
-## CSV Generation
+## TSV Generation
 
-It is necessary to provide a CSV file containing the necessary information for each sample.
+It is necessary to provide a tab-separated (TSV) file containing the information for each sample. The same table can drive both EGAP (assembly and QC) and the downstream ANOQI annotation pipeline.
 
-### CSV Format
+### TSV Format
 
-The CSV file should have the following header and columns:
+Fields are separated by tabs. Most cells hold a single value; a few hold a comma-separated list:
 
-| ONT_SRA | ONT_RAW_DIR | ONT_RAW_READS | ILLUMINA_SRA | ILLUMINA_RAW_DIR | ILLUMINA_RAW_F_READS | ILLUMINA_RAW_R_READS | PACBIO_SRA | PACBIO_RAW_DIR | PACBIO_RAW_READS | SPECIES_ID | SAMPLE_ID | ORGANISM_KINGDOM | ORGANISM_KARYOTE | PLOIDY | BUSCO_1 | BUSCO_2 | EST_SIZE | REF_SEQ_GCA | REF_SEQ | KRAKEN2_DB |
-|---------|-------------|---------------|--------------|------------------|----------------------|----------------------|------------|----------------|-----------------|------------|-----------|-----------------|-----------------|--------|---------|---------|----------|-------------|---------|------------|
-| None | None | None | SRA00000001 | None | None | None | None | None | None | Ab_sample1 | Ab_sample1 | Funga | Eukaryote | 2 | basidiomycota | agaricales | 55m | GCA00000001.1 | None | None |
-| None | None | /path/to/ONT/sample.fastq | None | None | /path/to/Illumina/s_1.fastq | /path/to/Illumina/s_2.fastq | None | None | None | Ab_sample2 | Ab_sample2_ONT | Funga | Eukaryote | 1 | basidiomycota | agaricales | 60m | None | None | /path/to/kraken2_db |
+- **ILLUMINA_RAW_READS**: the forward and reverse reads as `forward.fastq,reverse.fastq`.
+- **BUSCO**: the two Compleasm/BUSCO lineages as `lineage1,lineage2` (e.g. `agaricales,basidiomycota`).
+- **TX_EVI_GCA / PT_EVI_GCA** (and their `_PATH` forms): accept one accession/path or a comma-separated list.
+
+The header columns, grouped by role:
+
+| Group | Columns |
+|-------|---------|
+| Identity | `SPECIES_ID`, `SAMPLE_ID`, `ORGANISM_KINGDOM`, `ORGANISM_KARYOTE`, `PLOIDY`, `EST_SIZE`, `BUSCO` |
+| ONT reads | `ONT_SRA`, `ONT_RAW_DIR`, `ONT_RAW_READS` |
+| Illumina reads | `ILLUMINA_SRA`, `ILLUMINA_RAW_DIR`, `ILLUMINA_RAW_READS` |
+| PacBio reads | `PACBIO_SRA`, `PACBIO_RAW_DIR`, `PACBIO_RAW_READS` |
+| Reference / QC target | `REF_SEQ_GCA`, `REF_SEQ` |
+| Annotation (ANOQI) | `NT_ASSEMBLY_GCA`, `NT_ASSEMBLY_PATH`, `TX_EVI_GCA`, `TX_EVI_PATH`, `PT_EVI_GCA`, `PT_EVI_PATH` |
+| Optional | `KRAKEN2_DB` |
+
+Empty cells are left blank. The literal `None` placeholder is still accepted for back-compatibility.
 
 ### Column Descriptions
 
-- **ONT_SRA**: Oxford Nanopore Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
-- **ONT_RAW_DIR**: Path to the directory containing all Raw ONT Reads. Use `None` if specifying individual files.
-- **ONT_RAW_READS**: Path to the combined Raw ONT FASTQ reads (e.g., `/path/to/ONT/sample1.fastq`).
-- **ILLUMINA_SRA**: Illumina Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
-- **ILLUMINA_RAW_DIR**: Path to the directory containing all Raw Illumina Reads. Use `None` if specifying individual files.
-- **ILLUMINA_RAW_F_READS**: Path to the Raw Forward Illumina Reads (e.g., `/path/to/Illumina/sample1_1.fastq`).
-- **ILLUMINA_RAW_R_READS**: Path to the Raw Reverse Illumina Reads (e.g., `/path/to/Illumina/sample1_2.fastq`).
-- **PACBIO_SRA**: PacBio Sequence Read Archive (SRA) Accession number. Use `None` if specifying individual files.
-- **PACBIO_RAW_DIR**: Path to the directory containing all Raw PacBio Reads. Use `None` if specifying individual files.
-- **PACBIO_RAW_READS**: Path to the combined Raw PacBio FASTQ reads (e.g., `/path/to/PACBIO/sample1.fastq`).
 - **SPECIES_ID**: Species ID formatted as `<full species name>` (e.g., `Escherichia_coli`).
 - **SAMPLE_ID**: Sample ID formatted as `<full species name>-<other identifiers>` (e.g., `Escherichia_coli-Illu-SRR32496875`).
 - **ORGANISM_KINGDOM**: Kingdom of the organism (`Bacteria`, `Archaea`, `Flora`, `Funga`, or `Fauna`). Used by both Kraken2 and Tiara decontamination.
 - **ORGANISM_KARYOTE**: Karyote type of the organism (e.g., `Eukaryote`, `Prokaryote`).
 - **PLOIDY** *(optional, new in v3.4.2)*: Ploidy of the individual as an integer (`1` = haploid, `2` = diploid, etc.; the words `haploid`/`diploid` are also accepted). Haploid samples (`1`) **skip the purge_dups haplotig-removal step**, since there is no second haplotype to purge and purging could strip genuine sequence. Leave blank, `None`, or `2`+ to run purge_dups as before. Omitting the column entirely is safe and keeps the previous behaviour.
-- **BUSCO_1**: Name of the first Compleasm/BUSCO database (e.g., `basidiomycota`).
-- **BUSCO_2**: Name of the second Compleasm/BUSCO database (e.g., `agaricales`).
-- **EST_SIZE**: Estimated genome size (e.g., `55m` for 55 Mbp, `5g` for 5 Gbp).
-- **REF_SEQ_GCA**: Curated Genome Assembly (GCA) Accession number (or `None`).
-- **REF_SEQ**: Path to the reference genome for assembly scaffolding (or `None`).
-- **KRAKEN2_DB** *(optional, new in v3.4.1)*: Path to a Kraken2 database for read decontamination. Overrides the `KRAKEN2_DB` environment variable. Omit the column entirely or use `None` to rely on the env var or skip decontamination.
+- **EST_SIZE**: Estimated genome size (e.g., `55m` for 55 Mbp, `5g` for 5 Gbp). Leave blank for a QC-only sample (see Notes).
+- **BUSCO**: The two Compleasm/BUSCO lineage databases as a comma-separated pair (e.g., `agaricales,basidiomycota`).
+- **ONT_SRA**: Oxford Nanopore Sequence Read Archive (SRA) Accession number. Leave blank if specifying individual files.
+- **ONT_RAW_DIR**: Path to the directory containing all Raw ONT Reads. Leave blank if specifying individual files.
+- **ONT_RAW_READS**: Path to the combined Raw ONT FASTQ reads (e.g., `/path/to/ONT/sample1.fastq`).
+- **ILLUMINA_SRA**: Illumina Sequence Read Archive (SRA) Accession number. Leave blank if specifying individual files.
+- **ILLUMINA_RAW_DIR**: Path to the directory containing all Raw Illumina Reads. Leave blank if specifying individual files.
+- **ILLUMINA_RAW_READS**: Paths to the Raw Forward and Reverse Illumina Reads as a comma-separated pair (e.g., `/path/to/Illumina/sample1_1.fastq,/path/to/Illumina/sample1_2.fastq`).
+- **PACBIO_SRA**: PacBio Sequence Read Archive (SRA) Accession number. Leave blank if specifying individual files.
+- **PACBIO_RAW_DIR**: Path to the directory containing all Raw PacBio Reads. Leave blank if specifying individual files.
+- **PACBIO_RAW_READS**: Path to the combined Raw PacBio FASTQ reads (e.g., `/path/to/PACBIO/sample1.fastq`).
+- **REF_SEQ_GCA**: Curated Genome Assembly (GCA) Accession number for a reference genome (or blank).
+- **REF_SEQ**: Path to the reference genome for assembly scaffolding / QC (or blank).
+- **NT_ASSEMBLY_GCA**: GCA Accession of an already-built nucleotide assembly to carry into annotation, or to run final QC on directly when no reads are supplied (or blank).
+- **NT_ASSEMBLY_PATH**: Path to an already-built nucleotide assembly, serving the same role as `NT_ASSEMBLY_GCA` for a local file (or blank).
+- **TX_EVI_GCA**: Transcript evidence for annotation as a GCA Accession, or a comma-separated list of accessions (or blank).
+- **TX_EVI_PATH**: Path(s) to transcript evidence for annotation (or blank).
+- **PT_EVI_GCA**: Protein evidence for annotation as a GCA Accession, or a comma-separated list of accessions (or blank).
+- **PT_EVI_PATH**: Path(s) to protein evidence for annotation (or blank).
+- **KRAKEN2_DB** *(optional, new in v3.4.1)*: Path to a Kraken2 database for read decontamination. Overrides the `KRAKEN2_DB` environment variable. Omit the column entirely or leave blank to rely on the env var or skip decontamination.
 
 ### Notes
 
 - If you are providing **ANY** raw reads, ensure they exist in their appropriate folder (`/path/to/sample_dir/Illumina`, `/path/to/sample_dir/ONT`, etc.); you may need to generate the sample_dir based on the output_dir, species_id, and then sample_id (`/output_dir/species_id/sample_id`).
-- If you are providing `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS`, please make sure the directory path the files are in **DO NOT CONTAIN** `_1` or `_2`, but the actual **READS FILES DO CONTAIN** `_1` or `_2`.
-- If you provide a value for `ILLUMINA_RAW_DIR`, set `ILLUMINA_RAW_F_READS` and `ILLUMINA_RAW_R_READS` to `None`. EGAP will automatically detect and process all paired-end reads within that directory. The same applies for `ONT_RAW_DIR`.
+- If you are providing the forward and reverse Illumina reads in `ILLUMINA_RAW_READS`, please make sure the directory path the files are in **DO NOT CONTAIN** `_1` or `_2`, but the actual **READS FILES DO CONTAIN** `_1` or `_2`.
+- If you provide a value for `ILLUMINA_RAW_DIR`, leave `ILLUMINA_RAW_READS` blank. EGAP will automatically detect and process all paired-end reads within that directory. The same applies for `ONT_RAW_DIR`.
 - EGAP automatically renames `.fq` and `.fq.gz` files to `.fastq` / `.fastq.gz` at startup.
 - Ensure that all file paths are correct and accessible.
-- The CSV file should not contain extra spaces or special characters in the headers.
-- If you just want to perform QC analysis for an already built assembly: provide the path for the assembly or GCA Accession number to download, in the `REF_SEQ` or `REF_SEQ_GCA` field respectively, provide `ORGANISM_KARYOTE`, and the two BUSCO databases (`BUSCO_1`, `BUSCO_2`) to use; **DO NOT PROVIDE ESTIMATED SIZE (`EST_SIZE`)**.
+- The TSV file should not contain extra spaces or special characters in the headers.
+- If you just want to perform QC analysis for an already built assembly: provide the path or GCA Accession number in `REF_SEQ` / `REF_SEQ_GCA` (a reference genome) **or** in `NT_ASSEMBLY_PATH` / `NT_ASSEMBLY_GCA` (the annotation-pipeline assembly), provide `ORGANISM_KARYOTE` and the two `BUSCO` lineages, and **DO NOT PROVIDE ESTIMATED SIZE (`EST_SIZE`)**.
 
-### Example CSV File
+### Example TSV File
 
-`EGAP_test.csv` is included in this repository to run test examples. Running all four files takes about 24 hours on a 16-thread, 64 GB system.
+`EGAP_test.tsv` is included in this repository to run test examples. Running the read-based samples takes about 24 hours on a 16-thread, 64 GB system. The full tab-separated file lives at [`resources/EGAP_test.tsv`](resources/EGAP_test.tsv); only its populated columns are shown below (all other columns are blank):
 
-```csv
-ONT_SRA,ONT_RAW_DIR,ONT_RAW_READS,ILLUMINA_SRA,ILLUMINA_RAW_DIR,ILLUMINA_RAW_F_READS,ILLUMINA_RAW_R_READS,PACBIO_SRA,PACBIO_RAW_DIR,PACBIO_RAW_READS,SAMPLE_ID,SPECIES_ID,ORGANISM_KINGDOM,ORGANISM_KARYOTE,PLOIDY,BUSCO_1,BUSCO_2,EST_SIZE,REF_SEQ_GCA,REF_SEQ,KRAKEN2_DB
-None,None,None,None,None,None,None,None,None,None,Escherichia_coli-RefSeq,Escherichia_coli,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,None,GCA_000005845.2,None,None
-None,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-Illu-RefSeq,Escherichia_coli,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,GCA_000005845.2,None,None
-SRR32405433,None,None,SRR32496875,None,None,None,None,None,None,Escherichia_coli-ONT-Illu,Escherichia_coli,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,None,None,/path/to/kraken2_db
-None,None,None,None,None,None,None,SRR31460895,None,None,Escherichia_coli-PacBio,Escherichia_coli,Bacteria,prokaryote,1,gammaproteobacteria,enterobacterales,5m,None,None,None
-```
+| SPECIES_ID | SAMPLE_ID | ORGANISM_KINGDOM | ORGANISM_KARYOTE | PLOIDY | EST_SIZE | BUSCO | ONT_SRA | ILLUMINA_SRA | PACBIO_SRA | REF_SEQ_GCA |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Psilocybe_wayanedensis | Psilocybe_wayanedensis-DeconTest | Funga | eukaryote | 2 | 75m | agaricales,basidiomycota | | SRR30663514 | | |
+| Escherichia_coli-RefSeq | Escherichia_coli-RefSeqTest | Bacteria | prokaryote | 1 | | gammaproteobacteria,enterobacterales | | | | GCA_000005845.2 |
+| Escherichia_coli-Illu-RefSeq | Escherichia_coli-IlluminaTest | Bacteria | prokaryote | 1 | 5m | gammaproteobacteria,enterobacterales | | SRR32496875 | | GCA_000005845.2 |
+| Escherichia_coli-ONT-Illu | Escherichia_coli-HybridTest | Bacteria | prokaryote | 1 | 5m | gammaproteobacteria,enterobacterales | SRR32405433 | SRR32496875 | | |
+| Escherichia_coli-PacBio | Escherichia_coli-PacBioTest | Bacteria | prokaryote | 1 | 5m | gammaproteobacteria,enterobacterales | | | SRR31460895 | |
 
 ### Local Data
 If you are providing your own data locally, be sure to have a species folder and if needed a sub-folder matching your Species ID:
@@ -670,15 +687,15 @@ Additionally, fewer contigs aligning to BUSCO genes is preferable. Contigs with 
 
 **Q: The pipeline logs `WARN: No Kraken2 database found ... Skipping read decontamination.` Is that a problem?**
 
-No. Read decontamination is non-fatal by design. If `KRAKEN2_DB` is unset or points at an invalid directory, the step is skipped with a warning and the pipeline continues. To enable it, set `KRAKEN2_DB` to a valid database path (see [Installation, Kraken2](#kraken2-database-setup-required-for-read-decontamination)) or add a `KRAKEN2_DB` column to your input CSV.
+No. Read decontamination is non-fatal by design. If `KRAKEN2_DB` is unset or points at an invalid directory, the step is skipped with a warning and the pipeline continues. To enable it, set `KRAKEN2_DB` to a valid database path (see [Installation, Kraken2](#kraken2-database-setup-required-for-read-decontamination)) or add a `KRAKEN2_DB` column to your input TSV.
 
 **Q: MaSuRCA fails with a CABOG / unitigger error partway through assembly.**
 
-MaSuRCA's CABOG stage is sensitive to thread count and RAM. Try reducing `--cpu_threads` (for example from 32 to 16) and ensuring the machine has at least 2 × estimated genome size in free RAM. Also confirm that `EST_SIZE` in the CSV is realistic; a wildly wrong value (e.g. `50m` for a 5 Gbp genome) can trigger unitigger failures.
+MaSuRCA's CABOG stage is sensitive to thread count and RAM. Try reducing `--cpu_threads` (for example from 32 to 16) and ensuring the machine has at least 2 × estimated genome size in free RAM. Also confirm that `EST_SIZE` in the TSV is realistic; a wildly wrong value (e.g. `50m` for a 5 Gbp genome) can trigger unitigger failures.
 
 **Q: Tiara removes >50% of my contigs and the warning fires.**
 
-Tiara's classifier is kingdom-aware. Double-check that `ORGANISM_KINGDOM` in the CSV matches the sample (for fungi use `Funga`, not `Flora` or `Fauna`). If the kingdom is correct, inspect `{sample_dir}/decontamination/tiara_output.txt`; a genuinely contaminated assembly can legitimately lose more than half its contigs. The removed sequences are preserved as `{sample_id}_tiara_removed.fasta.gz` for manual review.
+Tiara's classifier is kingdom-aware. Double-check that `ORGANISM_KINGDOM` in the TSV matches the sample (for fungi use `Funga`, not `Flora` or `Fauna`). If the kingdom is correct, inspect `{sample_dir}/decontamination/tiara_output.txt`; a genuinely contaminated assembly can legitimately lose more than half its contigs. The removed sequences are preserved as `{sample_id}_tiara_removed.fasta.gz` for manual review.
 
 **Q: Disk fills up during a run even though v3.4.1 is supposed to auto-clean intermediates.**
 
@@ -686,7 +703,7 @@ Cleanup only fires after the downstream output is confirmed present (a safety gu
 
 **Q: The TUI shows `PENDING` forever on one sample while others progress.**
 
-EGAP processes samples sequentially by default. The TUI renders all samples up front but only the current one actively runs. To parallelise across samples, run multiple EGAP invocations with separate CSVs.
+EGAP processes samples sequentially by default. The TUI renders all samples up front but only the current one actively runs. To parallelise across samples, run multiple EGAP invocations with separate TSVs.
 
 **Q: `docker build` fails pulling packages from bioconda.**
 

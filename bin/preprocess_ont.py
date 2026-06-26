@@ -53,7 +53,7 @@ def null(val):
 # --------------------------------------------------------------
 def preprocess_ont(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
@@ -66,7 +66,7 @@ def preprocess_ont(
 
     Args:
         sample_id (str): Sample identifier.
-        input_csv (str): Path to metadata CSV file.
+        input_tsv (str): Path to metadata TSV file.
         output_dir (str): Directory for output files.
         cpu_threads (int or str): Number of CPU threads to use.
         ram_gb (int or str): Available RAM in GB.
@@ -77,7 +77,7 @@ def preprocess_ont(
     print(f"Preprocessing ONT reads for {sample_id}...")
 
     # Always anchor everything to absolute output_dir to avoid nested paths after chdir
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
     # IMPORTANT: also pull sample_stats_dict out of the context, otherwise the
     # later ``sample_stats_dict = nanoplot_qc_reads(..., sample_stats_dict)``
@@ -86,7 +86,7 @@ def preprocess_ont(
     # function, hiding any outer ctx attribute access on the RHS).
     sample_stats_dict = ctx.sample_stats_dict
 
-    # Identify read paths, reference, and BUSCO lineage info from CSV
+    # Identify read paths, reference, and BUSCO lineage info from TSV
     ont_raw_reads = null(current_series["ONT_RAW_READS"])
     ont_raw_dir   = null(current_series["ONT_RAW_DIR"])
     ont_sra       = null(current_series["ONT_SRA"])
@@ -242,9 +242,9 @@ def preprocess_ont(
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on corrected ONT reads ({e}); continuing.")
     
-        # Select best long reads (your helper uses output_dir/input_csv paths, unchanged)
-        highest_mean_qual_long_reads = select_long_reads(ctx.output_dir, ctx.input_csv, sample_id, cpu_threads)
-        highest = select_long_reads(ctx.output_dir, ctx.input_csv, sample_id, cpu_threads)
+        # Select best long reads (your helper uses output_dir/input_tsv paths, unchanged)
+        highest_mean_qual_long_reads = select_long_reads(ctx.output_dir, ctx.input_tsv, sample_id, cpu_threads)
+        highest = select_long_reads(ctx.output_dir, ctx.input_tsv, sample_id, cpu_threads)
         if not highest:
             highest = final_corrected_ont
     
@@ -266,7 +266,7 @@ if __name__ == "__main__":
     if len(sys.argv) != 6:
         print(f"ERROR: Expected 5 arguments (plus script name), got {len(sys.argv)-1}: {sys.argv[1:]}", 
               file=sys.stderr)
-        print("Usage: python3 preprocess_ont.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", 
+        print("Usage: python3 preprocess_ont.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", 
               file=sys.stderr)
         sys.exit(1)
 
@@ -277,15 +277,15 @@ if __name__ == "__main__":
         print(f"DEBUG: sys.argv[{i}] = '{arg}'")
     
     sample_id = sys.argv[1]
-    input_csv = sys.argv[2]
+    input_tsv = sys.argv[2]
     output_dir = sys.argv[3]
     cpu_threads = sys.argv[4]
     ram_gb = int(sys.argv[5]) if sys.argv[5] != " " else 8
     
     print(f"DEBUG: Parsed sample_id = '{sample_id}'")
-    print(f"DEBUG: Parsed input_csv = '{input_csv}'")
+    print(f"DEBUG: Parsed input_tsv = '{input_tsv}'")
     print(f"DEBUG: Parsed output_dir = '{output_dir}'")
     print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' (converted to {cpu_threads})")
     print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' (converted to {ram_gb})")
     
-    highest_mean_qual_long_reads = preprocess_ont(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    highest_mean_qual_long_reads = preprocess_ont(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)

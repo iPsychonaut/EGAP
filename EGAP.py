@@ -5,7 +5,7 @@ EGAP.py
 
 Orchestrates the Entheome Genome Assembly Pipeline (EGAP) by executing a series of
 preprocessing, assembly, comparison, polishing, curation, and quality assessment steps
-for genomic data. Processes multiple samples from a CSV input, utilizing specified
+for genomic data. Processes multiple samples from a TSV input, utilizing specified
 CPU threads and RAM resources.
 
 Created on Wed Aug 16 2023
@@ -204,7 +204,7 @@ QUAST_SETTINGS = {
 KRAKEN2_SETTINGS = {
     "stage": "pre-assembly (reads)",
     "targets": "ONT and PacBio highest-quality long reads",
-    "database": "resolved from KRAKEN2_DB env var or CSV column",
+    "database": "resolved from KRAKEN2_DB env var or TSV column",
     "keep (bacteria)": "bacteria, unclassified",
     "keep (archaea)": "archaea, unclassified",
     "keep (flora/funga/fauna)": "eukarya, unclassified",
@@ -224,7 +224,7 @@ TIARA_SETTINGS = {
 }
 
 
-def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, output_dir):
+def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output_dir):
     """Return all pipeline settings as a structured dict for reuse (TUI, logs, etc.)."""
     return {
         "input-setup settings": {
@@ -233,7 +233,7 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, output
             "container": "N/A (running python version)",
             "RAM GB": str(ram_gb),
             "CPU threads": str(cpu_threads),
-            "input csv": str(input_csv),
+            "input tsv": str(input_tsv),
             "output to": str(output_dir),
         },
         "trimmomatic settings": TRIMMOMATIC_SETTINGS,
@@ -291,7 +291,7 @@ def print_nested_dict(data, indent=0,
         print(f"{pad}{data}")
 
 
-def print_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, output_dir,
+def print_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output_dir,
                             header=True, divider=True, sleep_s=0.0):
     """
     Calls get_pipeline_settings(...) and prints the entire nested structure.
@@ -301,7 +301,7 @@ def print_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, outp
         current_moment=current_moment,
         ram_gb=ram_gb,
         cpu_threads=cpu_threads,
-        input_csv=input_csv,
+        input_tsv=input_tsv,
         output_dir=output_dir,
     )
 
@@ -320,53 +320,63 @@ def print_pipeline_settings(current_moment, ram_gb, cpu_threads, input_csv, outp
 
 
 # --------------------------------------------------------------
-# Updates the input.csv with any .fq -> .fastq
+# Updates the input.tsv with any .fq -> .fastq
 # --------------------------------------------------------------
-def preprocess_csv(csv_file_path):
+def preprocess_tsv(tsv_file_path):
     """
-    1) Load the CSV at `csv_file_path` into a pandas DataFrame.
-    2) Find any cell whose string ends in .fq or .fq.gz.
+    1) Load the tab-separated sample table at `tsv_file_path`.
+    2) Find any input whose string ends in .fq or .fq.gz (cells may hold a
+       comma-separated list, e.g. forward,reverse Illumina reads).
     3) Rename that file on disk to use .fastq (e.g. file.fq.gz → file.fastq.gz).
-    4) Update the DataFrame so that all old “.fq” or “.fq.gz” entries
-       become “.fastq” or “.fastq.gz”.
-    5) Save (overwrite) the original CSV with these new paths.
+    4) Rewrite the table in place, preserving its collapsed TSV layout.
+    5) Return the normalized DataFrame (collapsed columns re-expanded to the
+       legacy per-stage column names) for the orchestrator's sample loop.
     """
-    # (a) Read the CSV
-    df = pd.read_csv(csv_file_path)
+    # bin/ is on sys.path by the time this runs (main() inserts it before the
+    # call; the TUI imports egap with bin/ already importable).
+    from sample_tsv import read_sample_table
+
+    # (a) Read the raw table (collapsed schema preserved) for the on-disk rename.
+    df = pd.read_csv(tsv_file_path, sep="\t", dtype=str)
 
     # (b) Prepare a regex that matches “something.fq” or “something.fq.gz”
     pattern = re.compile(r'^(.*)\.fq(\.gz)?$')
 
-    # (c) Gather all unique values in the DataFrame (so we don’t rename the same file twice)
-    all_vals = pd.unique(df.values.ravel())
+    def _rename_token(token):
+        """Rename a single .fq/.fq.gz path on disk; return its .fastq form."""
+        token = token.strip()
+        m = pattern.match(token)
+        if not m:
+            return token
+        new_path = f"{m.group(1)}.fastq{m.group(2) or ''}"
+        # Same file referenced by two cells: the first pass already renamed it.
+        if not os.path.exists(token) and os.path.exists(new_path):
+            return new_path
+        try:
+            os.rename(token, new_path)
+        except FileNotFoundError:
+            print(f"Warning: file not found, skipping rename: {token!r}")
+        except FileExistsError:
+            print(f"Warning: target already exists, skipping rename: {new_path!r}")
+        return new_path
 
-    # (d) Build a mapping { old_path_str: new_path_str } for everything that matches
-    mapping = {}
-    for val in all_vals:
-        if isinstance(val, str):
-            m = pattern.match(val)
-            if m:
-                base      = m.group(1)         # “path/to/file” without “.fq”
-                gz_suffix = m.group(2) or ''   # either “.gz” or ''
-                new_path  = f"{base}.fastq{gz_suffix}"
+    def _rewrite_cell(val):
+        """Rewrite a cell value, handling comma-separated read lists token-wise."""
+        if not isinstance(val, str):
+            return val
+        if "," in val:
+            return ",".join(_rename_token(tok) for tok in val.split(","))
+        return _rename_token(val)
 
-                # Rename on disk (if possible)
-                try:
-                    os.rename(val, new_path)
-                except FileNotFoundError:
-                    print(f"Warning: file not found, skipping rename: {val!r}")
-                except FileExistsError:
-                    print(f"Warning: target already exists, skipping rename: {new_path!r}")
-                # In all cases, update the mapping so the DataFrame can be rewritten
-                mapping[val] = new_path
+    # (c) Apply the rename across every cell, preserving the collapsed layout.
+    for col in df.columns:
+        df[col] = df[col].map(_rewrite_cell)
 
-    # (e) Replace all occurrences of old_path → new_path in the DataFrame
-    df.replace(mapping, inplace=True)
+    # (d) Overwrite the original table as TSV, unchanged in shape.
+    df.to_csv(tsv_file_path, sep="\t", index=False)
 
-    # (f) Overwrite the original CSV
-    df.to_csv(csv_file_path, index=False)
-    
-    return df
+    # (e) Hand back a normalized view with the legacy per-stage column names.
+    return read_sample_table(tsv_file_path)
 
 # --------------------------------------------------------------
 # Finds a file in a given folder
@@ -424,18 +434,30 @@ def _cell_has_value(row, col):
 
 
 def sample_is_qc_only(row):
-    """Return ``True`` for a QC-only sample: a reference but no reads/EST_SIZE.
+    """Return ``True`` for a QC-only sample: an existing assembly but no reads/EST_SIZE.
 
-    The documented QC-only mode assesses an existing assembly: provide
-    ``REF_SEQ`` / ``REF_SEQ_GCA`` (plus BUSCO dbs) with no reads and no
-    ``EST_SIZE``. Such samples only need the reference fetched, then QC and the
+    The QC-only mode assesses an assembly that already exists rather than
+    building one. It triggers when the only inputs are an existing assembly
+    (plus BUSCO dbs) with no reads and no ``EST_SIZE``. The existing assembly
+    may be supplied as either:
+
+    - ``REF_SEQ`` / ``REF_SEQ_GCA`` -- EGAP's reference/QC target, or
+    - ``NT_ASSEMBLY_PATH`` / ``NT_ASSEMBLY_GCA`` -- the annotation-pipeline
+      (ANOQI) assembly carried in the shared table.
+
+    Either way EGAP only fetches/normalizes the assembly, then runs QC and the
     report; the assembly-building steps (preprocess reads, decontaminate reads,
     assemble, compare, polish, curate, decontaminate assembly) do not apply.
 
     This is mode dispatch, not skip-on-failure: read-based samples still run
     every applicable step and fail loudly on error.
     """
-    has_ref = _cell_has_value(row, "REF_SEQ") or _cell_has_value(row, "REF_SEQ_GCA")
+    has_ref = (
+        _cell_has_value(row, "REF_SEQ")
+        or _cell_has_value(row, "REF_SEQ_GCA")
+        or _cell_has_value(row, "NT_ASSEMBLY_PATH")
+        or _cell_has_value(row, "NT_ASSEMBLY_GCA")
+    )
     read_cols = ("ILLUMINA_SRA", "ILLUMINA_RAW_DIR", "ILLUMINA_RAW_F_READS",
                  "ILLUMINA_RAW_R_READS", "ONT_SRA", "ONT_RAW_DIR", "ONT_RAW_READS",
                  "PACBIO_SRA", "PACBIO_RAW_DIR", "PACBIO_RAW_READS")
@@ -447,10 +469,10 @@ def sample_is_qc_only(row):
 if __name__ == "__main__":
     # Parse command-line arguments for pipeline configuration
     parser = argparse.ArgumentParser(description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{VERSION}")
-    parser.add_argument("--input_csv", "-csv",
+    parser.add_argument("--input_tsv", "-tsv",
                         type=str,
                         required=True,
-                        help="Path to a CSV containing multiple sample data")
+                        help="Path to a TSV containing multiple sample data")
     parser.add_argument("--output_dir", "-o",
                         type=str,
                         required=True,
@@ -481,7 +503,7 @@ if __name__ == "__main__":
                         default=False, help="Skip the hifiasm assembler.")
 
     args = parser.parse_args()
-    input_csv   = args.input_csv
+    input_tsv   = args.input_tsv
     output_dir  = args.output_dir
     cpu_threads = args.cpu_threads
     ram_gb      = args.ram_gb
@@ -554,7 +576,7 @@ if __name__ == "__main__":
         \033[94mRAM GB                           \033[0m: {ram_gb}
         \033[94mCPU threads                      \033[0m: {cpu_threads}
         \033[94mdry run                          \033[0m: {dry_run}
-        \033[94minput csv                        \033[0m: {input_csv}
+        \033[94minput tsv                        \033[0m: {input_tsv}
         \033[94moutput to                        \033[0m: {output_dir}
 
     \033[96m-----------------------------------------------------------------------\033[0m
@@ -697,7 +719,7 @@ if __name__ == "__main__":
     \033[92mkraken2 settings\033[0m  (decontaminate_reads — pre-assembly)
        \033[94mstage                             \033[0m: pre-assembly (reads)
        \033[94mtargets                           \033[0m: ONT and PacBio highest-quality long reads
-       \033[94mdatabase                          \033[0m: resolved from KRAKEN2_DB env var or CSV column
+       \033[94mdatabase                          \033[0m: resolved from KRAKEN2_DB env var or TSV column
        \033[94mkeep (bacteria)                   \033[0m: bacteria, unclassified
        \033[94mkeep (archaea)                    \033[0m: archaea, unclassified
        \033[94mkeep (flora/funga/fauna)          \033[0m: eukarya, unclassified
@@ -749,7 +771,7 @@ if __name__ == "__main__":
         current_moment=current_moment,
         ram_gb=ram_gb,
         cpu_threads=cpu_threads,
-        input_csv=input_csv,
+        input_tsv=input_tsv,
         output_dir=output_dir,
         header=True,
         divider=True,
@@ -807,7 +829,7 @@ if __name__ == "__main__":
         print(f"WARN:\tPre-flight checks could not run ({_pf_exc}); continuing.")
 
     # Load the Sample Table and correct any ".fq" -> ".fastq"
-    input_csv_df = preprocess_csv(input_csv)
+    input_tsv_df = preprocess_tsv(input_tsv)
 
     # Resolve QC and reporter scripts once (outside the sample loop)
     qc_script = bin_dir / "qc_assessment.py"
@@ -821,7 +843,7 @@ if __name__ == "__main__":
     # moving on to the next sample.
     failed_samples = []
     _real_stdout = sys.stdout
-    for index, row in input_csv_df.iterrows():
+    for index, row in input_tsv_df.iterrows():
         sample_id = row["SAMPLE_ID"]
 
         # Open a per-sample log file and tee stdout into it for this sample's run.
@@ -857,7 +879,7 @@ if __name__ == "__main__":
             current_cmd = [sys.executable,
                            str(script),
                            sample_id,
-                           input_csv,
+                           input_tsv,
                            output_dir,
                            str(cpu_threads),
                            str(ram_gb)]
@@ -876,7 +898,7 @@ if __name__ == "__main__":
         qc_cmd = [sys.executable,
                   str(qc_script),
                   "final",
-                  input_csv,
+                  input_tsv,
                   sample_id,
                   output_dir,
                   str(cpu_threads),
@@ -891,7 +913,7 @@ if __name__ == "__main__":
         reporter_cmd = [sys.executable,
                         str(reporter_script),
                         sample_id,
-                        input_csv,
+                        input_tsv,
                         output_dir,
                         str(cpu_threads),
                         str(ram_gb)]

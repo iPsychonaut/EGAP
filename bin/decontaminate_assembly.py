@@ -60,9 +60,9 @@ def get_decontamination_classes(kingdom_id, karyote_id):
     """Return (keep_set, remove_set) for Tiara labels based on organism kingdom.
 
     Args:
-        kingdom_id (str or None): Value of the ORGANISM_KINGDOM CSV column
+        kingdom_id (str or None): Value of the ORGANISM_KINGDOM TSV column
             (e.g. "funga", "bacteria", "archaea").  Case-insensitive.
-        karyote_id (str or None): Value of the ORGANISM_KARYOTE CSV column.
+        karyote_id (str or None): Value of the ORGANISM_KARYOTE TSV column.
             Currently informational only; kept for future use.
 
     Returns:
@@ -213,7 +213,7 @@ def parse_tiara(tiara_out):
 # --------------------------------------------------------------
 def decontaminate_assembly(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
@@ -222,7 +222,7 @@ def decontaminate_assembly(
 
     Args:
         sample_id (str): Sample identifier.
-        input_csv (str): Path to metadata CSV.
+        input_tsv (str): Path to metadata TSV.
         output_dir (str): Root output directory.
         cpu_threads (int): CPU threads available.
         ram_gb (int): RAM in GB available (reserved for future use).
@@ -236,7 +236,7 @@ def decontaminate_assembly(
     # ----------------------------------------------------------
     # Section 1: Load per-sample context
     # ----------------------------------------------------------
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
     species_id          = current_series["SPECIES_ID"]
@@ -443,7 +443,7 @@ def decontaminate_assembly(
 # --------------------------------------------------------------
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 decontaminate_assembly.py <sample_id> <input_csv> "
+        print("Usage: python3 decontaminate_assembly.py <sample_id> <input_tsv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
@@ -451,7 +451,7 @@ if __name__ == "__main__":
 
     result = decontaminate_assembly(
         sys.argv[1],   # sample_id
-        sys.argv[2],   # input_csv
+        sys.argv[2],   # input_tsv
         sys.argv[3],   # output_dir
         sys.argv[4],   # cpu_threads
         sys.argv[5],   # ram_gb

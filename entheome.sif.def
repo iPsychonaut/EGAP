@@ -299,7 +299,7 @@ PY
           -B /host/data:/data \
           entheome.sif \
           python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-              --input-csv /data/samples.csv \
+              --input-tsv /data/samples.tsv \
               --output /data/output \
               --threads 16 --ram 64
 
@@ -307,7 +307,7 @@ PY
 
       singularity run -B /host/data:/data entheome.sif \
           python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-              --input-csv /data/samples.csv --output /data/output
+              --input-tsv /data/samples.tsv --output /data/output
 
     ---------------------------------------------------------------------------
     Environment variables

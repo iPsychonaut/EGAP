@@ -32,14 +32,14 @@ from record_provenance import record_file
 # --------------------------------------------------------------
 def assemble_spades(
     sample_id: str,
-    input_csv: str,
+    input_tsv: str,
     output_dir: str,
     cpu_threads: int,
     ram_gb: int,
 ) -> Optional[str]:
     """Assemble genomic data using SPAdes with Illumina and optional ONT reads.
 
-    Reads metadata from *input_csv*, resolves read paths, runs SPAdes in
+    Reads metadata from *input_tsv*, resolves read paths, runs SPAdes in
     ``--isolate`` mode (with optional ``--nanopore`` supplemental reads),
     and performs quality control via ``qc_assessment``.  Skips the assembly
     step if the final output file already exists.
@@ -47,9 +47,9 @@ def assemble_spades(
     Parameters
     ----------
     sample_id : str
-        Sample identifier used to look up the row in *input_csv*.
-    input_csv : str
-        Path to the metadata CSV file.
+        Sample identifier used to look up the row in *input_tsv*.
+    input_tsv : str
+        Path to the metadata TSV file.
     output_dir : str
         Root output directory; per-species subdirectories are created here.
     cpu_threads : int or str
@@ -70,7 +70,7 @@ def assemble_spades(
         Propagated from ``run_subprocess_cmd`` if the SPAdes binary is not
         found on ``PATH``.
     """
-    ctx = load_sample_context(sample_id, input_csv, output_dir, cpu_threads, ram_gb)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -129,7 +129,7 @@ def assemble_spades(
     if os.path.exists(egap_spades_assembly_path) and os.path.getsize(egap_spades_assembly_path) > 0:
         log_print(f"SKIP:\tSPAdes assembly already present: {egap_spades_assembly_path}")
         egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
-            "spades", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
+            "spades", ctx.input_tsv, sample_id, ctx.output_dir, cpu_threads, ram_gb
         )
         return egap_spades_assembly_path
 
@@ -204,7 +204,7 @@ def assemble_spades(
     print(f"DEBUG - spades_path - {spades_path}")
     print(f"DEBUG - spades_cmd - {spades_cmd}")
 
-    log_estimate_for("spades", sample_id, ctx.input_csv, ctx.output_dir, cpu_threads, ram_gb)
+    log_estimate_for("spades", sample_id, ctx.input_tsv, ctx.output_dir, cpu_threads, ram_gb)
     _ = run_subprocess_cmd(spades_cmd, shell_check=False)
 
     if not os.path.exists(spades_path):
@@ -216,7 +216,7 @@ def assemble_spades(
 
     # QC using absolute paths
     egap_spades_assembly_path, spades_stats_list, _ = qc_assessment(
-        "spades", ctx.input_csv, sample_id, ctx.output_dir, cpu_threads, ram_gb
+        "spades", ctx.input_tsv, sample_id, ctx.output_dir, cpu_threads, ram_gb
     )
 
     # --- Cleanup SPAdes intermediates once final assembly is confirmed ---
@@ -236,7 +236,7 @@ def assemble_spades(
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 assemble_spades.py <sample_id> <input_csv> "
+        print("Usage: python3 assemble_spades.py <sample_id> <input_tsv> "
               "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
@@ -244,7 +244,7 @@ if __name__ == "__main__":
 
     egap_spades_assembly_path = assemble_spades(
         sys.argv[1],       # sample_id
-        sys.argv[2],       # input_csv
+        sys.argv[2],       # input_tsv
         sys.argv[3],       # output_dir
         str(sys.argv[4]),  # cpu_threads
         str(sys.argv[5])   # ram_gb

@@ -60,7 +60,7 @@ except ImportError as e:  # optional dep missing (geopy/requests) or module abse
 
 # Use the shared helper from utilities so row extraction stays consistent
 try:
-    from utilities import get_current_row_data, initialize_logging_environment, to_abs
+    from utilities import get_current_row_data, initialize_logging_environment, to_abs, read_sample_table
 except Exception as e:
     print(f"ERROR:\tutilities.get_current_row_data not importable: {e}")
     raise
@@ -526,7 +526,7 @@ def extract_busco_db_info(busco_dir: str, busco_db: str) -> dict:
     busco_dir : str
         BUSCO/Compleasm output directory.
     busco_db : str
-        Lineage as given in the CSV (may lack the ``_odbNN`` suffix).
+        Lineage as given in the TSV (may lack the ``_odbNN`` suffix).
 
     Returns
     -------
@@ -623,13 +623,13 @@ def find_busco_svg(busco_dir: str, busco_db: str) -> str:
     return ""
 
 # ------------------------------ Main ------------------------------
-def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
+def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """
     Render the EGAP HTML report for a sample.
     Returns: path to <sample_dir>/<sample_id>_EGAP_summary.html (or a stub if templates are missing)
     """
     # Resolve critical paths first (CWD-safe)
-    input_csvto_abs = to_abs(input_csv)
+    input_tsvto_abs = to_abs(input_tsv)
     output_dirto_abs = to_abs(output_dir)
 
     # Locate or fetch templates
@@ -638,11 +638,11 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
     now = datetime.now().strftime("%Y%m%d-%H:%M:%S")
 
     # Metadata row
-    input_df = pd.read_csv(input_csvto_abs)
+    input_df = read_sample_table(input_tsvto_abs)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
 
-    # CSV columns (tolerate missing)
+    # TSV columns (tolerate missing)
     illumina_sra         = current_series.get("ILLUMINA_SRA")
     illumina_f_raw_reads = current_series.get("ILLUMINA_RAW_F_READS")
     illumina_r_raw_reads = current_series.get("ILLUMINA_RAW_R_READS")
@@ -1249,14 +1249,14 @@ def html_reporter(sample_id, input_csv, output_dir, cpu_threads, ram_gb):
 
 if __name__ == "__main__":
     if len(sys.argv) != 6:
-        print("Usage: python3 html_reporter.py <sample_id> <input_csv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+        print("Usage: python3 html_reporter.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
     initialize_logging_environment(sys.argv[3], sys.argv[1])
 
     _ = html_reporter(
         sys.argv[1],              # sample_id
-        sys.argv[2],              # input_csv
+        sys.argv[2],              # input_tsv
         sys.argv[3],              # output_dir
         str(sys.argv[4]),         # cpu_threads
         str(sys.argv[5])          # ram_gb
