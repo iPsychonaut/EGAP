@@ -121,7 +121,7 @@ A single EGAP run can peak at ~300 GB of intermediate files before cleanup; see 
 ### Software
 
 - **OS:** Linux x86_64 (primary target; tested on Debian/Ubuntu). macOS x86_64/arm64 is supported by `EGAP_setup.sh` but some assemblers are Linux-only.
-- **Python:** 3.8 (EGAP pins to `>=3.8,<3.9` because several dependencies, notably `tiara=1.0.3` and `numpy=1.19.5`, are incompatible with newer Python).
+- **Python:** 3.8 (EGAP pins to `>=3.8,<3.9`; the bioconda tool stack is validated against that interpreter). This caps the scientific Python stack at the last 3.8 builds: `pandas 2.0.3`, `numpy 1.24.x`, `matplotlib 3.7.x`, `biopython 1.83`. Code must also run on `pandas 1.4.4`, the floor that older solves land on; CI tests both.
 - **Conda:** Miniforge3, Miniconda3, or Anaconda (the installer uses Miniforge3).
 - **git, wget, tar** on PATH.
 - **Optional:** Docker ≥ 20.10 for container usage, Apptainer/Singularity ≥ 3.8 for HPC usage.
@@ -153,7 +153,7 @@ The following tools are installed:
 - [BUSCO](https://gitlab.com/ezlab/busco)
 - [Compleasm](https://github.com/bioinformatics-centre/compleasm)
 - [Kraken2](https://github.com/DerrickWood/kraken2) *(new in v3.4.1, read decontamination)*
-- [Tiara](https://github.com/ibe-uw/tiara) *(new in v3.4.1, assembly decontamination)*
+- [tiara-entheome](https://github.com/iPsychonaut/tiara-entheome) *(assembly decontamination; modernised fork of [Tiara](https://github.com/ibe-uw/tiara) with numpy >=1.21 and current pytorch/numba pins, replacing `tiara=1.0.3` as of v3.4.2)*
 - [pigz](https://zlib.net/pigz/) *(new in v3.4.1, parallel FASTA/FASTQ compression)*
 
 ##### Install Via Bash (recommended for most users):
@@ -185,7 +185,7 @@ The script appends `export KRAKEN2_DB=<chosen path>` to `~/.bashrc` and `~/.zshr
 Build the image (the bundled `Dockerfile` produces a multi-env image with EGAP, EGEP, and Funannotate):
 
 ```bash
-docker build -t entheome_ecosystem:3.4.1 .
+docker build -t entheome_ecosystem:3.4.2 .
 ```
 
 The default `ENTRYPOINT` runs EGAP directly, so you can treat the image like the `EGAP` CLI. Bind-mount your data and Kraken2 database at runtime:
@@ -195,7 +195,7 @@ docker run --rm \
     -e KRAKEN2_DB=/kraken2_db \
     -v /path/to/kraken2_db:/kraken2_db:ro \
     -v /path/to/data:/data \
-    entheome_ecosystem:3.4.1 \
+    entheome_ecosystem:3.4.2 \
     --input_tsv /data/samples.tsv \
     --output_dir /data/output \
     --cpu_threads 16 --ram_gb 64
@@ -206,7 +206,7 @@ Interactive shell with all three conda envs on PATH (override the entrypoint):
 ```bash
 docker run --rm -it --entrypoint bash \
     -v /path/to/data:/data \
-    entheome_ecosystem:3.4.1
+    entheome_ecosystem:3.4.2
 ```
 
 ##### Install Via Nextflow/Singularity:
@@ -707,7 +707,7 @@ EGAP processes samples sequentially by default. The TUI renders all samples up f
 
 **Q: `docker build` fails pulling packages from bioconda.**
 
-Bioconda occasionally throws solver conflicts when transitive dependencies shift. If a build fails mid-env-create, just re-run; conda's solver is non-deterministic and a retry often succeeds. If it persistently fails, check the build log for the conflicting package and file an issue. The Dockerfile's version pins (numpy=1.19.5, tiara=1.0.3, kraken2=2.1.6, flye=2.9.5, etc.) are load-bearing and documented inline.
+Bioconda occasionally throws solver conflicts when transitive dependencies shift. If a build fails mid-env-create, just re-run; conda's solver is non-deterministic and a retry often succeeds. If it persistently fails, check the build log for the conflicting package and file an issue. The Dockerfile's version pins (pandas>=2.0.3, numpy>=1.24.3,<2, kraken2=2.1.6, flye=2.9.5, etc.) are load-bearing and documented inline. `tiara-entheome` is installed with pip from its release tag until it lands on bioconda; its runtime dependencies (pytorch, skorch, numba) are resolved by conda in the same env.
 
 **Q: Singularity build fails on an HPC with "operation not permitted".**
 
@@ -763,8 +763,16 @@ The example data are published in:
 
 ## Changelog
 
-### v3.4.2 *(2026-06-20)*
+### v3.4.2 *(2026-09-05)*
 Reliability, provenance, and run-control release.
+
+- **Dependencies / packaging**
+  - `tiara-entheome` replaces upstream `tiara=1.0.3` in the Dockerfile, Singularity definition, and `EGAP_setup.sh`. Its `numpy>=1.21` requirement lifts the old `numpy=1.19.5` pin, so the containers now resolve `pandas>=2.0.3` as `meta.yaml` already required. Installed with pip from the `v1.0.0` tag until the bioconda recipe lands; pytorch, skorch, numba, tqdm and joblib come from conda.
+  - Version strings in the Dockerfile, Singularity definition and `EGAP_setup.sh` brought in line with `EGAP.py` and `meta.yaml` (3.4.2).
+  - `sample_tsv.get_current_row_data`: the `"None"` placeholder scrub uses `DataFrame.mask` instead of `DataFrame.replace`, which crashed on pandas 1.4.4 when a column already held `pd.NA`.
+- **Testing**
+  - New pytest baseline (`tests/`, 115 tests, no bioinformatics binaries required) and a GitHub Actions workflow covering Python 3.8 with pandas 2.0.3, Python 3.8 with pandas 1.4.4, and Python 3.11.
+  - `audit/`: fspassemblypipeline port assessment with prototypes for BUSCO lineage selection, checkpointing, contamination consensus, k-mer sizing and Merqury QV.
 
 - **Major additions**
   - Per-assembler skip flags (`--no-masurca`/`-no_m`, `--no-flye`/`-no_f`, `--no-spades`/`-no_s`, `--no-hifiasm`/`-no_h`) honoured by both the CLI and the TUI.

@@ -2,7 +2,7 @@
 # Entheome Ecosystem — multi-stage Docker image
 # -----------------------------------------------------------------------------
 # Builds three conda environments used across the Entheome toolchain:
-#   * EGAP_env         — Entheome Genome Assembly Pipeline (EGAP) v3.4.1
+#   * EGAP_env         — Entheome Genome Assembly Pipeline (EGAP) v3.4.2
 #   * EGEP_env         — Annotation helper tools
 #   * funannotate_env  — Funannotate for eukaryotic genome annotation
 # The final runtime image is a slim Debian layer that carries all three envs
@@ -12,10 +12,10 @@
 FROM condaforge/mambaforge AS build
 
 LABEL maintainer="Ian Bollinger <ian.bollinger@entheome.org>" \
-      version="3.4.1" \
-      description="Entheome Genome Assembly Pipeline (EGAP) v3.4.1 — multi-env Entheome ecosystem image" \
+      version="3.4.2" \
+      description="Entheome Genome Assembly Pipeline (EGAP) v3.4.2 — multi-env Entheome ecosystem image" \
       org.opencontainers.image.source="https://github.com/iPsychonaut/EGAP" \
-      org.opencontainers.image.version="3.4.1" \
+      org.opencontainers.image.version="3.4.2" \
       org.opencontainers.image.authors="Ian Bollinger <ian.bollinger@entheome.org>"
 
 # Install mamba and conda-pack in the base env — used to build and then
@@ -26,18 +26,23 @@ RUN mamba install -n base --yes conda-pack
 # Generate EGAP_env
 ###############################################################################
 
-# Create EGAP_env with Python 3.8 and all EGAP v3.4.1 dependencies.
-# Pinning rationale (verified against conda list on 2026-04-06):
-#   numpy=1.19.5     — tiara=1.0.3 requires numpy<1.20; do not loosen.
-#   tiara=1.0.3      — exact pin; newer solves break the numpy constraint.
-#   kraken2=2.1.6    — exact pin; tested working version.
-#   sra-tools=3.2.0  — exact pin; API changes between minor versions.
-#   trimmomatic=0.40 — exact pin; share-dir path used in adapter symlinks.
-#   flye=2.9.5       — exact pin; >=3.0 changes assembly graph format.
+# Create EGAP_env with Python 3.8 and all EGAP v3.4.2 dependencies.
+# Pinning rationale (verified against conda list on 2026-09-05):
+#   pandas>=2.0.3     matches meta.yaml; 2.0.3 is the final Python 3.8 build.
+#   numpy>=1.24.3,<2  pandas 2.0.3 needs numpy>=1.20.3. The old numpy=1.19.5
+#                     pin existed only for upstream tiara=1.0.3 (numpy<1.20),
+#                     which is replaced by tiara-entheome (numpy>=1.21).
+#   tiara-entheome    installed below via pip from the v1.0.0 tag (not yet on
+#                     bioconda). Its runtime deps (pytorch, skorch, numba,
+#                     tqdm, joblib) are resolved by conda in this create.
+#   kraken2=2.1.6     exact pin; tested working version.
+#   sra-tools=3.2.0   exact pin; API changes between minor versions.
+#   trimmomatic=0.40  exact pin; share-dir path used in adapter symlinks.
+#   flye=2.9.5        exact pin; >=3.0 changes assembly graph format.
 RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     'python>=3.8,<3.9' \
-    pandas \
-    'numpy=1.19.5' \
+    'pandas>=2.0.3' \
+    'numpy>=1.24.3,<2' \
     'masurca=4.1.4' \
     'quast=5.3.0' \
     'compleasm>=0.2.8' \
@@ -81,9 +86,13 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     requests \
     rich \
     textual \
-    'tiara=1.0.3' \
+    'pytorch>=1.10,<3' \
+    'skorch>=0.11' \
+    'numba>=0.56' \
+    tqdm \
+    joblib \
     'kraken2=2.1.6'
-    
+
 # Download required resources for quast
 RUN conda run -n EGAP_env quast-download-gridss && \
     conda run -n EGAP_env quast-download-silva
@@ -93,16 +102,23 @@ RUN git clone https://github.com/dfguan/runner.git && \
     cd runner && conda run -n EGAP_env python3 setup.py install --user && \
     cd .. && rm -rf runner
 
+# Install tiara-entheome (modernised Tiara fork used for assembly
+# decontamination) from the pinned release tag. Not yet on bioconda.
+# --no-deps: pytorch, skorch, numba, tqdm and joblib were resolved by conda above.
+RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
+        "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" && \
+    conda run -n EGAP_env tiara-entheome --help >/dev/null
+
 # Package EGAP_env with conda-pack
 RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
     mkdir /EGAP_env && cd /EGAP_env && tar xf /tmp/EGAP_env.tar && \
     rm /tmp/EGAP_env.tar && \
     /EGAP_env/bin/conda-unpack
 
-# Download EGAP v3.4.1 scripts from GitHub into the EGAP_env.
+# Download EGAP v3.4.2 scripts from GitHub into the EGAP_env.
 # Install wget (if not already available) to retrieve the files.
 RUN apt-get update && apt-get install -y wget && \
-    EGAP_BRANCH="v3.4.1" && \
+    EGAP_BRANCH="v3.4.2" && \
     EGAP_RAW="https://raw.githubusercontent.com/iPsychonaut/EGAP/${EGAP_BRANCH}" && \
     wget -O /EGAP_env/EGAP.py "${EGAP_RAW}/EGAP.py" && \
     chmod +x /EGAP_env/EGAP.py && \
@@ -237,7 +253,7 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
     GENEMARK_PATH="/mnt/d/EGEP"
 
 # -----------------------------------------------------------------------------
-# EGAP v3.4.1 runtime defaults
+# EGAP v3.4.2 runtime defaults
 # -----------------------------------------------------------------------------
 # Kraken2 DB is NOT baked into the image (the standard 16 GB archive would
 # roughly double the image size). Bind-mount the database directory at runtime
@@ -247,7 +263,7 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
 #       -e KRAKEN2_DB=/kraken2_db \
 #       -v /host/path/to/kraken2_db:/kraken2_db:ro \
 #       -v /host/data:/data \
-#       entheome_ecosystem:3.4.1 --input /data/samples.tsv --output /data/out
+#       entheome_ecosystem:3.4.2 --input /data/samples.tsv --output /data/out
 #
 # To provision a Kraken2 database on the host before running EGAP, either
 # build from source (authoritative, ~6-12 hrs):
@@ -268,7 +284,7 @@ RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"
 # -----------------------------------------------------------------------------
 # Default entrypoint — runs EGAP directly.
 # Override to enter an interactive shell:
-#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.1
+#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.2
 # -----------------------------------------------------------------------------
 ENTRYPOINT ["/EGAP_env/bin/EGAP"]
 CMD ["--help"]
@@ -277,21 +293,21 @@ CMD ["--help"]
 # Usage examples
 # -----------------------------------------------------------------------------
 # Build:
-#   docker build -t entheome_ecosystem:3.4.1 .
+#   docker build -t entheome_ecosystem:3.4.2 .
 #
 # Show EGAP help:
-#   docker run --rm entheome_ecosystem:3.4.1
+#   docker run --rm entheome_ecosystem:3.4.2
 #
 # Run EGAP with a host-mounted Kraken2 DB and data directory:
 #   docker run --rm \
 #       -e KRAKEN2_DB=/kraken2_db \
 #       -v /host/kraken2_db:/kraken2_db:ro \
 #       -v /host/data:/data \
-#       entheome_ecosystem:3.4.1 \
+#       entheome_ecosystem:3.4.2 \
 #       --input-tsv /data/samples.tsv \
 #       --output /data/output \
 #       --threads 16 --ram 64
 #
 # Interactive shell (all three conda envs available on PATH):
-#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.1
+#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.2
 # =============================================================================
