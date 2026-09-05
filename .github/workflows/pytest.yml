@@ -1,0 +1,55 @@
+name: pytest
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: unit (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.8 is EGAP's runtime pin (meta.yaml). 3.11 catches syntax drift early.
+        python: ["3.8", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install test dependencies
+        run: python -m pip install -r tests/requirements.txt
+      - name: Run unit tests (no bioinformatics binaries required)
+        run: python -m pytest tests -q --junitxml=pytest-${{ matrix.python }}.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-${{ matrix.python }}
+          path: pytest-${{ matrix.python }}.xml
+
+  # Opt-in job: creates the conda env and runs tests marked requires_tools.
+  # Disabled by default because the EGAP_env solve is ~20 min and the runners
+  # have 14 GB disk. Enable by setting the repository variable RUN_TOOL_TESTS=1.
+  tools:
+    name: tool-backed (conda)
+    if: vars.RUN_TOOL_TESTS == '1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          python-version: "3.8"
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          activate-environment: EGAP_test
+      - name: Install minimal tool subset
+        shell: bash -l {0}
+        run: mamba install -y pytest pandas biopython matplotlib-base psutil seqkit quast compleasm tiara
+      - name: Run tool-backed tests
+        shell: bash -l {0}
+        env:
+          EGAP_RUN_TOOL_TESTS: "1"
+        run: python -m pytest tests -q -m requires_tools
