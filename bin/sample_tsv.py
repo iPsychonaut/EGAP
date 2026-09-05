@@ -153,10 +153,13 @@ def get_current_row_data(input_df, sample_id):
     # Filter the DataFrame for rows where the "SAMPLE_ID" column equals the provided sample_id
     current_row = input_df[input_df["SAMPLE_ID"] == sample_id].copy()
 
-    # Replace literal string "None" with actual NaN so downstream pd.isna()
+    # Replace literal string "None" with pd.NA so downstream pd.isna()
     # checks work correctly (some TSV editors write "None" instead of leaving
-    # cells empty).
-    current_row = current_row.replace(to_replace="None", value=pd.NA)
+    # cells empty). Use mask() rather than DataFrame.replace(): on pandas
+    # 1.4.x, replace() raises AttributeError when an object column already
+    # holds pd.NA (the elementwise comparison collapses to a scalar bool).
+    # mask() behaves identically on pandas 1.4.4, 2.0.3 and 3.x.
+    current_row = current_row.mask(current_row == "None", other=pd.NA)
 
     sample_stats_dict = gen_sample_stats_dict(current_row)
     current_index = current_row.index.tolist()
