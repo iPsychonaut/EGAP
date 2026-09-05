@@ -18,8 +18,8 @@ From: debian:buster
 %labels
     Author       Ian Bollinger <ian.bollinger@entheome.org>
     Maintainer   Ian M Bollinger <ian.bollinger@entheome.org>
-    Version      3.4.1
-    Description  Entheome ecosystem (EGAP v3.4.1 + EGEP + Funannotate) Singularity image
+    Version      3.4.2
+    Description  Entheome ecosystem (EGAP v3.4.2 + EGEP + Funannotate) Singularity image
 
 %post
     export DEBIAN_FRONTEND=noninteractive
@@ -64,17 +64,22 @@ From: debian:buster
     # -----------------------------
     # Create EGAP_env (primary env)
     # -----------------------------
-    # Pinning rationale (verified against conda list on 2026-04-06):
-    #   numpy=1.19.5    — tiara=1.0.3 requires numpy<1.20; do not loosen.
-    #   tiara=1.0.3     — exact pin; newer solves break the numpy constraint.
-    #   kraken2=2.1.6   — exact pin; tested working version.
-    #   sra-tools=3.2.0 — exact pin; API changes between minor versions.
-    #   trimmomatic=0.40 — exact pin; share-dir path used in symlinks below.
-    #   flye=2.9.5      — exact pin; >=3.0 changes assembly graph format.
+    # Pinning rationale (verified against conda list on 2026-09-05):
+    #   pandas>=2.0.3     matches meta.yaml; 2.0.3 is the final Python 3.8 build.
+    #   numpy>=1.24.3,<2  pandas 2.0.3 needs numpy>=1.20.3. The old numpy=1.19.5
+    #                     pin existed only for upstream tiara=1.0.3 (numpy<1.20),
+    #                     which is replaced by tiara-entheome (numpy>=1.21).
+    #   tiara-entheome    installed below via pip from the v1.0.0 tag (not yet on
+    #                     bioconda). Its runtime deps (pytorch, skorch, numba,
+    #                     tqdm, joblib) are resolved by conda in this create.
+    #   kraken2=2.1.6     exact pin; tested working version.
+    #   sra-tools=3.2.0   exact pin; API changes between minor versions.
+    #   trimmomatic=0.40  exact pin; share-dir path used in symlinks below.
+    #   flye=2.9.5        exact pin; >=3.0 changes assembly graph format.
     /bin/bash -c "conda create -n EGAP_env -y -c bioconda -c conda-forge \
                  'python>=3.8,<3.9' \
-                 pandas \
-                 'numpy=1.19.5' \
+                 'pandas>=2.0.3' \
+                 'numpy>=1.24.3,<2' \
                  'masurca=4.1.4' \
                  'quast=5.3.0' \
                  'compleasm>=0.2.8' \
@@ -118,12 +123,23 @@ From: debian:buster
                  requests \
                  rich \
                  textual \
-                 'tiara=1.0.3' \
+                 'pytorch>=1.10,<3' \
+                 'skorch>=0.11' \
+                 'numba>=0.56' \
+                 tqdm \
+                 joblib \
                  'kraken2=2.1.6'" || { echo "Failed to create EGAP_env"; exit 1; }
 
     # Per-env pin file — belt-and-suspenders guard against Flye being pulled up
     mkdir -p /opt/conda/envs/EGAP_env/conda-meta
     printf "flye 2.9.5\n" >> /opt/conda/envs/EGAP_env/conda-meta/pinned
+
+    # tiara-entheome (modernised Tiara fork used for assembly decontamination)
+    # from the pinned release tag. Not yet on bioconda. --no-deps: pytorch,
+    # skorch, numba, tqdm and joblib were resolved by conda above.
+    /opt/conda/envs/EGAP_env/bin/python -m pip install --no-cache-dir --no-deps \
+        "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" || { echo "Failed to install tiara-entheome"; exit 1; }
+    /opt/conda/envs/EGAP_env/bin/tiara-entheome --help >/dev/null || { echo "tiara-entheome smoke test failed"; exit 1; }
 
     # Trimmomatic adapter symlinks — path encodes version=0.40, build=0
     # Uses a glob so a patch-level rebuild (0.40-1, 0.40-2 …) still resolves.
@@ -253,7 +269,7 @@ PY
     export ZOE="/usr/share/snap"
     export USER="me"
     source /opt/conda/etc/profile.d/conda.sh
-    # EGAP v3.4.1 — override at runtime via --env or bind-mount
+    # EGAP v3.4.2 — override at runtime via --env or bind-mount
     # e.g.: singularity run --env KRAKEN2_DB=/kraken2_db -B /host/db:/kraken2_db entheome.sif
     export KRAKEN2_DB="${KRAKEN2_DB:-}"
     export PYTHONUNBUFFERED=1
@@ -280,7 +296,7 @@ PY
     exec "$@"
 
 %help
-    Entheome ecosystem Singularity image (EGAP v3.4.1 + EGEP + Funannotate).
+    Entheome ecosystem Singularity image (EGAP v3.4.2 + EGEP + Funannotate).
 
     Three conda environments are baked in:
       EGAP_env         — genome assembly pipeline (primary)
@@ -339,7 +355,7 @@ PY
 
     Activate a specific conda env:
       source /opt/conda/etc/profile.d/conda.sh
-      conda activate EGAP_env         # for EGAP v3.4.1 assembly pipeline
+      conda activate EGAP_env         # for EGAP v3.4.2 assembly pipeline
       conda activate EGEP_env         # for annotation helpers
       conda activate funannotate_env  # for Funannotate
 
