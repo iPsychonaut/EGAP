@@ -9,7 +9,7 @@
 # plus Augustus and related runtime dependencies.
 # =============================================================================
 
-FROM condaforge/mambaforge AS build
+FROM condaforge/miniforge3 AS build
 
 LABEL maintainer="Ian Bollinger <ian.bollinger@entheome.org>" \
       version="3.4.2" \
@@ -50,6 +50,7 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     biopython \
     ragtag \
     'nanoplot=1.46.2' \
+    'python-kaleido>=0.1,<0.3' \
     termcolor \
     minimap2 \
     bwa-mem2 \
@@ -91,7 +92,8 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     'numba>=0.56' \
     tqdm \
     joblib \
-    'kraken2=2.1.6'
+    'kraken2=2.1.6' \
+    pigz
 
 # Download required resources for quast
 RUN conda run -n EGAP_env quast-download-gridss && \
@@ -147,9 +149,13 @@ RUN apt-get update && apt-get install -y wget && \
         qc_assessment.py \
         html_reporter.py \
         process_metadata.py \
-        final_compress.py; \
+        final_compress.py \
+        estimate_runtime.py \
+        monitor_assembly.py \
+        preflight_checks.py \
+        record_provenance.py; \
     do \
-        wget -O "/EGAP_env/bin/${SCRIPT}" "${EGAP_RAW}/bin/${SCRIPT}"; \
+        wget -O "/EGAP_env/bin/${SCRIPT}" "${EGAP_RAW}/bin/${SCRIPT}" || exit 1; \
     done && \
     chmod +x /EGAP_env/bin/*.py && \
     rm -rf /var/lib/apt/lists/*
@@ -215,7 +221,7 @@ SHELL ["conda", "run", "-n", "funannotate_env", "/bin/bash", "-c"]
 RUN python -m pip install git+https://github.com/nextgenusfs/funannotate.git
 
 # Package funannotate_env with conda-pack
-RUN conda-pack --ignore-missing-files -n EGEP_env -o /tmp/funannotate_env.tar && \
+RUN conda-pack --ignore-missing-files -n funannotate_env -o /tmp/funannotate_env.tar && \
     mkdir /funannotate_env && cd /funannotate_env && tar xf /tmp/funannotate_env.tar && \
     rm /tmp/funannotate_env.tar && \
     /funannotate_env/bin/conda-unpack
@@ -225,9 +231,9 @@ RUN conda-pack --ignore-missing-files -n EGEP_env -o /tmp/funannotate_env.tar &&
 ###############################################################################
 
 # Build runtime image
-FROM debian:buster AS runtime
+FROM debian:bookworm AS runtime
 
-# Copy BOTH conda envs from the build stage
+# Copy all three conda envs from the build stage
 COPY --from=build /EGAP_env /EGAP_env
 COPY --from=build /EGEP_env /EGEP_env
 COPY --from=build /funannotate_env /funannotate_env
