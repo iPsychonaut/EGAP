@@ -1,0 +1,29 @@
+# New variant for the A/B run: the old image, plus FASTB, plus the EGAP
+# scripts that call it, taken from this checkout.
+#
+# Build from the repo root. Contexts are named so the repo folder (150 GB of
+# run output, no .dockerignore) is never sent to Docker:
+#
+#   docker build -f tests/ab/Dockerfile.fastb \
+#       --build-context egap=bin --build-context fastb=../FASTB \
+#       -t localhost:5050/egap:fastb tests/ab
+#   docker push localhost:5050/egap:fastb
+ARG BASE=localhost:5050/egap:old
+FROM ${BASE}
+
+# fastb needs Python >= 3.9 and EGAP_env is 3.8. EGAP only calls the fastb
+# executable, so fastb gets its own venv on Debian's Python. /usr/bin/python3
+# is spelled out because the conda envs come first on PATH.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3-venv python3-numpy && \
+    /usr/bin/python3 -m venv --system-site-packages /opt/fastb && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=fastb pyproject.toml README.md /tmp/fastb/
+COPY --from=fastb fastb /tmp/fastb/fastb
+RUN /opt/fastb/bin/pip install --no-cache-dir --no-deps /tmp/fastb && \
+    ln -s /opt/fastb/bin/fastb /usr/local/bin/fastb && \
+    rm -rf /tmp/fastb && \
+    fastb --version
+
+COPY --from=egap file_operations.py utilities.py qc_assessment.py /EGAP_env/bin/
