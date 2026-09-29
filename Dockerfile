@@ -120,7 +120,7 @@ RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
 # Download EGAP v3.4.2 scripts from GitHub into the EGAP_env.
 # Install wget (if not already available) to retrieve the files.
 RUN apt-get update && apt-get install -y wget && \
-    EGAP_BRANCH="v3.4.2" && \
+    EGAP_BRANCH="chore/tiara-entheome-3.4.2" && \
     EGAP_RAW="https://raw.githubusercontent.com/iPsychonaut/EGAP/${EGAP_BRANCH}" && \
     wget -O /EGAP_env/EGAP.py "${EGAP_RAW}/EGAP.py" && \
     chmod +x /EGAP_env/EGAP.py && \
