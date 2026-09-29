@@ -6,7 +6,8 @@ file_operations.py
 Filesystem, path, and FASTA/FASTQ I/O helpers for EGAP modules.
 
 Extracted from :mod:`utilities` in v3.4.1.  Hosts path-normalisation,
-FASTA validation, parallel gzip wrappers (``pigz``), MD5 verification,
+FASTA validation, compression wrappers (``pigz``, and ``fastb`` for
+nucleotide FASTA when it is installed), MD5 verification,
 base-count tallies, coverage calculation, and a small move helper.
 
 Depends on :mod:`subprocess_runner` (``run_subprocess_cmd`` for the ``pigz`` wrappers).
@@ -18,13 +19,15 @@ Stage:
 
 Created on Wed Aug 16 2023
 
-Updated on 2026-05-24
+Updated on 2026-09-29
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import hashlib
+import itertools
 import os
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import List
@@ -141,10 +144,58 @@ def validate_fasta(file_path):
 
 
 # --------------------------------------------------------------
-# Compress a file using pigz
+# FASTB round-trip check
+# --------------------------------------------------------------
+_FASTA_EXTS = (".fasta", ".fa", ".fna")
+
+
+def _fasta_records(lines):
+    """Yield ``(header, sequence)`` byte pairs from FASTA lines, ignoring line wrapping."""
+    header, parts = None, []
+    for line in lines:
+        line = line.rstrip(b"\r\n")
+        if line.startswith(b">"):
+            if header is not None:
+                yield header, b"".join(parts)
+            header, parts = line, []
+        elif line and header is None:
+            yield b"", line  # text before the first header: never matches a decoded record
+        elif line:
+            parts.append(line)
+    if header is not None:
+        yield header, b"".join(parts)
+
+
+def _fastb_matches(fasta_file, fastb_file):
+    """Return True when *fastb_file* decodes to the headers and sequences of *fasta_file*.
+
+    FASTB keeps only the first word of a header and rejects protein, so the
+    original is compared record by record before anyone deletes it.
+    """
+    proc = subprocess.Popen(["fastb", "cat", "-w", "0", fastb_file],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    records = 0
+    same = True
+    with open(fasta_file, "rb") as original:
+        for a, b in itertools.zip_longest(_fasta_records(original), _fasta_records(proc.stdout)):
+            if a != b:
+                same = False
+                break
+            records += 1
+    proc.stdout.close()
+    return proc.wait() == 0 and same and records > 0
+
+
+# --------------------------------------------------------------
+# Compress a file using FASTB (nucleotide FASTA) or pigz
 # --------------------------------------------------------------
 def pigz_compress(input_file, cpu_threads):
-    """Compress a file using pigz with multiple threads.
+    """Compress a file with FASTB when possible, otherwise with pigz.
+
+    A ``.fasta`` / ``.fa`` / ``.fna`` file is encoded to ``<input_file>.fastb``
+    when the ``fastb`` executable is on PATH and the encoded file decodes back
+    to the same records.  Everything else (FASTQ, protein FASTA, FASTA headers
+    carrying a description, no ``fastb`` installed) is compressed with pigz.
 
     Parameters
     ----------
@@ -156,8 +207,17 @@ def pigz_compress(input_file, cpu_threads):
     Returns
     -------
     str
-        Path to the compressed ``.gz`` file.
+        Path to the compressed ``.fastb`` or ``.gz`` file.
     """
+    if input_file.endswith(_FASTA_EXTS) and shutil.which("fastb"):
+        fastb_file = input_file + ".fastb"
+        rc = run_subprocess_cmd(["fastb", "encode", input_file, "-o", fastb_file], shell_check=False)
+        if rc == 0 and _fastb_matches(input_file, fastb_file):
+            os.remove(input_file)
+            return fastb_file
+        print(f"NOTE:\tFASTB is not lossless for {input_file}; using pigz")
+        if os.path.exists(fastb_file):
+            os.remove(fastb_file)
     pigz_cmd = f"pigz -p {cpu_threads} {input_file}"
     _ = run_subprocess_cmd(pigz_cmd, shell_check=True)
     gzip_file = input_file + ".gz"
@@ -168,24 +228,58 @@ def pigz_compress(input_file, cpu_threads):
 # Decompress a file using pigz
 # --------------------------------------------------------------
 def pigz_decompress(input_file, cpu_threads):
-    """Decompress a file using pigz with multiple threads.
+    """Decompress a ``.gz`` file with pigz, or decode a ``.fastb`` file with FASTB.
 
     Parameters
     ----------
     input_file : str
-        Path to the ``.gz`` file to decompress.
+        Path to the ``.gz`` or ``.fastb`` file to decompress.
     cpu_threads : int
         Number of threads to use for decompression.
 
     Returns
     -------
     str
-        Path to the decompressed file (with ``.gz`` extension removed).
+        Path to the decompressed file (with the ``.gz`` / ``.fastb``
+        extension removed).
     """
+    if input_file.endswith(".fastb"):
+        fasta_file = input_file[:-len(".fastb")]
+        rc = run_subprocess_cmd(["fastb", "decode", input_file, "-o", fasta_file], shell_check=False)
+        if rc == 0:
+            os.remove(input_file)  # same as pigz -d: the compressed copy goes away
+        return fasta_file
     pigz_cmd = f"pigz -p {cpu_threads} -d -f {input_file}"
     _ = run_subprocess_cmd(pigz_cmd, shell_check=True)
     unzip_file = input_file.replace(".gz", "")
     return unzip_file
+
+
+# --------------------------------------------------------------
+# Bring back a file that an earlier run compressed
+# --------------------------------------------------------------
+def restore_if_compressed(path, cpu_threads):
+    """Decompress ``path + '.gz'`` or ``path + '.fastb'`` when *path* itself is missing.
+
+    Parameters
+    ----------
+    path : str
+        Path to the uncompressed file a caller is about to read.
+    cpu_threads : int
+        Number of threads to use for decompression.
+
+    Returns
+    -------
+    str
+        *path*, unchanged.  Callers still check that it exists.
+    """
+    if not os.path.exists(path):
+        for ext in (".gz", ".fastb"):
+            if os.path.exists(path + ext):
+                print(f"INFO:\tDecompressing {path}{ext} ...")
+                pigz_decompress(path + ext, cpu_threads)
+                break
+    return path
 
 
 # --------------------------------------------------------------
@@ -221,10 +315,10 @@ def sum_fastq_bases_with_pigz_safe(fq_path: Path, cpu_threads: int) -> int:
 # --------------------------------------------------------------
 def sum_fasta_bases_with_pigz_safe(fa_path: Path, cpu_threads: int) -> int:
     """
-    Same safety pattern for FASTA/FA files that may be .gz.
+    Same safety pattern for FASTA/FA files that may be .gz or .fastb.
     """
     total = 0
-    if str(fa_path).endswith(".gz"):
+    if str(fa_path).endswith((".gz", ".fastb")):
         with tempfile.TemporaryDirectory(prefix="egap_pigz_") as tdir:
             tmp_gz = Path(tdir) / fa_path.name
             shutil.copy2(str(fa_path), str(tmp_gz))
