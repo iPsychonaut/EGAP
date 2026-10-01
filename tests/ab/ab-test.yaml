@@ -8,10 +8,20 @@
 # egap-old and egap-new always run one pod each (7 CPU + 24Gi apiece on a
 # 16-thread / 55 GB host). A failed sample does not stop the other samples.
 #
-# After EGAP succeeds, each pod runs final_compress.py on the sample folder
-# (the pipeline itself never calls it) and prints one COMPRESS_SUMMARY line:
-# old = pigz on every .fasta/.fastq, new = FASTB on nucleotide FASTA, pigz on
-# the rest. The line is also saved as out/<variant>/<sample>_compress_summary.txt.
+# After EGAP succeeds, each pod times final_compress.py on the sample folder and
+# prints one COMPRESS_SUMMARY line: old = pigz on every .fasta/.fastq, new =
+# FASTB on nucleotide FASTA, pigz on the rest. The line is also saved as
+# out/<variant>/<sample>_compress_summary.txt.
+#
+# EGAP runs final_compress itself once the image carries the merged EGAP.py
+# (the old image fetches it from the branch at build time). So each pod first
+# undoes any .fasta/.fastq compression in the sample folder, then times the
+# step alone. On an image built before the merge the undo only touches the two
+# Tiara FASTAs, which EGAP has always compressed.
+#
+# The variants differ by image (new has the fastb executable and this
+# checkout's bin/ scripts) and by EGAP_INTERMEDIATE_FORMAT=fastb on the new Job.
+# Rebuild egap:old after the merge so both variants run the same EGAP code.
 #
 # Before applying:
 #   copy resources\EGAP_test.tsv  ->  %USERPROFILE%\egap-ab\input\
@@ -40,6 +50,7 @@ spec:
       containers:
         - name: egap
           image: egap-registry:5050/egap:old
+          imagePullPolicy: Always        # tag is rebuilt in place; never trust the node's cached copy
           command: ["bash", "-c"]
           args:
             - |
@@ -49,7 +60,12 @@ spec:
               awk -F'\t' -v s="$sample" 'NR==1 || $2==s' /data/input/EGAP_test.tsv > /tmp/sample.tsv
               [ "$(wc -l < /tmp/sample.tsv)" -eq 2 ] || { echo "sample $sample not found in EGAP_test.tsv" >&2; exit 1; }
               /EGAP_env/bin/EGAP --input_tsv /tmp/sample.tsv --output_dir /data/out --cpu_threads 7 --ram_gb 24
+              # EGAP exits 0 even when a sample fails; its log is the only truth
+              grep -q "PASS:.Sample $sample completed successfully" "/data/out/${sample}_log.txt" || { echo "EGAP did not pass $sample" >&2; exit 1; }
               dir="/data/out/$(awk -F'\t' 'NR==2 {print $1}' /tmp/sample.tsv)/$sample"
+              # undo compression EGAP already did here, so the step below is timed on its own
+              find "$dir" -type f \( -name '*.fasta.gz' -o -name '*.fastq.gz' \) -exec pigz -d -p 7 {} +
+              find "$dir" -type f -name '*.fastb' -exec sh -c 'fastb decode "$1" -o "${1%.fastb}" && rm "$1"' _ {} \;
               before=$(du -sb "$dir" | cut -f1)
               start=$(date +%s%N)
               python /EGAP_env/bin/final_compress.py "$sample" /tmp/sample.tsv /data/out 7 24
@@ -82,6 +98,9 @@ spec:
       containers:
         - name: egap
           image: egap-registry:5050/egap:fastb
+          imagePullPolicy: Always
+          env:
+            - {name: EGAP_INTERMEDIATE_FORMAT, value: fastb}   # default is pigz; stages and final_compress read this
           command: ["bash", "-c"]
           args:
             - |
@@ -91,7 +110,12 @@ spec:
               awk -F'\t' -v s="$sample" 'NR==1 || $2==s' /data/input/EGAP_test.tsv > /tmp/sample.tsv
               [ "$(wc -l < /tmp/sample.tsv)" -eq 2 ] || { echo "sample $sample not found in EGAP_test.tsv" >&2; exit 1; }
               /EGAP_env/bin/EGAP --input_tsv /tmp/sample.tsv --output_dir /data/out --cpu_threads 7 --ram_gb 24
+              # EGAP exits 0 even when a sample fails; its log is the only truth
+              grep -q "PASS:.Sample $sample completed successfully" "/data/out/${sample}_log.txt" || { echo "EGAP did not pass $sample" >&2; exit 1; }
               dir="/data/out/$(awk -F'\t' 'NR==2 {print $1}' /tmp/sample.tsv)/$sample"
+              # undo compression EGAP already did here, so the step below is timed on its own
+              find "$dir" -type f \( -name '*.fasta.gz' -o -name '*.fastq.gz' \) -exec pigz -d -p 7 {} +
+              find "$dir" -type f -name '*.fastb' -exec sh -c 'fastb decode "$1" -o "${1%.fastb}" && rm "$1"' _ {} \;
               before=$(du -sb "$dir" | cut -f1)
               start=$(date +%s%N)
               python /EGAP_env/bin/final_compress.py "$sample" /tmp/sample.tsv /data/out 7 24
