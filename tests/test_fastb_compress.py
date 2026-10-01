@@ -1,4 +1,4 @@
-"""bin/file_operations.py: FASTB for nucleotide FASTA, pigz for everything else."""
+"""bin/file_operations.py: INTERMEDIATE_FORMAT dispatch, FASTB round-trip, pigz fallback."""
 import os
 import shutil
 
@@ -18,16 +18,37 @@ def _write(path, text):
     return str(path)
 
 
-def test_bare_headers_use_fastb_and_round_trip(tmp_path):
+@pytest.fixture()
+def fmt(monkeypatch, request):
+    monkeypatch.setenv("EGAP_INTERMEDIATE_FORMAT", request.param)
+    return request.param
+
+
+def test_default_format_is_pigz(monkeypatch):
+    monkeypatch.delenv("EGAP_INTERMEDIATE_FORMAT", raising=False)
+    assert fo.intermediate_format() == "pigz"
+    monkeypatch.setenv("EGAP_INTERMEDIATE_FORMAT", "bogus")
+    with pytest.raises(ValueError):
+        fo.intermediate_format()
+
+
+@pytest.mark.parametrize("fmt", ["pigz", "fastb"], indirect=True)
+def test_compress_intermediate_follows_setting(tmp_path, fmt):
     fasta = _write(tmp_path / "asm.fasta", BARE)
-    out = fo.pigz_compress(fasta, 1)
-    assert out == fasta + ".fastb"
+    out = fo.compress_intermediate(fasta, 1)
+    assert out == fasta + (".fastb" if fmt == "fastb" else ".gz")
     assert os.path.exists(out) and not os.path.exists(fasta)
 
-    assert fo.pigz_decompress(out, 1) == fasta
-    assert not os.path.exists(out)
+    assert fo.decompress_intermediate(out, 2) == fasta
+    assert os.path.exists(fasta) and not os.path.exists(out)
     with open(fasta, "rb") as fh:
         assert list(fo._fasta_records(fh)) == list(fo._fasta_records(BARE.encode().splitlines()))
+
+
+@pytest.mark.parametrize("fmt", ["fastb"], indirect=True)
+def test_fastq_always_uses_pigz(tmp_path, fmt):
+    fastq = _write(tmp_path / "r.fastq", "@r1\nACGT\n+\nIIII\n")
+    assert fo.compress_intermediate(fastq, 1) == fastq + ".gz"
 
 
 @pytest.mark.parametrize("text", [
@@ -37,28 +58,23 @@ def test_bare_headers_use_fastb_and_round_trip(tmp_path):
 ])
 def test_lossy_or_rejected_input_falls_back_to_pigz(tmp_path, text):
     fasta = _write(tmp_path / "x.fasta", text)
-    out = fo.pigz_compress(fasta, 1)
+    out = fo.fastb_compress(fasta, 1)
     assert out == fasta + ".gz"
     assert os.path.exists(out) and not os.path.exists(fasta + ".fastb")
     assert fo.pigz_decompress(out, 1) == fasta
     assert open(fasta).read() == text
 
 
-def test_fastq_and_missing_fastb_use_pigz(tmp_path, monkeypatch):
-    fastq = _write(tmp_path / "r.fastq", "@r1\nACGT\n+\nIIII\n")
-    assert fo.pigz_compress(fastq, 1) == fastq + ".gz"
-
+def test_missing_fastb_executable_falls_back_to_pigz(tmp_path, monkeypatch):
     monkeypatch.setattr(fo.shutil, "which", lambda name: None)
     fasta = _write(tmp_path / "asm.fasta", BARE)
-    assert fo.pigz_compress(fasta, 1) == fasta + ".gz"
+    assert fo.fastb_compress(fasta, 1) == fasta + ".gz"
 
 
 @pytest.mark.parametrize("ext", [".gz", ".fastb"])
-def test_restore_if_compressed(tmp_path, ext, monkeypatch):
+def test_restore_if_compressed(tmp_path, ext):
     fasta = _write(tmp_path / "asm.fasta", BARE)
-    if ext == ".gz":
-        monkeypatch.setattr(fo.shutil, "which", lambda name: None)
-    assert fo.pigz_compress(fasta, 1) == fasta + ext
-    monkeypatch.undo()
+    fn = fo.fastb_compress if ext == ".fastb" else fo.pigz_compress
+    assert fn(fasta, 1) == fasta + ext
     assert fo.restore_if_compressed(fasta, 1) == fasta
     assert os.path.exists(fasta) and not os.path.exists(fasta + ext)

@@ -6,7 +6,8 @@ file_operations.py
 Filesystem, path, and FASTA/FASTQ I/O helpers for EGAP modules.
 
 Extracted from :mod:`utilities` in v3.4.1.  Hosts path-normalisation,
-FASTA validation, compression wrappers (``pigz``, and ``fastb`` for
+FASTA validation, compression wrappers (``pigz``, ``fastb``, and the
+``INTERMEDIATE_FORMAT`` dispatcher for
 nucleotide FASTA when it is installed), MD5 verification,
 base-count tallies, coverage calculation, and a small move helper.
 
@@ -187,15 +188,28 @@ def _fastb_matches(fasta_file, fastb_file):
 
 
 # --------------------------------------------------------------
-# Compress a file using FASTB (nucleotide FASTA) or pigz
+# Intermediate format setting
+# --------------------------------------------------------------
+INTERMEDIATE_FORMATS = ("pigz", "fastb")
+
+
+def intermediate_format():
+    """Return the configured intermediate format: ``pigz`` (default) or ``fastb``.
+
+    Read from ``EGAP_INTERMEDIATE_FORMAT``; EGAP.py sets that variable from
+    its ``--intermediate_format`` flag so every stage subprocess sees it.
+    """
+    fmt = os.environ.get("EGAP_INTERMEDIATE_FORMAT", "pigz").strip().lower() or "pigz"
+    if fmt not in INTERMEDIATE_FORMATS:
+        raise ValueError(f"EGAP_INTERMEDIATE_FORMAT must be one of {INTERMEDIATE_FORMATS}, got {fmt!r}")
+    return fmt
+
+
+# --------------------------------------------------------------
+# Compress a file using pigz
 # --------------------------------------------------------------
 def pigz_compress(input_file, cpu_threads):
-    """Compress a file with FASTB when possible, otherwise with pigz.
-
-    A ``.fasta`` / ``.fa`` / ``.fna`` file is encoded to ``<input_file>.fastb``
-    when the ``fastb`` executable is on PATH and the encoded file decodes back
-    to the same records.  Everything else (FASTQ, protein FASTA, FASTA headers
-    carrying a description, no ``fastb`` installed) is compressed with pigz.
+    """Compress a file using pigz with multiple threads.
 
     Parameters
     ----------
@@ -207,17 +221,8 @@ def pigz_compress(input_file, cpu_threads):
     Returns
     -------
     str
-        Path to the compressed ``.fastb`` or ``.gz`` file.
+        Path to the compressed ``.gz`` file.
     """
-    if input_file.endswith(_FASTA_EXTS) and shutil.which("fastb"):
-        fastb_file = input_file + ".fastb"
-        rc = run_subprocess_cmd(["fastb", "encode", input_file, "-o", fastb_file], shell_check=False)
-        if rc == 0 and _fastb_matches(input_file, fastb_file):
-            os.remove(input_file)
-            return fastb_file
-        print(f"NOTE:\tFASTB is not lossless for {input_file}; using pigz")
-        if os.path.exists(fastb_file):
-            os.remove(fastb_file)
     pigz_cmd = f"pigz -p {cpu_threads} {input_file}"
     _ = run_subprocess_cmd(pigz_cmd, shell_check=True)
     gzip_file = input_file + ".gz"
@@ -228,31 +233,108 @@ def pigz_compress(input_file, cpu_threads):
 # Decompress a file using pigz
 # --------------------------------------------------------------
 def pigz_decompress(input_file, cpu_threads):
-    """Decompress a ``.gz`` file with pigz, or decode a ``.fastb`` file with FASTB.
+    """Decompress a ``.gz`` file with pigz.
 
     Parameters
     ----------
     input_file : str
-        Path to the ``.gz`` or ``.fastb`` file to decompress.
+        Path to the ``.gz`` file to decompress.
     cpu_threads : int
         Number of threads to use for decompression.
 
     Returns
     -------
     str
-        Path to the decompressed file (with the ``.gz`` / ``.fastb``
-        extension removed).
+        Path to the decompressed file (with the ``.gz`` extension removed).
     """
-    if input_file.endswith(".fastb"):
-        fasta_file = input_file[:-len(".fastb")]
-        rc = run_subprocess_cmd(["fastb", "decode", input_file, "-o", fasta_file], shell_check=False)
-        if rc == 0:
-            os.remove(input_file)  # same as pigz -d: the compressed copy goes away
-        return fasta_file
     pigz_cmd = f"pigz -p {cpu_threads} -d -f {input_file}"
     _ = run_subprocess_cmd(pigz_cmd, shell_check=True)
-    unzip_file = input_file.replace(".gz", "")
+    unzip_file = input_file[:-3] if input_file.endswith(".gz") else input_file
     return unzip_file
+
+
+# --------------------------------------------------------------
+# Compress a nucleotide FASTA using FASTB
+# --------------------------------------------------------------
+def fastb_compress(input_file, cpu_threads):
+    """Encode a nucleotide FASTA to ``<input_file>.fastb``; fall back to pigz.
+
+    Same signature as :func:`pigz_compress`. The encoded file is decoded and
+    compared record by record before the FASTA is deleted. FASTB keeps only
+    the first word of each header and rejects protein, so anything that does
+    not round-trip (or a missing ``fastb`` executable) goes to pigz instead.
+
+    Parameters
+    ----------
+    input_file : str
+        Path to the FASTA file to compress.
+    cpu_threads : int
+        Threads for the pigz fallback (the FASTB encoder is single-threaded).
+
+    Returns
+    -------
+    str
+        Path to the ``.fastb`` file, or the ``.gz`` file on fallback.
+    """
+    if input_file.endswith(_FASTA_EXTS) and shutil.which("fastb"):
+        fastb_file = input_file + ".fastb"
+        rc = run_subprocess_cmd(["fastb", "encode", input_file, "-o", fastb_file], shell_check=False)
+        if rc == 0 and _fastb_matches(input_file, fastb_file):
+            os.remove(input_file)
+            return fastb_file
+        print(f"NOTE:\tFASTB is not lossless for {input_file}; using pigz")
+        if os.path.exists(fastb_file):
+            os.remove(fastb_file)
+    elif input_file.endswith(_FASTA_EXTS):
+        print("WARN:\tfastb executable not found on PATH; using pigz")
+    return pigz_compress(input_file, cpu_threads)
+
+
+# --------------------------------------------------------------
+# Decompress a FASTB file back to FASTA
+# --------------------------------------------------------------
+def fastb_decompress(input_file, cpu_threads):
+    """Decode a ``.fastb`` file to FASTA and remove it, like ``pigz -d``.
+
+    Parameters
+    ----------
+    input_file : str
+        Path to the ``.fastb`` file.
+    cpu_threads : int
+        Worker processes for ``fastb decode -p``.
+
+    Returns
+    -------
+    str
+        Path to the decoded FASTA (``.fastb`` extension removed).
+    """
+    fasta_file = input_file[:-len(".fastb")] if input_file.endswith(".fastb") else input_file + ".fasta"
+    rc = run_subprocess_cmd(["fastb", "decode", input_file, "-o", fasta_file,
+                             "-p", str(max(1, int(cpu_threads)))], shell_check=False)
+    if rc == 0:
+        os.remove(input_file)
+    return fasta_file
+
+
+# --------------------------------------------------------------
+# Dispatch on the intermediate format setting
+# --------------------------------------------------------------
+def compress_intermediate(input_file, cpu_threads):
+    """Compress an intermediate file according to ``INTERMEDIATE_FORMAT``.
+
+    Nucleotide FASTA goes to FASTB when the setting is ``fastb``. FASTQ and
+    every other file always go to pigz (FASTB has no quality scores).
+    """
+    if input_file.endswith(_FASTA_EXTS) and intermediate_format() == "fastb":
+        return fastb_compress(input_file, cpu_threads)
+    return pigz_compress(input_file, cpu_threads)
+
+
+def decompress_intermediate(input_file, cpu_threads):
+    """Decompress ``.gz`` with pigz or ``.fastb`` with FASTB, by extension."""
+    if input_file.endswith(".fastb"):
+        return fastb_decompress(input_file, cpu_threads)
+    return pigz_decompress(input_file, cpu_threads)
 
 
 # --------------------------------------------------------------
@@ -277,7 +359,7 @@ def restore_if_compressed(path, cpu_threads):
         for ext in (".gz", ".fastb"):
             if os.path.exists(path + ext):
                 print(f"INFO:\tDecompressing {path}{ext} ...")
-                pigz_decompress(path + ext, cpu_threads)
+                decompress_intermediate(path + ext, cpu_threads)
                 break
     return path
 

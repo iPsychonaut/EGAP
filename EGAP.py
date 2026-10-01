@@ -212,6 +212,10 @@ KRAKEN2_SETTINGS = {
     "missing db behaviour": "WARN and skip (non-fatal)",
 }
 
+COMPRESSION_SETTINGS = {
+    "INTERMEDIATE_FORMAT": "pigz",   # pigz | fastb; nucleotide FASTA intermediates only, FASTQ stays on pigz
+}
+
 TIARA_SETTINGS = {
     "stage": "post-assembly (contigs)",
     "targets": "final curated assembly",
@@ -235,6 +239,10 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output
             "CPU threads": str(cpu_threads),
             "input tsv": str(input_tsv),
             "output to": str(output_dir),
+        },
+        "compression settings": {
+            "INTERMEDIATE_FORMAT": os.environ.get("EGAP_INTERMEDIATE_FORMAT",
+                                                  COMPRESSION_SETTINGS["INTERMEDIATE_FORMAT"]),
         },
         "trimmomatic settings": TRIMMOMATIC_SETTINGS,
         "bbduk settings": BBDUK_SETTINGS,
@@ -495,6 +503,12 @@ if __name__ == "__main__":
     parser.add_argument("--dry_run", action="store_true", default=False,
                         help="Log file-management actions (removals/compressions) "
                              "without executing them. Equivalent to EGAP_DRY_RUN=1.")
+    parser.add_argument("--intermediate_format", choices=("pigz", "fastb"),
+                        default=os.environ.get("EGAP_INTERMEDIATE_FORMAT",
+                                               COMPRESSION_SETTINGS["INTERMEDIATE_FORMAT"]),
+                        help="Format for nucleotide FASTA intermediates: pigz (default) "
+                             "or fastb. FASTQ always uses pigz. Equivalent to "
+                             "EGAP_INTERMEDIATE_FORMAT=<value>.")
     parser.add_argument("--tui", action="store_true", default=False,
                         help="Run the pipeline through the interactive TUI instead of "
                              "plain terminal output.")
@@ -517,6 +531,7 @@ if __name__ == "__main__":
 
     if args.dry_run:
         os.environ["EGAP_DRY_RUN"] = "1"
+    os.environ["EGAP_INTERMEDIATE_FORMAT"] = args.intermediate_format  # inherited by stage subprocesses
     dry_run = args.dry_run
     current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -845,6 +860,9 @@ if __name__ == "__main__":
     reporter_script = bin_dir / "html_reporter.py"
     if not reporter_script.exists():
         raise FileNotFoundError(f"Missing Reporter script: {reporter_script}")
+    compress_script = bin_dir / "final_compress.py"
+    if not compress_script.exists():
+        raise FileNotFoundError(f"Missing compress script: {compress_script}")
 
     # Process each sample fully — pipeline steps, then QC, then HTML — before
     # moving on to the next sample.
@@ -929,6 +947,26 @@ if __name__ == "__main__":
         if reporter_return_code != 0:
             print(f"\nWARN:\thtml_reporter returned non-zero for {sample_id} (rc={reporter_return_code})")
             sample_step_failed = True
+
+        # ---- Final compression (after QC and report have read the FASTA files) ----
+        # Compresses every .fasta/.fastq left under the sample directory using
+        # INTERMEDIATE_FORMAT. Skipped when a step failed, so a broken run
+        # keeps its files as they were for inspection.
+        if sample_step_failed:
+            print(f"\nSKIP:\tfinal_compress for {sample_id}: an earlier step failed.")
+        elif dry_run:
+            print(f"\nDRY-RUN:\tWould run final_compress for {sample_id}.")
+        else:
+            compress_cmd = [sys.executable,
+                            str(compress_script),
+                            sample_id,
+                            input_tsv,
+                            output_dir,
+                            str(cpu_threads),
+                            str(ram_gb)]
+            print(f"\n→ Running final_compress: {' '.join(compress_cmd)}\n")
+            if run_filtered(compress_cmd) != 0:
+                print(f"\nWARN:\tfinal_compress returned non-zero for {sample_id}; files left uncompressed.")
 
         if sample_step_failed:
             print(f"\nFAIL:\tSample {sample_id} completed with errors. Continuing to next sample.")
