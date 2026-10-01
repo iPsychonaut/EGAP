@@ -853,6 +853,9 @@ if __name__ == "__main__":
     reporter_script = bin_dir / "html_reporter.py"
     if not reporter_script.exists():
         raise FileNotFoundError(f"Missing Reporter script: {reporter_script}")
+    compress_script = bin_dir / "final_compress.py"
+    if not compress_script.exists():
+        raise FileNotFoundError(f"Missing compress script: {compress_script}")
 
     # Process each sample fully — pipeline steps, then QC, then HTML — before
     # moving on to the next sample.
@@ -937,6 +940,26 @@ if __name__ == "__main__":
         if reporter_return_code != 0:
             print(f"\nWARN:\thtml_reporter returned non-zero for {sample_id} (rc={reporter_return_code})")
             sample_step_failed = True
+
+        # ---- Final compression (after QC and report have read the FASTA files) ----
+        # Compresses every .fasta/.fastq left under the sample directory using
+        # INTERMEDIATE_FORMAT. Skipped when a step failed, so a broken run
+        # keeps its files as they were for inspection.
+        if sample_step_failed:
+            print(f"\nSKIP:\tfinal_compress for {sample_id}: an earlier step failed.")
+        elif dry_run:
+            print(f"\nDRY-RUN:\tWould run final_compress for {sample_id}.")
+        else:
+            compress_cmd = [sys.executable,
+                            str(compress_script),
+                            sample_id,
+                            input_tsv,
+                            output_dir,
+                            str(cpu_threads),
+                            str(ram_gb)]
+            print(f"\n→ Running final_compress: {' '.join(compress_cmd)}\n")
+            if run_filtered(compress_cmd) != 0:
+                print(f"\nWARN:\tfinal_compress returned non-zero for {sample_id}; files left uncompressed.")
 
         if sample_step_failed:
             print(f"\nFAIL:\tSample {sample_id} completed with errors. Continuing to next sample.")

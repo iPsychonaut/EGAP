@@ -75,12 +75,12 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 if __name__ == "__main__":
     # Handle command-line arguments
     if len(sys.argv) != 6:
-        print("Usage: python3 final_compress.py <input_tsv> "
-              "<sample_id> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+        print("Usage: python3 final_compress.py <sample_id> "
+              "<input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    final_compress(sys.argv[1],       # input_tsv
-                   sys.argv[2],       # sample_id
+    final_compress(sys.argv[1],       # sample_id
+                   sys.argv[2],       # input_tsv
                    sys.argv[3],       # output_dir
                    str(sys.argv[4]),  # cpu_threads
                    str(sys.argv[5]))  # ram_gb
