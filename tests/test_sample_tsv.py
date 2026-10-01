@@ -37,6 +37,30 @@ def test_literal_none_placeholder_treated_as_blank(sample_tsv_factory):
     assert pd.isna(row["BUSCO_1"])
 
 
+def test_local_fna_ref_seq_is_normalized_to_fasta(sample_tsv_factory, tmp_path):
+    """A local .fna REF_SEQ reaches stages as the canonical RefSeq .fasta copy."""
+    import preprocess_refseq
+
+    fna = tmp_path / "GCA_000005845.2.fna"
+    fna.write_text(">chr\nACGT\n")
+    out = tmp_path / "out"
+    tsv = sample_tsv_factory(SPECIES_ID="Sp", SAMPLE_ID="Sp-1", BUSCO="a,b", REF_SEQ=str(fna))
+
+    # Before preprocess_refseq runs there is no copy, so the raw path is kept.
+    assert sample_tsv.load_sample_context("Sp-1", tsv, out, 1, 1).current_series["REF_SEQ"] == str(fna)
+
+    placed = preprocess_refseq.preprocess_refseq("Sp-1", str(tsv), str(out), 1, 1)
+    canonical = out / "Sp" / "RefSeq" / "Sp_RefSeq.fasta"
+    assert canonical.read_text() == ">chr\nACGT\n"
+    assert placed == str(canonical.resolve())
+
+    ref_seq = sample_tsv.load_sample_context("Sp-1", tsv, out, 1, 1).current_series["REF_SEQ"]
+    assert ref_seq.endswith("_RefSeq.fasta") and canonical.samefile(ref_seq)
+
+    # Re-running preprocess_refseq still sees the raw source, not its own copy.
+    assert preprocess_refseq.preprocess_refseq("Sp-1", str(tsv), str(out), 1, 1) == placed
+
+
 def test_get_current_row_data_returns_stats_schema(sample_tsv_factory):
     tsv = sample_tsv_factory(SPECIES_ID="Sp", SAMPLE_ID="Sp-1", BUSCO="a,b",
                              ONT_SRA="SRR000001")

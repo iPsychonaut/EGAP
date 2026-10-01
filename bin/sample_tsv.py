@@ -342,6 +342,20 @@ def load_sample_context(
     input_df = read_sample_table(input_tsv_abs)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
+    # preprocess_refseq copies a local REF_SEQ to <species>/RefSeq/..._RefSeq.fasta
+    # (naming must match preprocess_refseq.place_assembly()). Hand every stage that
+    # copy when the original extension is one tools reject (SPAdes exits 255 on
+    # .fna). ``current_row`` keeps the raw cell, which preprocess_refseq reads.
+    # ponytail: .gz is left alone because place_assembly copies bytes verbatim;
+    # gunzip there if compressed local references need normalizing too.
+    ref_seq = current_series["REF_SEQ"]
+    if isinstance(ref_seq, str) and not ref_seq.lower().endswith((".fasta", ".fa", ".gz")):
+        species_id, gca = current_series["SPECIES_ID"], current_series["REF_SEQ_GCA"]
+        stem = f"{species_id}_{gca}_RefSeq" if pd.notna(gca) else f"{species_id}_RefSeq"
+        canonical = os.path.join(output_dir_abs, str(species_id), "RefSeq", f"{stem}.fasta")
+        if os.path.exists(canonical):
+            current_series = current_series.copy()
+            current_series["REF_SEQ"] = canonical
     return SampleContext(
         sample_id=sample_id,
         input_tsv=input_tsv_abs,

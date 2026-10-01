@@ -21,7 +21,7 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import sys
 import pandas as pd
-from utilities import pigz_compress, get_current_row_data, read_sample_table
+from utilities import pigz_compress, load_sample_context
 
 
 def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
@@ -50,9 +50,8 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     print(f"Compressing all FASTA and FASTQ files for {sample_id}...")
 
     # Read the sample table and filter to the row corresponding to the sample of interest
-    input_df = read_sample_table(input_tsv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     # Identify read paths, reference, and BUSCO lineage info from TSV
     species_id = current_series["SPECIES_ID"]

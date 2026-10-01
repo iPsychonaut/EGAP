@@ -23,7 +23,7 @@ import glob
 import pandas as pd
 from pathlib import Path
 from collections import Counter
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, validate_fasta, read_sample_table
+from utilities import run_subprocess_cmd, load_sample_context, initialize_logging_environment, validate_fasta
 from Bio import SeqIO
 from qc_assessment import run_lineage_eval
 
@@ -223,9 +223,8 @@ def compare_assemblies(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     Returns:
         str: Path to the selected best assembly FASTA (gzipped).
     """
-    input_df = read_sample_table(input_tsv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]

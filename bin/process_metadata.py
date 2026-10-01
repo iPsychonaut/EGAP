@@ -26,7 +26,7 @@ from datetime import datetime
 from pathlib import Path
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
-from utilities import get_current_row_data, calculate_genome_coverage, read_sample_table
+from utilities import load_sample_context, calculate_genome_coverage
 
 
 # ignore only the Data Validation extension warning from openpyxl
@@ -128,9 +128,8 @@ def gen_assembly_metadata_tsv(input_tsv, sample_id, output_dir, templates_dir, c
     print(f"Generating Assembly Metadata TSV entry for {sample_id}...")
 
     # Load the input_tsv into dataframe and collect current sample_id information
-    input_df = read_sample_table(input_tsv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, None)
+    current_series = ctx.current_series
 
     # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -242,9 +241,8 @@ def gen_sra_metadata_xlsx(input_tsv, sample_id, output_dir, templates_dir):
     print("Generating SRA Metadata TSV entry...")
     
     # Load the input_tsv into dataframe and collect current sample_id information
-    input_df = read_sample_table(input_tsv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, None, None)
+    current_series = ctx.current_series
 
     # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -375,9 +373,8 @@ def process_metadata(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
         pointing at the two TSVs generated for the sample.
     """
     # Load input TSV and extract sample data
-    input_df = read_sample_table(input_tsv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     # Extract read paths and metadata from TSV
     species_id = current_series["SPECIES_ID"]
