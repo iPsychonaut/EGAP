@@ -413,7 +413,14 @@ def locate_bin_dir(required_scripts, search_root):
     """
     # We only need to look at folders (not individual files) and see if each
     # proc_name+".py" is present.
+    # Prefer the repo's own bin/ so a stray checkout (e.g. .claude/worktrees/*/bin)
+    # can never shadow it.
+    own_bin = Path(search_root) / "bin"
+    if all((own_bin / f"{proc}.py").is_file() for proc in required_scripts):
+        return own_bin
     for root, subdirs, files in os.walk(search_root):
+        # Prune hidden directories (.git, .claude, ...) in place
+        subdirs[:] = [d for d in subdirs if not d.startswith(".")]
         # root is a str; convert to Path for convenience
         root_path = Path(root)
         # Check if *all* required script filenames appear in `files`

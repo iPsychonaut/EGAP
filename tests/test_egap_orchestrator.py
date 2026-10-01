@@ -68,3 +68,22 @@ def test_find_files_is_an_infinite_loop_on_any_match(tmp_path):
     )
     with pytest.raises(subprocess.TimeoutExpired):
         subprocess.run([sys.executable, "-c", code], timeout=5, capture_output=True)
+
+
+def test_locate_bin_dir_prefers_repo_bin_over_hidden_worktree(egap, tmp_path):
+    scripts = ["a", "b"]
+    for d in (tmp_path / ".claude" / "worktrees" / "x" / "bin", tmp_path / "bin"):
+        d.mkdir(parents=True)
+        for s in scripts:
+            (d / f"{s}.py").touch()
+    assert egap.locate_bin_dir(scripts, tmp_path) == tmp_path / "bin"
+
+
+def test_locate_bin_dir_walk_skips_hidden_dirs(egap, tmp_path):
+    scripts = ["a", "b"]
+    for d in (tmp_path / ".claude" / "worktrees" / "x" / "bin", tmp_path / "src" / "scripts"):
+        d.mkdir(parents=True)
+        for s in scripts:
+            (d / f"{s}.py").touch()
+    assert egap.locate_bin_dir(scripts, tmp_path) == tmp_path / "src" / "scripts"
+    assert egap.locate_bin_dir(scripts, tmp_path / ".claude" / "nope") is None
