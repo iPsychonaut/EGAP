@@ -212,6 +212,10 @@ KRAKEN2_SETTINGS = {
     "missing db behaviour": "WARN and skip (non-fatal)",
 }
 
+COMPRESSION_SETTINGS = {
+    "INTERMEDIATE_FORMAT": "pigz",   # pigz | fastb; nucleotide FASTA intermediates only, FASTQ stays on pigz
+}
+
 TIARA_SETTINGS = {
     "stage": "post-assembly (contigs)",
     "targets": "final curated assembly",
@@ -235,6 +239,10 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output
             "CPU threads": str(cpu_threads),
             "input tsv": str(input_tsv),
             "output to": str(output_dir),
+        },
+        "compression settings": {
+            "INTERMEDIATE_FORMAT": os.environ.get("EGAP_INTERMEDIATE_FORMAT",
+                                                  COMPRESSION_SETTINGS["INTERMEDIATE_FORMAT"]),
         },
         "trimmomatic settings": TRIMMOMATIC_SETTINGS,
         "bbduk settings": BBDUK_SETTINGS,
@@ -488,6 +496,12 @@ if __name__ == "__main__":
     parser.add_argument("--dry_run", action="store_true", default=False,
                         help="Log file-management actions (removals/compressions) "
                              "without executing them. Equivalent to EGAP_DRY_RUN=1.")
+    parser.add_argument("--intermediate_format", choices=("pigz", "fastb"),
+                        default=os.environ.get("EGAP_INTERMEDIATE_FORMAT",
+                                               COMPRESSION_SETTINGS["INTERMEDIATE_FORMAT"]),
+                        help="Format for nucleotide FASTA intermediates: pigz (default) "
+                             "or fastb. FASTQ always uses pigz. Equivalent to "
+                             "EGAP_INTERMEDIATE_FORMAT=<value>.")
     parser.add_argument("--tui", action="store_true", default=False,
                         help="Run the pipeline through the interactive TUI instead of "
                              "plain terminal output.")
@@ -510,6 +524,7 @@ if __name__ == "__main__":
 
     if args.dry_run:
         os.environ["EGAP_DRY_RUN"] = "1"
+    os.environ["EGAP_INTERMEDIATE_FORMAT"] = args.intermediate_format  # inherited by stage subprocesses
     dry_run = args.dry_run
     current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

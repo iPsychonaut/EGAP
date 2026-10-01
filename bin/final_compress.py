@@ -21,7 +21,7 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import sys
 import pandas as pd
-from utilities import pigz_compress, get_current_row_data, read_sample_table
+from utilities import compress_intermediate, get_current_row_data, read_sample_table
 
 
 def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
@@ -67,7 +67,7 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             if file.endswith((".fasta", ".fastq")):
                 full_path = os.path.join(root, file)
                 print(f"Compressing: {full_path}")
-                _ = pigz_compress(full_path, cpu_threads)
+                _ = compress_intermediate(full_path, cpu_threads)
 
     print("PASS:\tAll FASTA and FASTQ successfully compressed!")
             

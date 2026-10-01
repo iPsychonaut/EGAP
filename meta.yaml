@@ -78,6 +78,7 @@ requirements:
     - textual >=0.4.2
     - kraken2 >=2.1.6
     - pigz >=2.8
+    - fastb >=3.0.0
 
 test:
   requires:
