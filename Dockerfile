@@ -115,6 +115,16 @@ RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
         "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" && \
     conda run -n EGAP_env tiara-entheome --help >/dev/null
 
+# masurca 4.1.4 and flye 2.9.5 both ship bin/flye and bin/flye-minimap2.
+# Whichever conda links last wins; when masurca's copies win, Flye 2.9.5
+# runs minimap2 2.17, which rejects its --secondary-seq option, and every
+# Flye assembly aborts at the consensus stage. Put Flye's own files back
+# and fail the build if the helper is still the old one.
+RUN conda install -n EGAP_env -y --force-reinstall --no-deps \
+        -c bioconda -c conda-forge 'flye=2.9.5' && \
+    conda run -n EGAP_env flye --version && \
+    conda run -n EGAP_env flye-minimap2 --secondary-seq=yes --version
+
 # Package EGAP_env with conda-pack
 RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
     mkdir /EGAP_env && cd /EGAP_env && tar xf /tmp/EGAP_env.tar && \
