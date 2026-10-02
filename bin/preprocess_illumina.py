@@ -654,15 +654,17 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             # floor at 100 bp so post-BBDuk reads stay usable.
             "minlen=100"
         ], False)
-        # BBDuk can exit non-zero and leave empty outputs (bbmap 40.02 does on
-        # paired input). Every later Illumina step would then run on nothing,
-        # so stop here instead of reporting PASS with empty read files.
+        # BBDuk can exit non-zero and leave empty outputs (bbmap 39.76-40.02 do
+        # on paired input below 16 threads). Every later Illumina step would
+        # then run on nothing, so stop here instead of reporting PASS with
+        # empty read files.
         if not (nonempty(bbduk_f_map) and nonempty(bbduk_r_map)):
             raise RuntimeError(
                 "BBDuk produced no reads.\n"
                 f"  Forward: {bbduk_f_map}\n"
                 f"  Reverse: {bbduk_r_map}\n"
-                "  Check the BBDuk output above; bbmap 40.x is known to fail on paired input."
+                "  Check the BBDuk output above. bbmap 39.76 through 40.02 fail on paired\n"
+                "  input with fewer than 16 threads; use bbmap >=39.15,<39.76."
             )
 
     # ---------- Clumpify (dedupe) ----------
