@@ -117,9 +117,10 @@ RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
 
 # masurca 4.1.4 and flye 2.9.5 both ship bin/flye and bin/flye-minimap2.
 # Whichever conda links last wins; when masurca's copies win, Flye 2.9.5
-# runs minimap2 2.17, which rejects its --secondary-seq option, and every
-# Flye assembly aborts at the consensus stage. Put Flye's own files back
-# and fail the build if the helper is still the old one.
+# gets a Python 2.7 launcher and minimap2 2.17, which rejects Flye's
+# --secondary-seq option, so every Flye assembly aborts at the consensus
+# stage. Make the env hold Flye's own copies; they are the source for the
+# repair after conda-pack below.
 RUN conda install -n EGAP_env -y --force-reinstall --no-deps \
         -c bioconda -c conda-forge 'flye=2.9.5' && \
     conda run -n EGAP_env flye --version && \
@@ -130,6 +131,17 @@ RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
     mkdir /EGAP_env && cd /EGAP_env && tar xf /tmp/EGAP_env.tar && \
     rm /tmp/EGAP_env.tar && \
     /EGAP_env/bin/conda-unpack
+
+# conda-pack writes masurca's copies of the two shared files into the packed
+# env even when the env itself holds Flye's. Put Flye's back: the helper
+# binary from the env, and a launcher for the installed flye module (the
+# env's own launcher has the build path in its shebang). Fail the build if
+# Flye would still get the old minimap2.
+RUN cp /opt/conda/envs/EGAP_env/bin/flye-minimap2 /EGAP_env/bin/flye-minimap2 && \
+    printf '#!/usr/bin/env python\nimport sys\nfrom flye.main import main\nsys.exit(main())\n' \
+        > /EGAP_env/bin/flye && chmod +x /EGAP_env/bin/flye && \
+    PATH="/EGAP_env/bin:$PATH" flye --version && \
+    /EGAP_env/bin/flye-minimap2 --secondary-seq=yes --version
 
 # Download EGAP v3.4.2 scripts from GitHub into the EGAP_env.
 # Install wget (if not already available) to retrieve the files.
