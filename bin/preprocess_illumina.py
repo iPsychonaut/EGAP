@@ -637,11 +637,17 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     bbduk_f_map = str(Path(trimmo_f_pair).with_name(Path(trimmo_f_pair).name.replace("_forward_paired", "_forward_mapped")))
     bbduk_r_map = str(Path(trimmo_r_pair).with_name(Path(trimmo_r_pair).name.replace("_reverse_paired", "_reverse_mapped")))
 
+    # Give BBTools its Java heap explicitly, as half of --ram_gb. Left to itself
+    # it sizes the heap from the host's free memory, which ignores a container
+    # memory limit and is read twice: when free memory moves between the two
+    # reads -Xms can exceed -Xmx and the JVM refuses to start.
+    bbtools_heap = f"-Xmx{max(1, int(ram_gb) // 2)}g"
+
     if nonempty(bbduk_f_map) and nonempty(bbduk_r_map):
         log_print(f"SKIP:\tbbduk mapped files exist: {bbduk_f_map} & {bbduk_r_map}.")
     else:
         run_subprocess_cmd([
-            "bbduk.sh",
+            "bbduk.sh", bbtools_heap,
             f"in1={reformat_f}", f"in2={reformat_r}",
             f"out1={bbduk_f_map}",  f"out2={bbduk_r_map}",
             "ref=adapters",
@@ -672,7 +678,7 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
         log_print(f"SKIP:\tClumpify deduplicated files exist: {illu_dedup_f_reads} & {illu_dedup_r_reads}.")
     else:
         run_subprocess_cmd([
-            "clumpify.sh",
+            "clumpify.sh", bbtools_heap,
             f"in={bbduk_f_map}", f"in2={bbduk_r_map}",
             f"out={illu_dedup_f_reads}", f"out2={illu_dedup_r_reads}",
             "dedupe"
