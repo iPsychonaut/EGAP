@@ -654,9 +654,19 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             # floor at 100 bp so post-BBDuk reads stay usable.
             "minlen=100"
         ], False)
+        # BBDuk can exit non-zero and leave empty outputs (bbmap 40.02 does on
+        # paired input). Every later Illumina step would then run on nothing,
+        # so stop here instead of reporting PASS with empty read files.
+        if not (nonempty(bbduk_f_map) and nonempty(bbduk_r_map)):
+            raise RuntimeError(
+                "BBDuk produced no reads.\n"
+                f"  Forward: {bbduk_f_map}\n"
+                f"  Reverse: {bbduk_r_map}\n"
+                "  Check the BBDuk output above; bbmap 40.x is known to fail on paired input."
+            )
 
     # ---------- Clumpify (dedupe) ----------
-    if os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads):
+    if nonempty(illu_dedup_f_reads) and nonempty(illu_dedup_r_reads):
         log_print(f"SKIP:\tClumpify deduplicated files exist: {illu_dedup_f_reads} & {illu_dedup_r_reads}.")
     else:
         run_subprocess_cmd([
@@ -665,6 +675,12 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             f"out={illu_dedup_f_reads}", f"out2={illu_dedup_r_reads}",
             "dedupe"
         ], False)
+        if not (nonempty(illu_dedup_f_reads) and nonempty(illu_dedup_r_reads)):
+            raise RuntimeError(
+                "Clumpify produced no deduplicated reads.\n"
+                f"  Forward: {illu_dedup_f_reads}\n"
+                f"  Reverse: {illu_dedup_r_reads}"
+            )
 
     log_print(f"PASS:\tPreprocessed Raw Illumina Reads for {species_id}: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
 

@@ -79,3 +79,44 @@ def test_get_current_row_data_unknown_sample_is_empty(sample_tsv_factory):
     # ``current_row.iloc[0]`` inside each stage. A fail-fast check belongs here.
     row, idx, stats = sample_tsv.get_current_row_data(df, "does-not-exist")
     assert len(row) == 0 and idx == []
+
+
+# ---- select_long_reads: which ONT read set the assemblers get ----
+
+def _ont_layout(tmp_path, sample_tsv_factory, corrected=False, filtered=True):
+    """<out>/Sp/ONT with raw reads, NanoStats for each stage, and optional read sets."""
+    out = tmp_path / "out"
+    ont = out / "Sp" / "ONT"
+    ont.mkdir(parents=True)
+    (ont / "SRRX.fastq").write_text("@raw\nACGT\n+\nIIII\n" * 50)
+    if filtered:
+        (ont / "Sp_ont_filtered.fastq").write_text("@filtered\nACGT\n+\nIIII\n")
+    if corrected:
+        (ont / "Sp_ont_corrected.fastq").write_text("@corrected\nACGT\n+\nIIII\n")
+    # Ratatosk fell back to the filtered reads, so "Corr" stats equal "Filt" stats.
+    for origin, qual in (("Raw_ONT_", 12.0), ("Filt_ONT_", 21.1), ("Corr_ONT_", 21.1)):
+        d = ont / f"{origin}nanoplot_analysis"
+        d.mkdir()
+        (d / f"{origin}NanoStats.txt").write_text(f"Mean read quality:    {qual}\n")
+    tsv = sample_tsv_factory(SPECIES_ID="Sp", SAMPLE_ID="Sp-1", BUSCO="a,b", ONT_SRA="SRRX")
+    return out, ont, tsv
+
+
+def test_select_long_reads_uses_filtered_when_corrected_was_never_written(sample_tsv_factory, tmp_path):
+    """Ratatosk produced nothing: the selection must not return None (raw-read fallback)."""
+    out, ont, tsv = _ont_layout(tmp_path, sample_tsv_factory, corrected=False)
+    chosen = sample_tsv.select_long_reads(str(out), str(tsv), "Sp-1", 1)
+    assert chosen == str(ont / "Sp_ONT_highest_mean_qual_long_reads.fastq")
+    assert open(chosen).read().startswith("@filtered")
+
+
+def test_select_long_reads_keeps_corrected_when_present(sample_tsv_factory, tmp_path):
+    out, ont, tsv = _ont_layout(tmp_path, sample_tsv_factory, corrected=True)
+    chosen = sample_tsv.select_long_reads(str(out), str(tsv), "Sp-1", 1)
+    assert open(chosen).read().startswith("@corrected")
+
+
+def test_select_long_reads_returns_none_with_no_candidate(sample_tsv_factory, tmp_path):
+    out, ont, tsv = _ont_layout(tmp_path, sample_tsv_factory, corrected=False, filtered=False)
+    assert sample_tsv.select_long_reads(str(out), str(tsv), "Sp-1", 1) is None
+    assert not (ont / "Sp_ONT_highest_mean_qual_long_reads.fastq").exists()

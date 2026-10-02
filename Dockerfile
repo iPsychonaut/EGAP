@@ -39,6 +39,9 @@ RUN mamba install -n base --yes conda-pack
 #   sra-tools=3.2.0   exact pin; API changes between minor versions.
 #   trimmomatic=0.40  exact pin; share-dir path used in adapter symlinks.
 #   flye=2.9.5        exact pin; >=3.0 changes assembly graph format.
+#   bbmap<40          40.02's BBDuk dies on paired in1=/in2= input
+#                     ("List size mismatch" in PairStreamer), exits 1 and
+#                     writes no reads. 39.81 is the tested working version.
 RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     'python>=3.8,<3.9' \
     'pandas>=2.0.3' \
@@ -66,7 +69,7 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     'trimmomatic=0.40' \
     pilon \
     fastqc \
-    bbmap \
+    'bbmap>=39.15,<40' \
     racon \
     kmc \
     'spades=4.2.0' \

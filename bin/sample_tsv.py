@@ -599,11 +599,16 @@ def select_long_reads(output_dir, input_tsv, sample_id, cpu_threads):
 
     renamed_highest_mean_qual_long_reads = f"{species_id}_{reads_type}_highest_mean_qual_long_reads.fastq"
     if not os.path.exists(highest_mean_qual_long_reads):
-        # try fallback: see if it's named like "Escherichia_coli_filtered.fastq"
-        fallback_file = os.path.join(reads_dir, f"{species_id}_filtered.fastq")
-        if os.path.exists(fallback_file):
-            print(f"FALLBACK:\tFound fallback filtered file: {fallback_file}")
-            highest_mean_qual_long_reads = fallback_file
+        # The chosen set may never have been written: when Ratatosk yields
+        # nothing, preprocess_ont carries on with the filtered reads and no
+        # *_corrected.fastq exists. Use the filtered set rather than returning
+        # None, which makes every later stage fall back to the raw reads.
+        # The second name is the older "<species>_filtered.fastq" layout.
+        for fallback_file in (filtered_reads, os.path.join(reads_dir, f"{species_id}_filtered.fastq")):
+            if os.path.exists(fallback_file) and os.path.getsize(fallback_file) > 0:
+                print(f"FALLBACK:\t{highest_mean_qual_long_reads} does not exist; using filtered reads: {fallback_file}")
+                highest_mean_qual_long_reads = fallback_file
+                break
         else:
             print("ERROR:\tNo usable highest-mean-quality long read file found.")
             return None

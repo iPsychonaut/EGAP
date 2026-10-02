@@ -196,7 +196,10 @@ def preprocess_ont(
         filtered_ont = os.path.join(ont_dir_abs, f"{species_id}_ont_filtered.fastq")
         coverage = 75
         target_bases = est_size_bp * coverage
-        use_illumina = os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads)
+        # Empty files count as absent: Filtlong and Ratatosk cannot use them, and
+        # an empty pair here once sent every long-read stage to the raw reads.
+        use_illumina = all(os.path.exists(p) and os.path.getsize(p) > 0
+                           for p in (illu_dedup_f_reads, illu_dedup_r_reads))
         illumina_opt = f"-1 {illu_dedup_f_reads} -2 {illu_dedup_r_reads}" if use_illumina else ""
     
         if not os.path.exists(filtered_ont):
@@ -244,10 +247,10 @@ def preprocess_ont(
     
         # Select best long reads (your helper uses output_dir/input_tsv paths, unchanged)
         highest_mean_qual_long_reads = select_long_reads(ctx.output_dir, ctx.input_tsv, sample_id, cpu_threads)
-        highest = select_long_reads(ctx.output_dir, ctx.input_tsv, sample_id, cpu_threads)
-        if not highest:
-            highest = final_corrected_ont
-    
+        if not highest_mean_qual_long_reads:
+            print(f"ERROR:\tNo long reads were selected for {sample_id}; later stages would fall back to the raw reads.")
+            return None
+
     finally:
         os.chdir(prev_cwd)
 

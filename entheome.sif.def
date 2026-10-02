@@ -102,7 +102,7 @@ From: debian:buster
                  'trimmomatic=0.40' \
                  pilon \
                  fastqc \
-                 bbmap \
+                 'bbmap>=39.15,<40' \
                  racon \
                  kmc \
                  'spades=4.2.0' \
