@@ -41,8 +41,9 @@ def test_compress_intermediate_follows_setting(tmp_path, fmt):
 
     assert fo.decompress_intermediate(out, 2) == fasta
     assert os.path.exists(fasta) and not os.path.exists(out)
-    with open(fasta, "rb") as fh:
-        assert list(fo._fasta_records(fh)) == list(fo._fasta_records(BARE.encode().splitlines()))
+    # fastb decode wraps at 80 columns, so ignore line breaks
+    with open(fasta) as fh:
+        assert fh.read().replace("\n", "") == BARE.replace("\n", "")
 
 
 @pytest.mark.parametrize("fmt", ["fastb"], indirect=True)

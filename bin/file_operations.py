@@ -25,10 +25,8 @@ Updated on 2026-09-29
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import hashlib
-import itertools
 import os
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import List
@@ -145,46 +143,9 @@ def validate_fasta(file_path):
 
 
 # --------------------------------------------------------------
-# FASTB round-trip check
+# FASTA extensions FASTB may take
 # --------------------------------------------------------------
 _FASTA_EXTS = (".fasta", ".fa", ".fna")
-
-
-def _fasta_records(lines):
-    """Yield ``(header, sequence)`` byte pairs from FASTA lines, ignoring line wrapping."""
-    header, parts = None, []
-    for line in lines:
-        line = line.rstrip(b"\r\n")
-        if line.startswith(b">"):
-            if header is not None:
-                yield header, b"".join(parts)
-            header, parts = line, []
-        elif line and header is None:
-            yield b"", line  # text before the first header: never matches a decoded record
-        elif line:
-            parts.append(line)
-    if header is not None:
-        yield header, b"".join(parts)
-
-
-def _fastb_matches(fasta_file, fastb_file):
-    """Return True when *fastb_file* decodes to the headers and sequences of *fasta_file*.
-
-    FASTB keeps only the first word of a header and rejects protein, so the
-    original is compared record by record before anyone deletes it.
-    """
-    proc = subprocess.Popen(["fastb", "cat", "-w", "0", fastb_file],
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    records = 0
-    same = True
-    with open(fasta_file, "rb") as original:
-        for a, b in itertools.zip_longest(_fasta_records(original), _fasta_records(proc.stdout)):
-            if a != b:
-                same = False
-                break
-            records += 1
-    proc.stdout.close()
-    return proc.wait() == 0 and same and records > 0
 
 
 # --------------------------------------------------------------
@@ -259,10 +220,11 @@ def pigz_decompress(input_file, cpu_threads):
 def fastb_compress(input_file, cpu_threads):
     """Encode a nucleotide FASTA to ``<input_file>.fastb``; fall back to pigz.
 
-    Same signature as :func:`pigz_compress`. The encoded file is decoded and
-    compared record by record before the FASTA is deleted. FASTB keeps only
-    the first word of each header and rejects protein, so anything that does
-    not round-trip (or a missing ``fastb`` executable) goes to pigz instead.
+    Same signature as :func:`pigz_compress`. ``fastb encode --verify`` re-reads
+    its output and compares every header line and sequence with the FASTA
+    before anything is deleted. FASTB keeps only the first word of each header
+    and rejects protein, so anything that does not round-trip (or an empty
+    file, or a missing ``fastb`` executable) goes to pigz instead.
 
     Parameters
     ----------
@@ -276,10 +238,11 @@ def fastb_compress(input_file, cpu_threads):
     str
         Path to the ``.fastb`` file, or the ``.gz`` file on fallback.
     """
-    if input_file.endswith(_FASTA_EXTS) and shutil.which("fastb"):
+    if input_file.endswith(_FASTA_EXTS) and shutil.which("fastb") and os.path.getsize(input_file):
         fastb_file = input_file + ".fastb"
-        rc = run_subprocess_cmd(["fastb", "encode", input_file, "-o", fastb_file], shell_check=False)
-        if rc == 0 and _fastb_matches(input_file, fastb_file):
+        rc = run_subprocess_cmd(["fastb", "encode", input_file, "-o", fastb_file, "--verify"],
+                                shell_check=False)
+        if rc == 0:
             os.remove(input_file)
             return fastb_file
         print(f"NOTE:\tFASTB is not lossless for {input_file}; using pigz")
