@@ -60,9 +60,9 @@ except ImportError as e:  # optional dep missing (geopy/requests) or module abse
 
 # Use the shared helper from utilities so row extraction stays consistent
 try:
-    from utilities import get_current_row_data, initialize_logging_environment, to_abs, read_sample_table
+    from utilities import load_sample_context, initialize_logging_environment, to_abs
 except Exception as e:
-    print(f"ERROR:\tutilities.get_current_row_data not importable: {e}")
+    print(f"ERROR:\tutilities.load_sample_context not importable: {e}")
     raise
 
 # Provenance (steps / commands / versions). Optional: a minimal install or a
@@ -638,9 +638,9 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     now = datetime.now().strftime("%Y%m%d-%H:%M:%S")
 
     # Metadata row
-    input_df = read_sample_table(input_tsvto_abs)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]
+    ctx = load_sample_context(sample_id, input_tsvto_abs, output_dirto_abs, cpu_threads, ram_gb)
+    sample_stats_dict = ctx.sample_stats_dict
+    current_series = ctx.current_series
 
     # TSV columns (tolerate missing)
     illumina_sra         = current_series.get("ILLUMINA_SRA")

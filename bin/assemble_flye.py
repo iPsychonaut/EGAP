@@ -22,6 +22,7 @@ from typing import Optional
 
 import pandas as pd
 from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context, to_abs
+from sample_tsv import flye_ont_mode
 from qc_assessment import qc_assessment
 from estimate_runtime import log_estimate_for
 from record_provenance import record_file
@@ -129,10 +130,13 @@ def assemble_flye(
 
     flye_path = os.path.join(current_work_dir, "assembly.fasta")
 
-    # Build Flye command (same logic as original)
+    # Build Flye command. The ONT read-type mode follows what the selected
+    # reads are (corrected or not, and their mean quality).
     if isinstance(ont_raw_reads, str) and os.path.exists(ont_raw_reads):
+        ont_mode = flye_ont_mode(highest_mean_qual_long_reads, candidate)
+        print(f"NOTE:\tFlye ONT mode: {ont_mode}")
         flye_cmd = ["flye",
-                    "--nano-corr", highest_mean_qual_long_reads,
+                    ont_mode, highest_mean_qual_long_reads,
                     "--out-dir", current_work_dir,
                     "--genome-size", str(est_size),
                     "--threads", str(cpu_threads),

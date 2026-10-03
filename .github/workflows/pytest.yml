@@ -7,13 +7,22 @@ on:
 
 jobs:
   unit:
-    name: unit (py${{ matrix.python }})
+    name: unit (py${{ matrix.python }}, pandas ${{ matrix.pandas }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         # 3.8 is EGAP's runtime pin (meta.yaml). 3.11 catches syntax drift early.
         python: ["3.8", "3.11"]
+        pandas: ["latest"]
+        include:
+          # Solver-installed EGAP_env instances resolve to pandas 1.4.4 when
+          # upstream tiara=1.0.3 forces numpy<1.20. Exercise that floor so
+          # pandas-version-specific bugs (e.g. DataFrame.replace with pd.NA)
+          # are caught in CI, not in a user's env.
+          - python: "3.8"
+            pandas: "1.4.4"
+            numpy: "1.24.4"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,13 +30,16 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install test dependencies
         run: python -m pip install -r tests/requirements.txt
+      - name: Pin pandas floor
+        if: matrix.pandas != 'latest'
+        run: python -m pip install "pandas==${{ matrix.pandas }}" "numpy==${{ matrix.numpy }}"
       - name: Run unit tests (no bioinformatics binaries required)
-        run: python -m pytest tests -q --junitxml=pytest-${{ matrix.python }}.xml
+        run: python -m pytest tests -q --junitxml=pytest-${{ matrix.python }}-pandas${{ matrix.pandas }}.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: pytest-${{ matrix.python }}
-          path: pytest-${{ matrix.python }}.xml
+          name: pytest-${{ matrix.python }}-pandas${{ matrix.pandas }}
+          path: pytest-${{ matrix.python }}-pandas${{ matrix.pandas }}.xml
 
   # Opt-in job: creates the conda env and runs tests marked requires_tools.
   # Disabled by default because the EGAP_env solve is ~20 min and the runners

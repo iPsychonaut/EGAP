@@ -55,7 +55,9 @@ requirements:
     - trimmomatic >=0.39
     - pilon >=1.22
     - fastqc >=0.12.1
-    - bbmap >=39.15
+    # <39.76: from 39.76 through 40.02, BBDuk fails on paired in1=/in2= input
+    # below 16 threads and writes no reads. 39.52 works at 1-16 threads.
+    - bbmap >=39.15,<39.76
     - racon >=1.5.0
     - kmc >=3.2.4
     - spades >=4.0.0

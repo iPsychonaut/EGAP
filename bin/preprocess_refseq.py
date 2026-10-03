@@ -209,7 +209,9 @@ def preprocess_refseq(
     output_dir_abs = Path(ctx.output_dir)
     print(f"DEBUG - input_tsv  - {ctx.input_tsv}")
     print(f"DEBUG - output_dir - {output_dir_abs}")
-    current_series = ctx.current_series
+    # Raw TSV row: ctx.current_series may already point REF_SEQ at the
+    # normalized copy, which would hide a changed source path on re-runs.
+    current_series = ctx.current_row.iloc[0]
 
     species_id = str(current_series["SPECIES_ID"]).strip()
 

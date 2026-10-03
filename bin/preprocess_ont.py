@@ -191,16 +191,25 @@ def preprocess_ont(
         except Exception as e:
             print(f"WARN:\tNanoPlot failed on raw ONT reads ({e}); continuing without NanoStats.")
     
-        # Filtlong (only include Illumina if those files actually exist).
+        # Filtlong on basecall quality only. The Illumina reads are deliberately
+        # not passed as a reference: with -1/-2 Filtlong scores each ONT read by
+        # k-mer agreement with the Illumina reads, and with a target_bases cap
+        # on deep data it fills the cap from the regions the Illumina reads
+        # cover best. On the E. coli test (660x raw ONT, Illumina from another
+        # isolate) that kept reads over 68% of the genome and Flye gave 56
+        # contigs of 2.4 Mb; without the reference the same cap covered 93% and
+        # Flye gave 3 contigs of 4.88 Mb. --trim needs a reference, so it goes too.
         # Canonical filtered name regardless of which input source resolved.
         filtered_ont = os.path.join(ont_dir_abs, f"{species_id}_ont_filtered.fastq")
         coverage = 75
         target_bases = est_size_bp * coverage
-        use_illumina = os.path.exists(illu_dedup_f_reads) and os.path.exists(illu_dedup_r_reads)
-        illumina_opt = f"-1 {illu_dedup_f_reads} -2 {illu_dedup_r_reads}" if use_illumina else ""
-    
+        # Empty files count as absent: Ratatosk cannot use them, and an empty
+        # pair here once sent every long-read stage to the raw reads.
+        use_illumina = all(os.path.exists(p) and os.path.getsize(p) > 0
+                           for p in (illu_dedup_f_reads, illu_dedup_r_reads))
+
         if not os.path.exists(filtered_ont):
-            filtlong_cmd = f"filtlong {illumina_opt} --trim --min_length 1000 --min_mean_q 8 --keep_percent 90 --target_bases {target_bases} {ont_raw_reads} > {filtered_ont}"
+            filtlong_cmd = f"filtlong --min_length 1000 --min_mean_q 8 --keep_percent 90 --target_bases {target_bases} {ont_raw_reads} > {filtered_ont}"
             _ = run_subprocess_cmd(filtlong_cmd, True)
             if (not os.path.exists(filtered_ont)) or os.path.getsize(filtered_ont) == 0:
                 print(f"ERROR:\tFiltlong did not produce reads at {filtered_ont}")
@@ -244,10 +253,10 @@ def preprocess_ont(
     
         # Select best long reads (your helper uses output_dir/input_tsv paths, unchanged)
         highest_mean_qual_long_reads = select_long_reads(ctx.output_dir, ctx.input_tsv, sample_id, cpu_threads)
-        highest = select_long_reads(ctx.output_dir, ctx.input_tsv, sample_id, cpu_threads)
-        if not highest:
-            highest = final_corrected_ont
-    
+        if not highest_mean_qual_long_reads:
+            print(f"ERROR:\tNo long reads were selected for {sample_id}; later stages would fall back to the raw reads.")
+            return None
+
     finally:
         os.chdir(prev_cwd)
 

@@ -2,20 +2,20 @@
 # Entheome Ecosystem — multi-stage Docker image
 # -----------------------------------------------------------------------------
 # Builds three conda environments used across the Entheome toolchain:
-#   * EGAP_env         — Entheome Genome Assembly Pipeline (EGAP) v3.4.1
+#   * EGAP_env         — Entheome Genome Assembly Pipeline (EGAP) v3.4.2
 #   * EGEP_env         — Annotation helper tools
 #   * funannotate_env  — Funannotate for eukaryotic genome annotation
 # The final runtime image is a slim Debian layer that carries all three envs
 # plus Augustus and related runtime dependencies.
 # =============================================================================
 
-FROM condaforge/mambaforge AS build
+FROM condaforge/miniforge3 AS build
 
 LABEL maintainer="Ian Bollinger <ian.bollinger@entheome.org>" \
-      version="3.4.1" \
-      description="Entheome Genome Assembly Pipeline (EGAP) v3.4.1 — multi-env Entheome ecosystem image" \
+      version="3.4.2" \
+      description="Entheome Genome Assembly Pipeline (EGAP) v3.4.2 — multi-env Entheome ecosystem image" \
       org.opencontainers.image.source="https://github.com/iPsychonaut/EGAP" \
-      org.opencontainers.image.version="3.4.1" \
+      org.opencontainers.image.version="3.4.2" \
       org.opencontainers.image.authors="Ian Bollinger <ian.bollinger@entheome.org>"
 
 # Install mamba and conda-pack in the base env — used to build and then
@@ -26,18 +26,27 @@ RUN mamba install -n base --yes conda-pack
 # Generate EGAP_env
 ###############################################################################
 
-# Create EGAP_env with Python 3.8 and all EGAP v3.4.1 dependencies.
-# Pinning rationale (verified against conda list on 2026-04-06):
-#   numpy=1.19.5     — tiara=1.0.3 requires numpy<1.20; do not loosen.
-#   tiara=1.0.3      — exact pin; newer solves break the numpy constraint.
-#   kraken2=2.1.6    — exact pin; tested working version.
-#   sra-tools=3.2.0  — exact pin; API changes between minor versions.
-#   trimmomatic=0.40 — exact pin; share-dir path used in adapter symlinks.
-#   flye=2.9.5       — exact pin; >=3.0 changes assembly graph format.
+# Create EGAP_env with Python 3.8 and all EGAP v3.4.2 dependencies.
+# Pinning rationale (verified against conda list on 2026-09-05):
+#   pandas>=2.0.3     matches meta.yaml; 2.0.3 is the final Python 3.8 build.
+#   numpy>=1.24.3,<2  pandas 2.0.3 needs numpy>=1.20.3. The old numpy=1.19.5
+#                     pin existed only for upstream tiara=1.0.3 (numpy<1.20),
+#                     which is replaced by tiara-entheome (numpy>=1.21).
+#   tiara-entheome    installed below via pip from the v1.0.0 tag (not yet on
+#                     bioconda). Its runtime deps (pytorch, skorch, numba,
+#                     tqdm, joblib) are resolved by conda in this create.
+#   kraken2=2.1.6     exact pin; tested working version.
+#   sra-tools=3.2.0   exact pin; API changes between minor versions.
+#   trimmomatic=0.40  exact pin; share-dir path used in adapter symlinks.
+#   flye=2.9.5        exact pin; >=3.0 changes assembly graph format.
+#   bbmap<39.76       from 39.76 on (tested through 40.02) BBDuk dies on
+#                     paired in1=/in2= input when it has fewer than 16
+#                     threads ("List size mismatch" in PairStreamer): exit
+#                     1 and no reads written. 39.52 works at 1-16 threads.
 RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     'python>=3.8,<3.9' \
-    pandas \
-    'numpy=1.19.5' \
+    'pandas>=2.0.3' \
+    'numpy>=1.24.3,<2' \
     'masurca=4.1.4' \
     'quast=5.3.0' \
     'compleasm>=0.2.8' \
@@ -45,6 +54,7 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     biopython \
     ragtag \
     'nanoplot=1.46.2' \
+    'python-kaleido>=0.1,<0.3' \
     termcolor \
     minimap2 \
     bwa-mem2 \
@@ -60,7 +70,7 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     'trimmomatic=0.40' \
     pilon \
     fastqc \
-    bbmap \
+    'bbmap>=39.15,<39.76' \
     racon \
     kmc \
     'spades=4.2.0' \
@@ -81,9 +91,14 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
     requests \
     rich \
     textual \
-    'tiara=1.0.3' \
-    'kraken2=2.1.6'
-    
+    'pytorch>=1.10,<3' \
+    'skorch>=0.11' \
+    'numba>=0.56' \
+    tqdm \
+    joblib \
+    'kraken2=2.1.6' \
+    pigz
+
 # Download required resources for quast
 RUN conda run -n EGAP_env quast-download-gridss && \
     conda run -n EGAP_env quast-download-silva
@@ -93,16 +108,45 @@ RUN git clone https://github.com/dfguan/runner.git && \
     cd runner && conda run -n EGAP_env python3 setup.py install --user && \
     cd .. && rm -rf runner
 
+# Install tiara-entheome (modernised Tiara fork used for assembly
+# decontamination) from the pinned release tag. Not yet on bioconda.
+# --no-deps: pytorch, skorch, numba, tqdm and joblib were resolved by conda above.
+RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
+        "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" && \
+    conda run -n EGAP_env tiara-entheome --help >/dev/null
+
+# masurca 4.1.4 and flye 2.9.5 both ship bin/flye and bin/flye-minimap2.
+# Whichever conda links last wins; when masurca's copies win, Flye 2.9.5
+# gets a Python 2.7 launcher and minimap2 2.17, which rejects Flye's
+# --secondary-seq option, so every Flye assembly aborts at the consensus
+# stage. Make the env hold Flye's own copies; they are the source for the
+# repair after conda-pack below.
+RUN conda install -n EGAP_env -y --force-reinstall --no-deps \
+        -c bioconda -c conda-forge 'flye=2.9.5' && \
+    conda run -n EGAP_env flye --version && \
+    conda run -n EGAP_env flye-minimap2 --secondary-seq=yes --version
+
 # Package EGAP_env with conda-pack
 RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
     mkdir /EGAP_env && cd /EGAP_env && tar xf /tmp/EGAP_env.tar && \
     rm /tmp/EGAP_env.tar && \
     /EGAP_env/bin/conda-unpack
 
-# Download EGAP v3.4.1 scripts from GitHub into the EGAP_env.
+# conda-pack writes masurca's copies of the two shared files into the packed
+# env even when the env itself holds Flye's. Put Flye's back: the helper
+# binary from the env, and a launcher for the installed flye module (the
+# env's own launcher has the build path in its shebang). Fail the build if
+# Flye would still get the old minimap2.
+RUN cp /opt/conda/envs/EGAP_env/bin/flye-minimap2 /EGAP_env/bin/flye-minimap2 && \
+    printf '#!/usr/bin/env python\nimport sys\nfrom flye.main import main\nsys.exit(main())\n' \
+        > /EGAP_env/bin/flye && chmod +x /EGAP_env/bin/flye && \
+    PATH="/EGAP_env/bin:$PATH" flye --version && \
+    /EGAP_env/bin/flye-minimap2 --secondary-seq=yes --version
+
+# Download EGAP v3.4.2 scripts from GitHub into the EGAP_env.
 # Install wget (if not already available) to retrieve the files.
 RUN apt-get update && apt-get install -y wget && \
-    EGAP_BRANCH="v3.4.1" && \
+    EGAP_BRANCH="chore/tiara-entheome-3.4.2" && \
     EGAP_RAW="https://raw.githubusercontent.com/iPsychonaut/EGAP/${EGAP_BRANCH}" && \
     wget -O /EGAP_env/EGAP.py "${EGAP_RAW}/EGAP.py" && \
     chmod +x /EGAP_env/EGAP.py && \
@@ -131,9 +175,13 @@ RUN apt-get update && apt-get install -y wget && \
         qc_assessment.py \
         html_reporter.py \
         process_metadata.py \
-        final_compress.py; \
+        final_compress.py \
+        estimate_runtime.py \
+        monitor_assembly.py \
+        preflight_checks.py \
+        record_provenance.py; \
     do \
-        wget -O "/EGAP_env/bin/${SCRIPT}" "${EGAP_RAW}/bin/${SCRIPT}"; \
+        wget -O "/EGAP_env/bin/${SCRIPT}" "${EGAP_RAW}/bin/${SCRIPT}" || exit 1; \
     done && \
     chmod +x /EGAP_env/bin/*.py && \
     rm -rf /var/lib/apt/lists/*
@@ -199,7 +247,7 @@ SHELL ["conda", "run", "-n", "funannotate_env", "/bin/bash", "-c"]
 RUN python -m pip install git+https://github.com/nextgenusfs/funannotate.git
 
 # Package funannotate_env with conda-pack
-RUN conda-pack --ignore-missing-files -n EGEP_env -o /tmp/funannotate_env.tar && \
+RUN conda-pack --ignore-missing-files -n funannotate_env -o /tmp/funannotate_env.tar && \
     mkdir /funannotate_env && cd /funannotate_env && tar xf /tmp/funannotate_env.tar && \
     rm /tmp/funannotate_env.tar && \
     /funannotate_env/bin/conda-unpack
@@ -209,9 +257,9 @@ RUN conda-pack --ignore-missing-files -n EGEP_env -o /tmp/funannotate_env.tar &&
 ###############################################################################
 
 # Build runtime image
-FROM debian:buster AS runtime
+FROM debian:bookworm AS runtime
 
-# Copy BOTH conda envs from the build stage
+# Copy all three conda envs from the build stage
 COPY --from=build /EGAP_env /EGAP_env
 COPY --from=build /EGEP_env /EGEP_env
 COPY --from=build /funannotate_env /funannotate_env
@@ -237,7 +285,7 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
     GENEMARK_PATH="/mnt/d/EGEP"
 
 # -----------------------------------------------------------------------------
-# EGAP v3.4.1 runtime defaults
+# EGAP v3.4.2 runtime defaults
 # -----------------------------------------------------------------------------
 # Kraken2 DB is NOT baked into the image (the standard 16 GB archive would
 # roughly double the image size). Bind-mount the database directory at runtime
@@ -247,7 +295,7 @@ ENV AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config" \
 #       -e KRAKEN2_DB=/kraken2_db \
 #       -v /host/path/to/kraken2_db:/kraken2_db:ro \
 #       -v /host/data:/data \
-#       entheome_ecosystem:3.4.1 --input /data/samples.tsv --output /data/out
+#       entheome_ecosystem:3.4.2 --input /data/samples.tsv --output /data/out
 #
 # To provision a Kraken2 database on the host before running EGAP, either
 # build from source (authoritative, ~6-12 hrs):
@@ -268,7 +316,7 @@ RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"
 # -----------------------------------------------------------------------------
 # Default entrypoint — runs EGAP directly.
 # Override to enter an interactive shell:
-#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.1
+#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.2
 # -----------------------------------------------------------------------------
 ENTRYPOINT ["/EGAP_env/bin/EGAP"]
 CMD ["--help"]
@@ -277,21 +325,21 @@ CMD ["--help"]
 # Usage examples
 # -----------------------------------------------------------------------------
 # Build:
-#   docker build -t entheome_ecosystem:3.4.1 .
+#   docker build -t entheome_ecosystem:3.4.2 .
 #
 # Show EGAP help:
-#   docker run --rm entheome_ecosystem:3.4.1
+#   docker run --rm entheome_ecosystem:3.4.2
 #
 # Run EGAP with a host-mounted Kraken2 DB and data directory:
 #   docker run --rm \
 #       -e KRAKEN2_DB=/kraken2_db \
 #       -v /host/kraken2_db:/kraken2_db:ro \
 #       -v /host/data:/data \
-#       entheome_ecosystem:3.4.1 \
+#       entheome_ecosystem:3.4.2 \
 #       --input-tsv /data/samples.tsv \
 #       --output /data/output \
 #       --threads 16 --ram 64
 #
 # Interactive shell (all three conda envs available on PATH):
-#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.1
+#   docker run --rm -it --entrypoint bash entheome_ecosystem:3.4.2
 # =============================================================================
