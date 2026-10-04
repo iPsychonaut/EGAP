@@ -65,6 +65,11 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
         for file in files:
             if file.endswith((".fasta", ".fastq")):
                 full_path = os.path.join(root, file)
+                # MaSuRCA leaves symlinks to FASTA files this walk has already
+                # compressed and removed; pigz skips symlinks, so do the same.
+                if os.path.islink(full_path):
+                    print(f"SKIP:\tsymlink: {full_path}")
+                    continue
                 print(f"Compressing: {full_path}")
                 _ = compress_intermediate(full_path, cpu_threads)
 
