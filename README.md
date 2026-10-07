@@ -590,7 +590,7 @@ Empty cells are left blank. The literal `None` placeholder is still accepted for
 | Psilocybe_wayanedensis | Psilocybe_wayanedensis-DeconTest | Funga | eukaryote | 2 | 75m | agaricales,basidiomycota | | SRR30663514 | | |
 | Escherichia_coli-RefSeq | Escherichia_coli-RefSeqTest | Bacteria | prokaryote | 1 | | gammaproteobacteria,enterobacterales | | | | GCA_000005845.2 |
 | Escherichia_coli-Illu-RefSeq | Escherichia_coli-IlluminaTest | Bacteria | prokaryote | 1 | 5m | gammaproteobacteria,enterobacterales | | SRR32496875 | | GCA_000005845.2 |
-| Escherichia_coli-ONT-Illu | Escherichia_coli-HybridTest | Bacteria | prokaryote | 1 | 5m | gammaproteobacteria,enterobacterales | SRR32405433 | SRR32496875 | | |
+| Escherichia_coli-ONT-Illu | Escherichia_coli-HybridTest | Bacteria | prokaryote | 1 | 5m | gammaproteobacteria,enterobacterales | SRR32405433 | SRR15116275 | | |
 | Escherichia_coli-PacBio | Escherichia_coli-PacBioTest | Bacteria | prokaryote | 1 | 5m | gammaproteobacteria,enterobacterales | | | SRR31460895 | |
 
 ### Local Data
