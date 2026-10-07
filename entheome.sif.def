@@ -134,6 +134,16 @@ From: debian:buster
     mkdir -p /opt/conda/envs/EGAP_env/conda-meta
     printf "flye 2.9.5\n" >> /opt/conda/envs/EGAP_env/conda-meta/pinned
 
+    # masurca 4.1.4 and flye 2.9.5 both ship bin/flye and bin/flye-minimap2.
+    # Whichever conda links last wins; when masurca's copies win, Flye gets a
+    # Python 2.7 launcher and minimap2 2.17, which rejects Flye's
+    # --secondary-seq option, so every Flye assembly aborts at the consensus
+    # stage. Reinstall Flye last so its copies win. The env is used in place
+    # here (no conda-pack), so this is enough; the Docker image also needs a
+    # copy step after packing. Untested in a Singularity build.
+    /opt/conda/bin/conda install -n EGAP_env -y --force-reinstall --no-deps \
+        -c bioconda -c conda-forge 'flye=2.9.5' || { echo "Failed to reinstall Flye"; exit 1; }
+
     # tiara-entheome (modernised Tiara fork used for assembly decontamination)
     # from the pinned release tag. Not yet on bioconda. --no-deps: pytorch,
     # skorch, numba, tqdm and joblib were resolved by conda above.
@@ -256,6 +266,9 @@ if not (Version('2.9.5') <= Version(ver) < Version('3.0.0')):
     sys.exit(1)
 print('Flye version OK:', ver)
 PY
+    # Flye's own minimap2 helper must have won over masurca's (see above).
+    /opt/conda/envs/EGAP_env/bin/flye-minimap2 --secondary-seq=yes --version \
+        || { echo "flye-minimap2 rejects --secondary-seq: masurca's copy won"; exit 1; }
 
 %environment
     export PATH="/usr/local/bin:/opt/conda/envs/EGEP_env/bin:/opt/conda/envs/EGAP_env/bin:/opt/conda/envs/funannotate_env/bin:/opt/conda/bin:/usr/local/bin:$PATH"
