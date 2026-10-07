@@ -238,19 +238,41 @@ def fastb_compress(input_file, cpu_threads):
     str
         Path to the ``.fastb`` file, or the ``.gz`` file on fallback.
     """
-    if input_file.endswith(_FASTA_EXTS) and shutil.which("fastb") and os.path.getsize(input_file):
-        fastb_file = input_file + ".fastb"
-        rc = run_subprocess_cmd(["fastb", "encode", input_file, "-o", fastb_file, "--verify"],
-                                shell_check=False)
-        if rc == 0:
-            os.remove(input_file)
-            return fastb_file
-        print(f"NOTE:\tFASTB is not lossless for {input_file}; using pigz")
-        if os.path.exists(fastb_file):
-            os.remove(fastb_file)
-    elif input_file.endswith(_FASTA_EXTS):
-        print("WARN:\tfastb executable not found on PATH; using pigz")
-    return pigz_compress(input_file, cpu_threads)
+    return fastb_compress_many([input_file], cpu_threads)[0]
+
+
+def fastb_compress_many(input_files, cpu_threads):
+    """Encode several FASTA files with one ``fastb encode`` process; pigz for the rest.
+
+    One Python start-up (about 0.36 s) instead of one per file; on the E. coli
+    hybrid sample that start-up was 70% of FASTB's per-file cost. fastb handles
+    each file on its own and a file that does not round-trip leaves no output,
+    so "output exists" means success. Returns the output paths in input order.
+    """
+    have_fastb = shutil.which("fastb")
+    batch = [f for f in input_files
+             if f.endswith(_FASTA_EXTS) and have_fastb and os.path.getsize(f)]
+    for f in batch:  # a stale output from an earlier run must not count as success
+        if os.path.exists(f + ".fastb"):
+            os.remove(f + ".fastb")
+    # ponytail: 200 files per call keeps the command line far below ARG_MAX;
+    # a process pool across calls if the FASTB step still shows in timings.
+    for i in range(0, len(batch), 200):
+        run_subprocess_cmd(["fastb", "encode", "--append", "--verify", *batch[i:i + 200]],
+                           shell_check=False)
+    batch = set(batch)
+    outputs = []
+    for f in input_files:
+        if f in batch and os.path.exists(f + ".fastb"):
+            os.remove(f)
+            outputs.append(f + ".fastb")
+            continue
+        if f in batch:
+            print(f"NOTE:\tFASTB is not lossless for {f}; using pigz")
+        elif f.endswith(_FASTA_EXTS) and not have_fastb:
+            print("WARN:\tfastb executable not found on PATH; using pigz")
+        outputs.append(pigz_compress(f, cpu_threads))
+    return outputs
 
 
 # --------------------------------------------------------------

@@ -21,7 +21,8 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import sys
 import pandas as pd
-from utilities import compress_intermediate, load_sample_context
+from utilities import (compress_intermediate, fastb_compress_many, intermediate_format,
+                       load_sample_context)
 
 
 def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
@@ -61,6 +62,10 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - sample_dir - {sample_dir}")
 
     # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
+    # Nucleotide FASTA files are collected and sent to one fastb process when
+    # the format is fastb (one Python start-up instead of one per file);
+    # everything else is compressed as it is found.
+    fastb_batch = []
     for root, dirs, files in os.walk(sample_dir):
         for file in files:
             if file.endswith((".fasta", ".fastq")):
@@ -70,8 +75,14 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
                 if os.path.islink(full_path):
                     print(f"SKIP:\tsymlink: {full_path}")
                     continue
+                if file.endswith(".fasta") and intermediate_format() == "fastb":
+                    fastb_batch.append(full_path)
+                    continue
                 print(f"Compressing: {full_path}")
                 _ = compress_intermediate(full_path, cpu_threads)
+    if fastb_batch:
+        print(f"Compressing {len(fastb_batch)} FASTA file(s) with FASTB")
+        _ = fastb_compress_many(fastb_batch, cpu_threads)
 
     print("PASS:\tAll FASTA and FASTQ successfully compressed!")
             
