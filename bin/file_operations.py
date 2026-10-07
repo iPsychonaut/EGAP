@@ -28,6 +28,7 @@ import hashlib
 import os
 import shutil
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import List
 
@@ -242,12 +243,15 @@ def fastb_compress(input_file, cpu_threads):
 
 
 def fastb_compress_many(input_files, cpu_threads):
-    """Encode several FASTA files with one ``fastb encode`` process; pigz for the rest.
+    """Encode several FASTA files with up to ``cpu_threads`` ``fastb encode`` processes; pigz for the rest.
 
-    One Python start-up (about 0.36 s) instead of one per file; on the E. coli
-    hybrid sample that start-up was 70% of FASTB's per-file cost. fastb handles
-    each file on its own and a file that does not round-trip leaves no output,
-    so "output exists" means success. Returns the output paths in input order.
+    The encoder is single-threaded, so the files are dealt round-robin by size
+    into ``cpu_threads`` chunks and one process runs per chunk, all at once.
+    Each process pays one Python start-up (about 0.36 s); per file that
+    start-up was 70% of FASTB's cost on the E. coli hybrid sample. fastb
+    handles each file on its own and a file that does not round-trip leaves
+    no output, so "output exists" means success. Returns the output paths in
+    input order.
     """
     have_fastb = shutil.which("fastb")
     batch = [f for f in input_files
@@ -255,11 +259,14 @@ def fastb_compress_many(input_files, cpu_threads):
     for f in batch:  # a stale output from an earlier run must not count as success
         if os.path.exists(f + ".fastb"):
             os.remove(f + ".fastb")
-    # ponytail: 200 files per call keeps the command line far below ARG_MAX;
-    # a process pool across calls if the FASTB step still shows in timings.
-    for i in range(0, len(batch), 200):
-        run_subprocess_cmd(["fastb", "encode", "--append", "--verify", *batch[i:i + 200]],
-                           shell_check=False)
+    workers = max(1, min(int(cpu_threads), len(batch)))
+    by_size = sorted(batch, key=os.path.getsize, reverse=True)
+    # ponytail: 200 files per process keeps the command line far below ARG_MAX.
+    chunks = [c[j:j + 200] for c in (by_size[i::workers] for i in range(workers))
+              for j in range(0, len(c), 200)]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        list(pool.map(lambda c: run_subprocess_cmd(
+            ["fastb", "encode", "--append", "--verify", *c], shell_check=False), chunks))
     batch = set(batch)
     outputs = []
     for f in input_files:
