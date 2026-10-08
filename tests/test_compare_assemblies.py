@@ -102,6 +102,39 @@ def test_single_assembly_is_returned_without_vote(monkeypatch, tmp_path,
         os.chdir(cwd)
 
 
+def test_equal_busco_falls_through_to_contiguity(monkeypatch, tmp_path,
+                                                 sample_tsv_factory, rng):
+    """The E. coli hybrid re-run of 2026-10-04: SPAdes and Flye had the same
+    BUSCO scores (one differing only by float noise, one an exact tie), Flye
+    had 5 contigs against 88. A tied metric casts no vote, so Flye wins 2-0."""
+    cwd = os.getcwd()
+    try:
+        tsv, out = _setup(monkeypatch, tmp_path, sample_tsv_factory, rng, {
+            "SPAdes": (99.71000000000001, 100.0, 88, 470_899),
+            "Flye":   (99.71, 100.0, 5, 4_716_820),
+        })
+        best = ca.compare_assemblies("Sp-1", str(tsv), str(out), 1, 4)
+        assert Path(best).read_text() == (out / "Sp" / "Sp-1" / "flye.fasta").read_text()
+    finally:
+        os.chdir(cwd)
+
+
+def test_quast_report_parsing(tmp_path, monkeypatch):
+    """report.tsv as QUAST 5 writes it: the '# contigs' row, not the
+    '# contigs (>= N bp)' rows, and N50. The old code looked for a label
+    QUAST never writes and always returned None for the count."""
+    sample_dir = tmp_path
+    asm = tmp_path / "x.fasta"
+    asm.write_text(">a\nACGT\n")
+    out_dir = sample_dir / "spades_assembly" / "x.fasta_quast"
+    out_dir.mkdir(parents=True)
+    (out_dir / "report.tsv").write_text(
+        "Assembly\tx\n# contigs (>= 0 bp)\t195\n# contigs (>= 1000 bp)\t67\n"
+        "# contigs\t88\nLargest contig\t1\nTotal length\t1\nN50\t470899\nL50\t4\n")
+    monkeypatch.setattr(ca, "validate_fasta", lambda p: True)
+    assert ca.get_quast_stats(str(asm), 1, str(sample_dir), "spades") == (88, 470899)
+
+
 def test_failed_busco_on_one_assembly_does_not_crash(monkeypatch, tmp_path,
                                                      sample_tsv_factory, rng):
     cwd = os.getcwd()

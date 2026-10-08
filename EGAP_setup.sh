@@ -2,7 +2,7 @@
 # ===========================================================================
 # EGAP_setup.sh
 #
-# Installation script for the Entheome Genome Assembly Pipeline (EGAP) v3.4.1.
+# Installation script for the Entheome Genome Assembly Pipeline (EGAP) v3.4.2.
 # Installs Miniforge3 (if absent), creates the EGAP_env conda environment,
 # installs auxiliary tools (runner, quast resources), and optionally provisions
 # the Kraken2 16 GB Standard database used for read decontamination.
@@ -27,8 +27,8 @@
 #                      pointing at the chosen Kraken2 database directory.
 #
 # Author:  Ian Bollinger (ian.bollinger@entheome.org)
-# Version: 3.4.1
-# Updated: 2026-04-16
+# Version: 3.4.2
+# Updated: 2026-09-05
 # ===========================================================================
 set -euo pipefail
 
@@ -182,6 +182,24 @@ install_aux_tools() {
         log_warn "runner import check failed — the package may not be functional."
     fi
 
+    # tiara-entheome is the modernised Tiara fork EGAP prefers for assembly
+    # decontamination (see bin/decontaminate_assembly.py). It is not on bioconda
+    # yet, so install its runtime deps with conda and the package itself from
+    # the pinned release tag with --no-deps.
+    log_info "Installing tiara-entheome v1.0.0 (Tiara fork) into EGAP_env..."
+    conda install -y -n EGAP_env -c conda-forge -c bioconda \
+        "pytorch>=1.10,<3" "skorch>=0.11" "numba>=0.56" tqdm joblib \
+        || die "Failed to install tiara-entheome runtime dependencies"
+    pip install --no-cache-dir --no-deps \
+        "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" \
+        || die "tiara-entheome installation failed"
+
+    if command -v tiara-entheome >/dev/null 2>&1; then
+        log_pass "tiara-entheome installed successfully."
+    else
+        log_warn "tiara-entheome not found on PATH; assembly decontamination will be skipped at runtime."
+    fi
+
     log_info "Downloading QUAST auxiliary datasets (gridss, silva)..."
     quast-download-gridss || log_warn "quast-download-gridss failed (non-fatal)"
     quast-download-silva  || log_warn "quast-download-silva failed (non-fatal)"
@@ -252,7 +270,7 @@ export_kraken2_var() {
 # Main
 # ---------------------------------------------------------------------------
 main() {
-    log_info "EGAP v3.4.1 setup starting."
+    log_info "EGAP v3.4.2 setup starting."
     detect_platform
     install_miniforge
 
@@ -263,7 +281,7 @@ main() {
     install_aux_tools
     provision_kraken2
 
-    log_pass "EGAP v3.4.1 installation complete."
+    log_pass "EGAP v3.4.2 installation complete."
     echo
     echo "Next steps:"
     echo "  1. Open a new shell (or run: source ~/.bashrc)"

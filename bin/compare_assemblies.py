@@ -23,7 +23,7 @@ import glob
 import pandas as pd
 from pathlib import Path
 from collections import Counter
-from utilities import run_subprocess_cmd, get_current_row_data, initialize_logging_environment, validate_fasta, read_sample_table
+from utilities import run_subprocess_cmd, load_sample_context, initialize_logging_environment, validate_fasta
 from Bio import SeqIO
 from qc_assessment import run_lineage_eval
 
@@ -108,10 +108,15 @@ def get_quast_stats(assembly, cpu_threads, sample_dir, assembler):
             contig_count = None
             n50 = None
             for line in f:
-                if "Total number of contigs" in line:
-                    contig_count = int(line.split()[4])  # Adjust for TSV format
-                if "N50" in line:
-                    n50 = int(line.split()[1])
+                # report.tsv rows are "<label>\t<value>". The contig row is
+                # "# contigs" exactly; "# contigs (>= N bp)" rows are skipped.
+                # The old label "Total number of contigs" never matched, so
+                # the contig count was always None and cast no vote.
+                label, _, value = line.rstrip("\n").partition("\t")
+                if label == "# contigs":
+                    contig_count = int(value)
+                elif label == "N50":
+                    n50 = int(value)
             return contig_count, n50
     except FileNotFoundError:
         print(f"ERROR:\tQUAST report not found: {report}")
@@ -223,9 +228,8 @@ def compare_assemblies(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     Returns:
         str: Path to the selected best assembly FASTA (gzipped).
     """
-    input_df = read_sample_table(input_tsv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     # Identify read paths, reference, and BUSCO lineage info from TSV
     illumina_sra = current_series["ILLUMINA_SRA"]
@@ -348,12 +352,16 @@ def compare_assemblies(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             custom_stats.append("Unknown")
             continue
 
-        # Minimize contig count (idx==2), else maximize
-        if idx == 2:
-            best = min(candidates, key=lambda x: x[0])[1]
-        else:
-            best = max(candidates, key=lambda x: x[0])[1]
-        custom_stats.append(best)
+        # Minimize contig count (idx==2), else maximize. BUSCO percentages are
+        # compared at 2 decimals: 99.71000000000001 and 99.71 are the same
+        # score. A metric with no single winner casts no vote, so assemblies
+        # of equal completeness are separated by contig count and N50 rather
+        # than by discovery order (SPAdes, 88 contigs, once beat Flye, 5
+        # contigs, on exactly that).
+        scored = [(round(v, 2) if idx < 2 else v, m) for v, m in candidates]
+        target = min(s for s, _ in scored) if idx == 2 else max(s for s, _ in scored)
+        winners = [m for s, m in scored if s == target]
+        custom_stats.append(winners[0] if len(winners) == 1 else "Tie")
 
     print(f"DEBUG - len(assemblies) - {len(assemblies)}")
 
@@ -361,8 +369,9 @@ def compare_assemblies(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     if len(assemblies) == 1:
         most_represented_method = list(assemblies.keys())[0]
     elif len(assemblies) > 0:
-        counts = Counter(m for m in custom_stats if m != "Unknown")
-        most_represented_method = counts.most_common(1)[0][0] if counts else "Unknown"
+        counts = Counter(m for m in custom_stats if m not in ("Unknown", "Tie"))
+        # Every metric tied or unknown: nothing separates them, keep the first.
+        most_represented_method = counts.most_common(1)[0][0] if counts else methods[0]
     else:
         print("ERROR:\tNo valid assemblies to compare")
         return None

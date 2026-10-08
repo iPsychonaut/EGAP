@@ -30,6 +30,7 @@ from utilities import (
     run_subprocess_cmd,
     pigz_compress,
     pigz_decompress,
+    restore_if_compressed,
     analyze_nanostats,
     initialize_logging_environment,
     load_sample_context,
@@ -916,9 +917,7 @@ def final_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_thread
         pacbio_raw_reads = os.path.join(species_dir, "PacBio", f"{pacbio_sra}.fastq")
     if pd.notna(ref_seq_gca) and pd.isna(ref_seq):
         ref_seq = os.path.join(species_dir, "RefSeq", f"{species_id}_{ref_seq_gca}_RefSeq.fasta")
-        ref_seq_gz = ref_seq + ".gz"
-        if os.path.exists(ref_seq_gz) and not os.path.exists(ref_seq):
-            _ = pigz_decompress(ref_seq_gz, cpu_threads)
+        restore_if_compressed(ref_seq, cpu_threads)
 
     # Annotation-pipeline assembly: when no REF_SEQ was supplied, QC the
     # NT_ASSEMBLY instead. preprocess_refseq has already fetched a GCA or
@@ -933,9 +932,7 @@ def final_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_thread
         elif pd.notna(nt_assembly_path):
             ref_seq = os.path.join(nt_dir, f"{species_id}_NtAssembly.fasta")
         if isinstance(ref_seq, str):
-            ref_seq_gz = ref_seq + ".gz"
-            if os.path.exists(ref_seq_gz) and not os.path.exists(ref_seq):
-                _ = pigz_decompress(ref_seq_gz, cpu_threads)
+            restore_if_compressed(ref_seq, cpu_threads)
 
     # Set Illumina deduplicated read paths only if Illumina reads are present
     illu_dedup_f_reads = None
@@ -974,9 +971,7 @@ def final_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_thread
         """Ensure QC runs on the final-labeled path (rename or copy)."""
         if src_path == dst_path and os.path.exists(dst_path):
             return dst_path
-        if not os.path.exists(src_path) and os.path.exists(src_path + ".gz"):
-            print(f"INFO:\tDecompressing {src_path}.gz ...")
-            _ = pigz_decompress(src_path + ".gz", cpu_threads)
+        restore_if_compressed(src_path, cpu_threads)
         if not os.path.exists(src_path):
             raise FileNotFoundError(f"Assembly path not found: {src_path}")
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
@@ -1016,17 +1011,14 @@ def final_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_thread
             cand = decontaminated_assembly
             print(f"NOTE:\tUsing Tiara-decontaminated assembly as final: {cand}")
 
-        # 2) Try curated (plain or .gz)
+        # 2) Try curated (plain, .gz, or .fastb)
         elif not os.path.exists(cand):
-            if os.path.exists(cand + ".gz"):
-                cand = pigz_decompress(cand + ".gz", cpu_threads)
+            restore_if_compressed(cand, cpu_threads)
 
-        # 3) If curated still missing, try already-final EGAP assembly (plain or .gz)
+        # 3) If curated still missing, try already-final EGAP assembly (plain, .gz, or .fastb)
         if not os.path.exists(cand):
-            if os.path.exists(labeled_assembly):
+            if os.path.exists(restore_if_compressed(labeled_assembly, cpu_threads)):
                 cand = labeled_assembly
-            elif os.path.exists(labeled_assembly + ".gz"):
-                cand = pigz_decompress(labeled_assembly + ".gz", cpu_threads)
 
         # 4) If still missing, try polished fallback before giving up
         if not os.path.exists(cand):
