@@ -11,20 +11,17 @@
 ARG BASE=localhost:5050/egap:old
 FROM ${BASE}
 
-# EGAP only calls the fastb executable, so fastb gets its own venv on Debian's
-# Python and EGAP_env's packages stay exactly as in the old image.
-# /usr/bin/python3 is spelled out because the conda envs come first on PATH.
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3-venv python3-numpy && \
-    /usr/bin/python3 -m venv --system-site-packages /opt/fastb && \
-    rm -rf /var/lib/apt/lists/*
-
+# fastb goes into EGAP_env itself (Python 3.8, numpy already there), so
+# file_operations can import it and encode in-process instead of spawning
+# the executable. --no-deps: numpy is the only dependency and the env pins
+# it. The Bioconda `fastb` package will do the same in the real image;
+# until then the package is built from the FASTB checkout.
 COPY --from=fastb pyproject.toml README.md /tmp/fastb/
 COPY --from=fastb fastb /tmp/fastb/fastb
-RUN /opt/fastb/bin/pip install --no-cache-dir --no-deps /tmp/fastb && \
-    ln -s /opt/fastb/bin/fastb /usr/local/bin/fastb && \
+RUN /EGAP_env/bin/pip install --no-cache-dir --no-deps /tmp/fastb && \
     rm -rf /tmp/fastb && \
-    fastb --version
+    fastb --version && \
+    /EGAP_env/bin/python -c "import fastb.cli; print('fastb importable from EGAP_env')"
 
 # Every stage script from this checkout, so the modules agree with each other
 # (final_compress and decontaminate_assembly call compress_intermediate from

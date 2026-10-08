@@ -28,7 +28,7 @@ import hashlib
 import os
 import shutil
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 from typing import List
 
@@ -242,6 +242,21 @@ def fastb_compress(input_file, cpu_threads):
     return fastb_compress_many([input_file], cpu_threads)[0]
 
 
+def _fastb_available():
+    """``"module"`` when fastb imports here, ``"exe"`` when only the executable is on PATH, else None."""
+    try:
+        import fastb.cli  # noqa: F401
+        return "module"
+    except ImportError:
+        return "exe" if shutil.which("fastb") else None
+
+
+def _fastb_encode_chunk(files):
+    """Worker: encode and verify one chunk of files with the fastb package in this process."""
+    import fastb.cli
+    return fastb.cli.main(["encode", "--append", "--verify", *files])
+
+
 def fastb_compress_many(input_files, cpu_threads):
     """Encode several FASTA files with up to ``cpu_threads`` ``fastb encode`` processes; pigz for the rest.
 
@@ -253,7 +268,7 @@ def fastb_compress_many(input_files, cpu_threads):
     no output, so "output exists" means success. Returns the output paths in
     input order.
     """
-    have_fastb = shutil.which("fastb")
+    have_fastb = _fastb_available()
     batch = [f for f in input_files
              if f.endswith(_FASTA_EXTS) and have_fastb and os.path.getsize(f)]
     for f in batch:  # a stale output from an earlier run must not count as success
@@ -264,9 +279,18 @@ def fastb_compress_many(input_files, cpu_threads):
     # ponytail: 200 files per process keeps the command line far below ARG_MAX.
     chunks = [c[j:j + 200] for c in (by_size[i::workers] for i in range(workers))
               for j in range(0, len(c), 200)]
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        list(pool.map(lambda c: run_subprocess_cmd(
-            ["fastb", "encode", "--append", "--verify", *c], shell_check=False), chunks))
+    if have_fastb == "module":
+        # fastb is importable here: encode in worker processes forked from this
+        # interpreter, which already holds numpy, so no per-process start-up.
+        import fastb
+        print(f"CMD:\tfastb encode --append --verify (in-process, fastb {fastb.__version__}, "
+              f"{len(chunks)} worker(s), {len(batch)} file(s))")
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(_fastb_encode_chunk, chunks))
+    elif chunks:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(lambda c: run_subprocess_cmd(
+                ["fastb", "encode", "--append", "--verify", *c], shell_check=False), chunks))
     batch = set(batch)
     outputs = []
     for f in input_files:

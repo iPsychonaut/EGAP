@@ -68,12 +68,18 @@ def test_lossy_or_rejected_input_falls_back_to_pigz(tmp_path, text):
 
 @pytest.mark.parametrize("fmt", ["fastb"], indirect=True)
 @pytest.mark.parametrize("threads", [1, 3])
-def test_fastb_compress_many_mixes_fastb_and_pigz(tmp_path, fmt, threads):
+@pytest.mark.parametrize("path", ["module", "exe"])
+def test_fastb_compress_many_mixes_fastb_and_pigz(tmp_path, fmt, threads, path, monkeypatch):
     """Up to cpu_threads fastb processes for the batch; per file, success means
     the .fastb exists. A lossless file goes to FASTB, a header description and
     a protein file go to pigz, an empty file goes to pigz without entering the
     batch, and a stale .fastb from an earlier run is not mistaken for a result.
-    With 3 threads the three non-empty files run in three processes at once."""
+    With 3 threads the three non-empty files run in three processes at once.
+    "module" encodes in-process (fastb importable here), "exe" spawns the
+    executable; both must give the same outputs."""
+    if path == "module":
+        pytest.importorskip("fastb.cli")
+    monkeypatch.setattr(fo, "_fastb_available", lambda: path)
     good = _write(tmp_path / "good.fasta", BARE)
     desc = _write(tmp_path / "desc.fasta", ">c length=8\nACGTACGT\n")
     prot = _write(tmp_path / "prot.fasta", ">p\nMKFLILLFNILCLFPVLAADNHGVGPQGAS\n")
@@ -86,8 +92,9 @@ def test_fastb_compress_many_mixes_fastb_and_pigz(tmp_path, fmt, threads):
     assert not os.path.exists(prot + ".fastb")
 
 
-def test_missing_fastb_executable_falls_back_to_pigz(tmp_path, monkeypatch):
-    monkeypatch.setattr(fo.shutil, "which", lambda name: None)
+def test_missing_fastb_falls_back_to_pigz(tmp_path, monkeypatch):
+    """Neither the module nor the executable: pigz, with a warning."""
+    monkeypatch.setattr(fo, "_fastb_available", lambda: None)
     fasta = _write(tmp_path / "asm.fasta", BARE)
     assert fo.fastb_compress(fasta, 1) == fasta + ".gz"
 
