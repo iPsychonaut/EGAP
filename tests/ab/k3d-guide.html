@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>k3d Field Guide</title>
+<style>
+  :root {
+    --bg: #f7f6f2; --panel: #ffffff; --ink: #1d2327; --muted: #5b6670; --line: #dcd9d0;
+    --accent: #0f6e5c; --accent-soft: #e2f1ed; --warn: #9a4a00; --warn-soft: #fdf0dc;
+    --code-bg: #1f2529; --code-ink: #e8ecef; --l1: #e9eef5; --l2: #dcebe6; --l3: #f3e9d6; --l4: #f1dfe3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181b; --panel: #1c2226; --ink: #e6eaed; --muted: #9aa6b0; --line: #2e373d;
+      --accent: #5fc9b0; --accent-soft: #17302b; --warn: #f0b060; --warn-soft: #33260f;
+      --code-bg: #0d1012; --code-ink: #dfe5e9; --l1: #222c38; --l2: #1b322c; --l3: #352d1c; --l4: #38222a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 80px; }
+  header h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+  header p { color: var(--muted); margin: 0; max-width: 60ch; }
+  nav { margin: 24px 0 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+  nav a { font-size: .85rem; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--ink); text-decoration: none; background: var(--panel); }
+  nav a:hover { border-color: var(--accent); color: var(--accent); }
+  section { margin-top: 48px; }
+  h2 { font-size: 1.35rem; margin: 0 0 4px; }
+  h2 span { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 8px; }
+  h3 { font-size: 1rem; margin: 24px 0 4px; }
+  p { margin: 8px 0; max-width: 68ch; }
+  .lede { color: var(--muted); }
+  a { color: var(--accent); }
+  code { font: .9em ui-monospace, "Cascadia Code", Consolas, monospace;
+    background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+  .cmd { position: relative; margin: 8px 0 16px; }
+  .cmd pre { margin: 0; background: var(--code-bg); color: var(--code-ink); border-radius: 8px;
+    padding: 12px 64px 12px 14px; overflow-x: auto; font: .85rem/1.5 ui-monospace, "Cascadia Code", Consolas, monospace; }
+  .cmd button { position: absolute; top: 8px; right: 8px; font: inherit; font-size: .75rem; cursor: pointer;
+    color: var(--code-ink); background: transparent; border: 1px solid #55606a; border-radius: 6px; padding: 2px 8px; }
+  .cmd button:hover { border-color: var(--code-ink); }
+  pre.yaml { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 14px;
+    overflow-x: auto; font: .82rem/1.55 ui-monospace, "Cascadia Code", Consolas, monospace; }
+  pre.yaml i { color: #8fd3c1; font-style: normal; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: .92rem; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  .layers { margin: 16px 0; display: grid; gap: 0; }
+  .layer { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .layer b { display: block; }
+  .layer small { color: var(--muted); }
+  .layer .layer { margin-top: 10px; }
+  .l1 { background: var(--l1); } .l2 { background: var(--l2); } .l3 { background: var(--l3); } .l4 { background: var(--l4); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .pair .layer { margin-top: 0; }
+  .note, .warn { border-left: 4px solid var(--accent); background: var(--accent-soft);
+    padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 16px 0; max-width: 68ch; }
+  .warn { border-color: var(--warn); background: var(--warn-soft); }
+  .warn b { color: var(--warn); }
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; }
+  ol.steps > li { counter-increment: s; position: relative; padding-left: 40px; margin: 16px 0; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 28px; height: 28px;
+    border-radius: 50%; background: var(--accent); color: var(--bg); font-weight: 600; font-size: .85rem;
+    display: grid; place-items: center; }
+  details { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin: 10px 0; }
+  summary { cursor: pointer; font-weight: 600; }
+  ul.links { padding-left: 18px; }
+  ul.links li { margin: 6px 0; }
+  footer { margin-top: 56px; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); padding-top: 16px; }
+  @media (max-width: 560px) { .pair { grid-template-columns: 1fr; } header h1 { font-size: 1.6rem; } }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>k3d Field Guide</h1>
+  <p>How the EGAP test cluster on this machine is built, how to run it, and how to fix it.
+     Written for the setup made on 2026-09-29. Short sentences, real commands.</p>
+</header>
+
+<nav>
+  <a href="#picture">1 Picture</a><a href="#words">2 Words</a><a href="#setup">3 Your setup</a>
+  <a href="#loop">4 Daily loop</a><a href="#onoff">5 On, off, rebuild</a><a href="#survive">6 What survives</a>
+  <a href="#status">7 Status and fixes</a><a href="#jobfile">8 The job file</a>
+  <a href="#drills">9 Practice</a><a href="#links">10 Read more</a>
+</nav>
+
+<section id="picture">
+  <h2><span>1</span>The picture</h2>
+  <p class="lede">Four boxes, one inside the other. Every problem lives in exactly one of them.</p>
+  <div class="layers">
+    <div class="layer l1"><b>Windows 11</b><small>Your files, your terminal, <code>kubectl</code>, <code>k3d</code>, <code>docker</code></small>
+      <div class="layer l2"><b>Docker Desktop</b><small>A small Linux machine (WSL2) that runs containers. 16 CPUs, 55 GB.</small>
+        <div class="pair">
+          <div class="layer l3"><b>egap-registry</b><small>A shelf for images. Port 5050.</small></div>
+          <div class="layer l3"><b>k3d-egap-server-0</b><small>One container that is the whole k3s cluster.</small>
+            <div class="layer l4"><b>Pods</b><small>Your EGAP runs. Made by Jobs.</small></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p><b>k3s</b> is a small Kubernetes. It does not run on Windows directly.
+     <b>k3d</b> is a tool that starts k3s <em>inside a Docker container</em>, which is why Docker Desktop must be running first.</p>
+</section>
+
+<section id="words">
+  <h2><span>2</span>The words</h2>
+  <div class="scroll"><table>
+    <tr><th>Word</th><th>Meaning</th><th>Here</th></tr>
+    <tr><td>Image</td><td>A frozen box holding code and every tool it needs.</td><td><code>egap:old</code>, <code>egap:fastb</code></td></tr>
+    <tr><td>Container</td><td>A running copy of an image.</td><td></td></tr>
+    <tr><td>Registry</td><td>A shelf the cluster pulls images from.</td><td><code>localhost:5050</code></td></tr>
+    <tr><td>Cluster</td><td>The boss (k3s) plus the machines it controls.</td><td><code>egap</code>, one node</td></tr>
+    <tr><td>Node</td><td>One machine in the cluster.</td><td><code>k3d-egap-server-0</code></td></tr>
+    <tr><td>Job</td><td>An order: run this image until it finishes.</td><td><code>egap-old</code>, <code>egap-new</code></td></tr>
+    <tr><td>Pod</td><td>One running attempt of a Job.</td><td><code>egap-old-0-xxxxx</code></td></tr>
+    <tr><td>Label</td><td>A tag you filter by.</td><td><code>variant=old</code></td></tr>
+    <tr><td>Context</td><td>Which cluster <code>kubectl</code> is talking to.</td><td><code>k3d-egap</code></td></tr>
+    <tr><td>Manifest</td><td>A YAML file that describes what you want.</td><td><code>tests/ab/ab-test.yaml</code></td></tr>
+  </table></div>
+  <div class="note">Kubernetes works by <b>desired state</b>. You do not tell it "start this now".
+    You hand it a file saying "this Job should exist". It works out the steps.</div>
+</section>
+
+<section id="setup">
+  <h2><span>3</span>Your setup</h2>
+  <div class="scroll"><table>
+    <tr><th>Thing</th><th>Value</th></tr>
+    <tr><td>Cluster name</td><td><code>egap</code></td></tr>
+    <tr><td>Push images to</td><td><code>localhost:5050/&lt;name&gt;:&lt;tag&gt;</code></td></tr>
+    <tr><td>Name images in YAML as</td><td><code>egap-registry:5050/&lt;name&gt;:&lt;tag&gt;</code></td></tr>
+    <tr><td>Data folder on Windows</td><td><code>C:\Users\theda\egap-ab</code></td></tr>
+    <tr><td>Same folder inside the cluster</td><td><code>/data</code></td></tr>
+    <tr><td>Inputs</td><td><code>egap-ab\input\</code> (mounted read-only)</td></tr>
+    <tr><td>Outputs</td><td><code>egap-ab\out\old\</code> and <code>egap-ab\out\new\</code></td></tr>
+    <tr><td>Job file</td><td><code>tests/ab/ab-test.yaml</code> in the EGAP repo</td></tr>
+    <tr><td>New-image recipe</td><td><code>tests/ab/Dockerfile.fastb</code></td></tr>
+  </table></div>
+  <div class="note">One image has <b>two names</b>. From Windows the shelf is <code>localhost:5050</code>.
+    From inside the cluster the same shelf is <code>egap-registry:5050</code>. Mixing them up gives <code>ImagePullBackOff</code>.</div>
+</section>
+
+<section id="loop">
+  <h2><span>4</span>The daily loop</h2>
+  <p class="lede">Run every command from the EGAP repo folder.</p>
+  <ol class="steps">
+    <li><b>Check the cluster is up.</b> You want one node, status <code>Ready</code>.
+      <div class="cmd"><pre>kubectl get nodes</pre></div></li>
+    <li><b>Put the image on the shelf.</b>
+      <div class="cmd"><pre>docker push localhost:5050/egap:old</pre></div>
+      See what is on the shelf:
+      <div class="cmd"><pre>curl http://localhost:5050/v2/_catalog</pre></div></li>
+    <li><b>Hand over the order.</b> Add <code>-l variant=old</code> to start only one side.
+      <div class="cmd"><pre>kubectl apply -f tests/ab/ab-test.yaml</pre></div></li>
+    <li><b>Watch.</b> <code>-w</code> keeps the list live. Ctrl+C stops watching, not the run.
+      <div class="cmd"><pre>kubectl get pods -l app=egap-ab -w</pre></div></li>
+    <li><b>Read the output.</b>
+      <div class="cmd"><pre>kubectl logs -f -l variant=old</pre></div></li>
+    <li><b>Collect results.</b> They are already on Windows in <code>egap-ab\out\</code>. Compression numbers:
+      <div class="cmd"><pre>kubectl logs -l app=egap-ab --tail=-1 --prefix | findstr COMPRESS_SUMMARY</pre></div></li>
+    <li><b>Clear before the next run.</b> A Job cannot be edited, only replaced.
+      <div class="cmd"><pre>kubectl delete -f tests/ab/ab-test.yaml</pre></div>
+      This removes Jobs, pods and their logs. It does not touch output files.</li>
+  </ol>
+</section>
+
+<section id="onoff">
+  <h2><span>5</span>On, off, rebuild</h2>
+  <h3>Pause and resume</h3>
+  <p>Stop frees CPU and RAM. Nothing is lost.</p>
+  <div class="cmd"><pre>k3d cluster stop egap</pre></div>
+  <div class="cmd"><pre>k3d cluster start egap</pre></div>
+  <h3>After a reboot</h3>
+  <p>Start Docker Desktop and wait for it. Then check with <code>kubectl get nodes</code>.
+     If the node is missing or <code>NotReady</code>, run <code>k3d cluster start egap</code>.</p>
+  <h3>Rebuild from nothing</h3>
+  <p>Needed when you change what folders are mounted. Takes about 15 seconds.</p>
+  <div class="cmd"><pre>k3d cluster delete egap</pre></div>
+  <div class="cmd"><pre>k3d cluster create egap --no-lb --registry-create egap-registry:0.0.0.0:5050 --volume "C:\Users\theda\egap-ab:/data@server:0" --k3s-arg "--disable=traefik@server:0" --k3s-arg "--disable=servicelb@server:0"</pre></div>
+  <p>Then push your images again.</p>
+  <details><summary>What each flag does</summary>
+    <div class="scroll"><table>
+      <tr><th>Flag</th><th>Why</th></tr>
+      <tr><td><code>--no-lb</code></td><td>No load balancer. Batch jobs serve no web traffic.</td></tr>
+      <tr><td><code>--registry-create</code></td><td>Makes the image shelf and tells the cluster to trust it.</td></tr>
+      <tr><td><code>--volume A:B@server:0</code></td><td>Windows folder A appears as B inside the node.</td></tr>
+      <tr><td><code>--disable=traefik</code>, <code>servicelb</code></td><td>Turns off web-routing parts you do not use.</td></tr>
+    </table></div>
+    <p>To add the Kraken2 database, add a second volume:
+       <code>--volume "C:\path\to\kraken2_db:/kraken2_db@server:0"</code>, then mount it in the job file.</p>
+  </details>
+  <div class="warn"><b>Docker Desktop error dialog.</b> Click <b>Quit</b>. Never click "Reset to factory defaults":
+    it can delete every image and volume. On 2026-09-29 Docker failed to start because of stale socket files in
+    <code>%LOCALAPPDATA%\Docker\run</code> and <code>%LOCALAPPDATA%\docker-secrets-engine</code>.
+    The fix was to quit Docker, rename those two folders, and start Docker again. Quit Docker from the tray before shutting down to avoid it.</div>
+</section>
+
+<section id="survive">
+  <h2><span>6</span>What survives what</h2>
+  <div class="scroll"><table>
+    <tr><th>Event</th><th>Output files</th><th>Images on shelf</th><th>Jobs and logs</th></tr>
+    <tr><td>Pod finishes</td><td>kept</td><td>kept</td><td>kept</td></tr>
+    <tr><td><code>kubectl delete -f ...</code></td><td>kept</td><td>kept</td><td>gone</td></tr>
+    <tr><td><code>k3d cluster stop</code> / <code>start</code></td><td>kept</td><td>kept</td><td>kept</td></tr>
+    <tr><td>Reboot, sleep, Docker quit</td><td>kept</td><td>kept</td><td>running pods die</td></tr>
+    <tr><td><code>k3d cluster delete</code></td><td>kept</td><td>probably gone (not tested here)</td><td>gone</td></tr>
+  </table></div>
+  <p>Output files live on Windows, outside the cluster. They are the safest thing you have.
+     Logs live inside the cluster, so copy anything you need before deleting a Job.</p>
+</section>
+
+<section id="status">
+  <h2><span>7</span>Status and fixes</h2>
+  <p class="lede">Two commands answer almost every question.</p>
+  <div class="cmd"><pre>kubectl describe pod -l app=egap-ab</pre></div>
+  <p>Read the <b>Events</b> list at the bottom. It says what the cluster tried and what went wrong.</p>
+  <div class="cmd"><pre>kubectl logs -l variant=old --tail=50</pre></div>
+  <p>This is what the program itself printed.</p>
+  <div class="scroll"><table>
+    <tr><th>Status</th><th>Meaning</th><th>Fix</th></tr>
+    <tr><td><code>Pending</code></td><td>Not enough free CPU or RAM for what the pod asked.</td><td>Wait for another pod to end, or lower <code>requests</code>.</td></tr>
+    <tr><td><code>ContainerCreating</code></td><td>Pulling the image. Big images take minutes.</td><td>Wait.</td></tr>
+    <tr><td><code>ImagePullBackOff</code></td><td>Image not found.</td><td>Push it. Check the name uses <code>egap-registry:5050</code>.</td></tr>
+    <tr><td><code>Running</code></td><td>Working.</td><td></td></tr>
+    <tr><td><code>OOMKilled</code></td><td>Used more memory than its limit.</td><td>Raise <code>limits.memory</code>, or lower <code>--ram_gb</code>.</td></tr>
+    <tr><td><code>Error</code></td><td>The program exited with a failure.</td><td>Read the logs.</td></tr>
+    <tr><td><code>Completed</code></td><td>Finished without error.</td><td></td></tr>
+  </table></div>
+  <h3>Wrong cluster?</h3>
+  <div class="cmd"><pre>kubectl config current-context</pre></div>
+  <p>Should print <code>k3d-egap</code>. If not:</p>
+  <div class="cmd"><pre>kubectl config use-context k3d-egap</pre></div>
+  <h3>Known trap on this machine</h3>
+  <p><code>k3d image import</code> fails with <code>content digest ... not found</code>. Use <code>docker push</code> to the registry instead.</p>
+</section>
+
+<section id="jobfile">
+  <h2><span>8</span>How the job file works</h2>
+  <p class="lede">One Job, shortened. The second Job is the same with <code>new</code> and <code>egap:fastb</code>.</p>
+<pre class="yaml">kind: Job
+metadata:
+  name: egap-old
+  labels: {app: egap-ab, variant: old}   <i># tags used by -l filters</i>
+spec:
+  completionMode: Indexed                <i># numbered pods: 0, 1, 2</i>
+  completions: 3                         <i># three samples</i>
+  parallelism: 1                         <i># one at a time</i>
+  backoffLimitPerIndex: 0                <i># a failed sample is not retried, others still run</i>
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: egap
+          image: egap-registry:5050/egap:old
+          command: ["bash", "-c"]
+          args: [ ...script... ]         <i># pick sample by number, run EGAP, run final_compress</i>
+          resources:
+            requests: {cpu: "7", memory: 24Gi}   <i># reserved for this pod</i>
+            limits:   {cpu: "7", memory: 24Gi}   <i># hard ceiling</i>
+          volumeMounts:
+            - {name: data, mountPath: /data/input, subPath: input, readOnly: true}
+            - {name: data, mountPath: /data/out,   subPath: out/old}
+      volumes:
+        - name: data
+          hostPath: {path: /data}        <i># the Windows folder, as seen by the node</i></pre>
+  <h3>Why it is a fair test</h3>
+  <div class="scroll"><table>
+    <tr><th>Held the same</th><th>How</th></tr>
+    <tr><td>Input</td><td>Both Jobs read the same TSV, mounted read-only.</td></tr>
+    <tr><td>CPU and memory</td><td><code>requests</code> equals <code>limits</code>, same numbers in both.</td></tr>
+    <tr><td>Load on the machine</td><td>Always one old pod and one new pod at once.</td></tr>
+    <tr><td>Script</td><td>Identical text in both Jobs.</td></tr>
+    <tr><td><b>Different</b></td><td>Only the image.</td></tr>
+  </table></div>
+  <h3>Rules of thumb</h3>
+  <ul>
+    <li>A container still <em>sees</em> all 16 CPUs even with a limit of 7. Always pass the thread count to the tool.</li>
+    <li>For clean timing, run one Job at a time. Parallel runs share the disk.</li>
+    <li>Writing to a Windows folder from Linux is slow. Fine for E. coli. Move data into WSL for big genomes.</li>
+    <li>Do not run <code>docker build .</code> from the EGAP folder. It holds 150 GB and has no <code>.dockerignore</code>. Use the command at the top of <code>Dockerfile.fastb</code>.</li>
+  </ul>
+</section>
+
+<section id="drills">
+  <h2><span>9</span>Practice</h2>
+  <p class="lede">Five drills. Each takes a few minutes and cannot hurt your data. Do them when no real run is active.</p>
+  <details><summary>Drill 1: look around</summary>
+    <p>List everything in the cluster, including the parts k3s runs for itself.</p>
+    <div class="cmd"><pre>kubectl get pods -A</pre></div>
+    <p><b>Expect:</b> a few pods in <code>kube-system</code> such as <code>coredns</code>. Those are the cluster's own helpers.</p>
+  </details>
+  <details><summary>Drill 2: run a tiny Job</summary>
+    <div class="cmd"><pre>kubectl create job hello --image=egap-registry:5050/smoke:1 -- bash -c "nproc; ls /"</pre></div>
+    <div class="cmd"><pre>kubectl logs job/hello</pre></div>
+    <div class="cmd"><pre>kubectl delete job hello</pre></div>
+    <p><b>Expect:</b> <code>16</code>, then a folder list. You made, read and removed a Job.</p>
+  </details>
+  <details><summary>Drill 3: cause ImagePullBackOff on purpose</summary>
+    <div class="cmd"><pre>kubectl create job broken --image=egap-registry:5050/does-not-exist:1 -- true</pre></div>
+    <div class="cmd"><pre>kubectl describe pod -l job-name=broken</pre></div>
+    <div class="cmd"><pre>kubectl delete job broken</pre></div>
+    <p><b>Expect:</b> the Events list says the image could not be pulled. Now you know what that failure looks like.</p>
+  </details>
+  <details><summary>Drill 4: stop and start the cluster</summary>
+    <div class="cmd"><pre>k3d cluster stop egap</pre></div>
+    <div class="cmd"><pre>kubectl get nodes</pre></div>
+    <div class="cmd"><pre>k3d cluster start egap</pre></div>
+    <p><b>Expect:</b> the middle command fails to connect. After start it works again and the shelf still holds your images.</p>
+  </details>
+  <details><summary>Drill 5: see who uses what</summary>
+    <div class="cmd"><pre>kubectl top pods</pre></div>
+    <div class="cmd"><pre>kubectl describe node k3d-egap-server-0</pre></div>
+    <p><b>Expect:</b> live CPU and memory per pod, then an "Allocated resources" block showing how much of the node is reserved.</p>
+  </details>
+</section>
+
+<section id="links">
+  <h2><span>10</span>Read more</h2>
+  <h3>Start here</h3>
+  <ul class="links">
+    <li><a href="https://docs.docker.com/get-started/docker-overview/">Docker overview</a>: images, containers, registries.</li>
+    <li><a href="https://kubernetes.io/docs/tutorials/kubernetes-basics/">Kubernetes basics tutorial</a>: the official beginner path.</li>
+    <li><a href="https://k3d.io/stable/">k3d documentation</a>: the tool that runs your cluster.</li>
+  </ul>
+  <h3>The parts you use</h3>
+  <ul class="links">
+    <li><a href="https://kubernetes.io/docs/concepts/workloads/controllers/job/">Jobs</a>: run-to-completion work, retries, backoff limits.</li>
+    <li><a href="https://kubernetes.io/docs/tasks/job/indexed-parallel-processing-static/">Indexed Jobs</a>: the numbered-pod pattern in your job file.</li>
+    <li><a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/">Requests and limits</a>: how CPU and memory are reserved and capped.</li>
+    <li><a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/">Labels and selectors</a>: how <code>-l variant=old</code> works.</li>
+    <li><a href="https://kubernetes.io/docs/concepts/storage/volumes/">Volumes</a>: includes <code>hostPath</code>, used for the data folder.</li>
+    <li><a href="https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/">Pod lifecycle</a>: what each status means.</li>
+    <li><a href="https://k3d.io/stable/usage/registries/">k3d registries</a>: why the image has two names.</li>
+    <li><a href="https://k3d.io/stable/usage/commands/k3d_cluster_create/">k3d cluster create</a>: every flag.</li>
+  </ul>
+  <h3>When it breaks</h3>
+  <ul class="links">
+    <li><a href="https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/">Debug pods</a>: step-by-step from the Kubernetes docs.</li>
+    <li><a href="https://kubernetes.io/docs/reference/kubectl/quick-reference/">kubectl quick reference</a>: one page of commands.</li>
+    <li><a href="https://docs.docker.com/desktop/troubleshoot-and-support/troubleshoot/">Docker Desktop troubleshooting</a>.</li>
+    <li><a href="https://docs.docker.com/desktop/features/wsl/">Docker Desktop on WSL 2</a>: how the Linux machine under Docker works.</li>
+    <li><a href="https://learn.microsoft.com/en-us/windows/wsl/wsl-config">WSL configuration</a>: the <code>.wslconfig</code> file that sets memory and idle timeout.</li>
+    <li><a href="https://docs.docker.com/build/concepts/context/">Docker build context</a>: why the 150 GB folder matters.</li>
+    <li><a href="https://docs.k3s.io/">k3s documentation</a>: the Kubernetes inside the container.</li>
+  </ul>
+</section>
+
+<footer>
+  Versions when written: Docker Desktop 4.83.0, Docker Engine 29.6.2, k3d 5.9.0, k3s v1.35.5, kubectl v1.36.1.
+  Commands are for PowerShell on Windows 11.
+</footer>
+
+</main>
+<script>
+  document.querySelectorAll('.cmd').forEach(function (box) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.textContent = 'Copy';
+    b.addEventListener('click', function () {
+      navigator.clipboard.writeText(box.querySelector('pre').textContent).then(function () {
+        b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1200);
+      });
+    });
+    box.appendChild(b);
+  });
+</script>
+</body>
+</html>
