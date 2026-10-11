@@ -1,0 +1,38 @@
+# Baseline for the A/B run: EGAP_env only, on the same Debian base and with the
+# same runtime settings as the repo Dockerfile. EGEP_env and funannotate_env are
+# left out: EGAP does not use them, and their conda solve currently fails.
+#
+# Step 1 builds the EGAP_env part of the repo Dockerfile (everything above
+# "# Generate EGEP_env"), step 2 copies it into a slim image. From the repo root,
+# in Git Bash:
+#
+#   n=$(grep -n '^# Generate EGEP_env' Dockerfile | cut -d: -f1)
+#   head -n $((n - 2)) Dockerfile > /tmp/Dockerfile.egap-build
+#   mkdir -p /tmp/empty
+#   docker build -f /tmp/Dockerfile.egap-build --target build -t egap-build:dev /tmp/empty
+#   docker build -f tests/ab/Dockerfile.old -t localhost:5050/egap:old /tmp/empty
+#   docker push localhost:5050/egap:old
+FROM debian:bookworm
+
+COPY --from=egap-build:dev /EGAP_env /EGAP_env
+
+RUN apt-get update && apt-get install -y \
+    snap augustus augustus-data locales locales-all libgl1 procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# CONDA_PREFIX: preprocess_illumina finds the Trimmomatic adapter files through
+# it. Nothing activates the env in a container, so it has to be set here.
+ENV PATH="/EGAP_env/bin:$PATH" \
+    CONDA_PREFIX="/EGAP_env" \
+    KRAKEN2_DB="" \
+    CONDA_DEFAULT_ENV=EGAP_env \
+    PYTHONUNBUFFERED=1 \
+    EGAP_DRY_RUN=0
+
+# masurca 4.1.4 ships an old Flye launcher (Python 2.7 only) that overwrites
+# bin/flye from flye 2.9.5. Put back a launcher for the installed flye module.
+RUN printf '#!/usr/bin/env python\nimport sys\nfrom flye.main import main\nsys.exit(main())\n' \
+        > /EGAP_env/bin/flye && flye --version
+
+ENTRYPOINT ["/EGAP_env/bin/EGAP"]
+CMD ["--help"]
