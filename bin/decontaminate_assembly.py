@@ -44,7 +44,7 @@ from typing import Optional
 import pandas as pd
 from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, initialize_logging_environment, log_print, pigz_compress, load_sample_context
+from utilities import run_subprocess_cmd, initialize_logging_environment, log_print, compress_intermediate, load_sample_context
 
 
 # --------------------------------------------------------------
@@ -415,8 +415,8 @@ def decontaminate_assembly(
     # Compress working FASTAs now that final_out has been written.
     # This keeps all Tiara output but reclaims space for the redundant copies.
     log_print(f"NOTE:\tCompressing Tiara working FASTAs...")
-    pigz_compress(removed_fasta, cpu_threads)
-    pigz_compress(decontam_fasta, cpu_threads)
+    compress_intermediate(removed_fasta, cpu_threads)
+    compress_intermediate(decontam_fasta, cpu_threads)
 
     # ----------------------------------------------------------
     # Section 13: Write done marker

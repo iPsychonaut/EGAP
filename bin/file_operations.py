@@ -6,7 +6,9 @@ file_operations.py
 Filesystem, path, and FASTA/FASTQ I/O helpers for EGAP modules.
 
 Extracted from :mod:`utilities` in v3.4.1.  Hosts path-normalisation,
-FASTA validation, parallel gzip wrappers (``pigz``), MD5 verification,
+FASTA validation, compression wrappers (``pigz``, ``fastb``, and the
+``INTERMEDIATE_FORMAT`` dispatcher for
+nucleotide FASTA when it is installed), MD5 verification,
 base-count tallies, coverage calculation, and a small move helper.
 
 Depends on :mod:`subprocess_runner` (``run_subprocess_cmd`` for the ``pigz`` wrappers).
@@ -18,7 +20,7 @@ Stage:
 
 Created on Wed Aug 16 2023
 
-Updated on 2026-05-24
+Updated on 2026-09-29
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
@@ -26,6 +28,7 @@ import hashlib
 import os
 import shutil
 import tempfile
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from pathlib import Path
 from typing import List
 
@@ -141,6 +144,30 @@ def validate_fasta(file_path):
 
 
 # --------------------------------------------------------------
+# FASTA extensions FASTB may take
+# --------------------------------------------------------------
+_FASTA_EXTS = (".fasta", ".fa", ".fna")
+
+
+# --------------------------------------------------------------
+# Intermediate format setting
+# --------------------------------------------------------------
+INTERMEDIATE_FORMATS = ("pigz", "fastb")
+
+
+def intermediate_format():
+    """Return the configured intermediate format: ``pigz`` (default) or ``fastb``.
+
+    Read from ``EGAP_INTERMEDIATE_FORMAT``; EGAP.py sets that variable from
+    its ``--intermediate_format`` flag so every stage subprocess sees it.
+    """
+    fmt = os.environ.get("EGAP_INTERMEDIATE_FORMAT", "pigz").strip().lower() or "pigz"
+    if fmt not in INTERMEDIATE_FORMATS:
+        raise ValueError(f"EGAP_INTERMEDIATE_FORMAT must be one of {INTERMEDIATE_FORMATS}, got {fmt!r}")
+    return fmt
+
+
+# --------------------------------------------------------------
 # Compress a file using pigz
 # --------------------------------------------------------------
 def pigz_compress(input_file, cpu_threads):
@@ -168,7 +195,7 @@ def pigz_compress(input_file, cpu_threads):
 # Decompress a file using pigz
 # --------------------------------------------------------------
 def pigz_decompress(input_file, cpu_threads):
-    """Decompress a file using pigz with multiple threads.
+    """Decompress a ``.gz`` file with pigz.
 
     Parameters
     ----------
@@ -180,12 +207,177 @@ def pigz_decompress(input_file, cpu_threads):
     Returns
     -------
     str
-        Path to the decompressed file (with ``.gz`` extension removed).
+        Path to the decompressed file (with the ``.gz`` extension removed).
     """
     pigz_cmd = f"pigz -p {cpu_threads} -d -f {input_file}"
     _ = run_subprocess_cmd(pigz_cmd, shell_check=True)
-    unzip_file = input_file.replace(".gz", "")
+    unzip_file = input_file[:-3] if input_file.endswith(".gz") else input_file
     return unzip_file
+
+
+# --------------------------------------------------------------
+# Compress a nucleotide FASTA using FASTB
+# --------------------------------------------------------------
+def fastb_compress(input_file, cpu_threads):
+    """Encode a nucleotide FASTA to ``<input_file>.fastb``; fall back to pigz.
+
+    Same signature as :func:`pigz_compress`. ``fastb encode --verify`` re-reads
+    its output and compares every header line and sequence with the FASTA
+    before anything is deleted. FASTB keeps only the first word of each header
+    and rejects protein, so anything that does not round-trip (or an empty
+    file, or a missing ``fastb`` executable) goes to pigz instead.
+
+    Parameters
+    ----------
+    input_file : str
+        Path to the FASTA file to compress.
+    cpu_threads : int
+        Threads for the pigz fallback (the FASTB encoder is single-threaded).
+
+    Returns
+    -------
+    str
+        Path to the ``.fastb`` file, or the ``.gz`` file on fallback.
+    """
+    return fastb_compress_many([input_file], cpu_threads)[0]
+
+
+def _fastb_available():
+    """``"module"`` when fastb imports here, ``"exe"`` when only the executable is on PATH, else None."""
+    try:
+        import fastb.cli  # noqa: F401
+        return "module"
+    except ImportError:
+        return "exe" if shutil.which("fastb") else None
+
+
+def _fastb_encode_chunk(files):
+    """Worker: encode and verify one chunk of files with the fastb package in this process."""
+    import fastb.cli
+    return fastb.cli.main(["encode", "--append", "--verify", *files])
+
+
+def fastb_compress_many(input_files, cpu_threads):
+    """Encode several FASTA files with up to ``cpu_threads`` ``fastb encode`` processes; pigz for the rest.
+
+    The encoder is single-threaded, so the files are dealt round-robin by size
+    into ``cpu_threads`` chunks and one process runs per chunk, all at once.
+    Each process pays one Python start-up (about 0.36 s); per file that
+    start-up was 70% of FASTB's cost on the E. coli hybrid sample. fastb
+    handles each file on its own and a file that does not round-trip leaves
+    no output, so "output exists" means success. Returns the output paths in
+    input order.
+    """
+    have_fastb = _fastb_available()
+    batch = [f for f in input_files
+             if f.endswith(_FASTA_EXTS) and have_fastb and os.path.getsize(f)]
+    for f in batch:  # a stale output from an earlier run must not count as success
+        if os.path.exists(f + ".fastb"):
+            os.remove(f + ".fastb")
+    workers = max(1, min(int(cpu_threads), len(batch)))
+    by_size = sorted(batch, key=os.path.getsize, reverse=True)
+    # ponytail: 200 files per process keeps the command line far below ARG_MAX.
+    chunks = [c[j:j + 200] for c in (by_size[i::workers] for i in range(workers))
+              for j in range(0, len(c), 200)]
+    if have_fastb == "module":
+        # fastb is importable here: encode in worker processes forked from this
+        # interpreter, which already holds numpy, so no per-process start-up.
+        import fastb
+        print(f"CMD:\tfastb encode --append --verify (in-process, fastb {fastb.__version__}, "
+              f"{len(chunks)} worker(s), {len(batch)} file(s))")
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(_fastb_encode_chunk, chunks))
+    elif chunks:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(lambda c: run_subprocess_cmd(
+                ["fastb", "encode", "--append", "--verify", *c], shell_check=False), chunks))
+    batch = set(batch)
+    outputs = []
+    for f in input_files:
+        if f in batch and os.path.exists(f + ".fastb"):
+            os.remove(f)
+            outputs.append(f + ".fastb")
+            continue
+        if f in batch:
+            print(f"NOTE:\tFASTB is not lossless for {f}; using pigz")
+        elif f.endswith(_FASTA_EXTS) and not have_fastb:
+            print("WARN:\tfastb executable not found on PATH; using pigz")
+        outputs.append(pigz_compress(f, cpu_threads))
+    return outputs
+
+
+# --------------------------------------------------------------
+# Decompress a FASTB file back to FASTA
+# --------------------------------------------------------------
+def fastb_decompress(input_file, cpu_threads):
+    """Decode a ``.fastb`` file to FASTA and remove it, like ``pigz -d``.
+
+    Parameters
+    ----------
+    input_file : str
+        Path to the ``.fastb`` file.
+    cpu_threads : int
+        Worker processes for ``fastb decode -p``.
+
+    Returns
+    -------
+    str
+        Path to the decoded FASTA (``.fastb`` extension removed).
+    """
+    fasta_file = input_file[:-len(".fastb")] if input_file.endswith(".fastb") else input_file + ".fasta"
+    rc = run_subprocess_cmd(["fastb", "decode", input_file, "-o", fasta_file,
+                             "-p", str(max(1, int(cpu_threads)))], shell_check=False)
+    if rc == 0:
+        os.remove(input_file)
+    return fasta_file
+
+
+# --------------------------------------------------------------
+# Dispatch on the intermediate format setting
+# --------------------------------------------------------------
+def compress_intermediate(input_file, cpu_threads):
+    """Compress an intermediate file according to ``INTERMEDIATE_FORMAT``.
+
+    Nucleotide FASTA goes to FASTB when the setting is ``fastb``. FASTQ and
+    every other file always go to pigz (FASTB has no quality scores).
+    """
+    if input_file.endswith(_FASTA_EXTS) and intermediate_format() == "fastb":
+        return fastb_compress(input_file, cpu_threads)
+    return pigz_compress(input_file, cpu_threads)
+
+
+def decompress_intermediate(input_file, cpu_threads):
+    """Decompress ``.gz`` with pigz or ``.fastb`` with FASTB, by extension."""
+    if input_file.endswith(".fastb"):
+        return fastb_decompress(input_file, cpu_threads)
+    return pigz_decompress(input_file, cpu_threads)
+
+
+# --------------------------------------------------------------
+# Bring back a file that an earlier run compressed
+# --------------------------------------------------------------
+def restore_if_compressed(path, cpu_threads):
+    """Decompress ``path + '.gz'`` or ``path + '.fastb'`` when *path* itself is missing.
+
+    Parameters
+    ----------
+    path : str
+        Path to the uncompressed file a caller is about to read.
+    cpu_threads : int
+        Number of threads to use for decompression.
+
+    Returns
+    -------
+    str
+        *path*, unchanged.  Callers still check that it exists.
+    """
+    if not os.path.exists(path):
+        for ext in (".gz", ".fastb"):
+            if os.path.exists(path + ext):
+                print(f"INFO:\tDecompressing {path}{ext} ...")
+                decompress_intermediate(path + ext, cpu_threads)
+                break
+    return path
 
 
 # --------------------------------------------------------------
@@ -221,10 +413,10 @@ def sum_fastq_bases_with_pigz_safe(fq_path: Path, cpu_threads: int) -> int:
 # --------------------------------------------------------------
 def sum_fasta_bases_with_pigz_safe(fa_path: Path, cpu_threads: int) -> int:
     """
-    Same safety pattern for FASTA/FA files that may be .gz.
+    Same safety pattern for FASTA/FA files that may be .gz or .fastb.
     """
     total = 0
-    if str(fa_path).endswith(".gz"):
+    if str(fa_path).endswith((".gz", ".fastb")):
         with tempfile.TemporaryDirectory(prefix="egap_pigz_") as tdir:
             tmp_gz = Path(tdir) / fa_path.name
             shutil.copy2(str(fa_path), str(tmp_gz))

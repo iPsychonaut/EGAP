@@ -1,0 +1,32 @@
+# New variant for the A/B run: the old image, plus FASTB, plus the EGAP
+# stage scripts (bin/*.py) from this checkout.
+#
+# Build from the repo root. Contexts are named so the repo folder (150 GB of
+# run output, no .dockerignore) is never sent to Docker:
+#
+#   docker build -f tests/ab/Dockerfile.fastb \
+#       --build-context egap=bin --build-context fastb=../FASTB \
+#       -t localhost:5050/egap:fastb tests/ab
+#   docker push localhost:5050/egap:fastb
+ARG BASE=localhost:5050/egap:old
+FROM ${BASE}
+
+# fastb goes into EGAP_env itself (Python 3.8, numpy already there), so
+# file_operations can import it and encode in-process instead of spawning
+# the executable. --no-deps: numpy is the only dependency and the env pins
+# it. The Bioconda `fastb` package will do the same in the real image;
+# until then the package is built from the FASTB checkout.
+COPY --from=fastb pyproject.toml README.md /tmp/fastb/
+COPY --from=fastb fastb /tmp/fastb/fastb
+RUN /EGAP_env/bin/pip install --no-cache-dir --no-deps /tmp/fastb && \
+    rm -rf /tmp/fastb && \
+    fastb --version && \
+    /EGAP_env/bin/python -c "import fastb.cli; print('fastb importable from EGAP_env')"
+
+# Every stage script from this checkout, so the modules agree with each other
+# (final_compress and decontaminate_assembly call compress_intermediate from
+# utilities). EGAP.py is not in this build context: it stays as the base image
+# has it, which is why the Job sets EGAP_INTERMEDIATE_FORMAT instead of passing
+# --intermediate_format.
+COPY --from=egap *.py /EGAP_env/bin/
+RUN cd /EGAP_env/bin && python -c "import utilities; utilities.compress_intermediate; print(utilities.intermediate_format())"

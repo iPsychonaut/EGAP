@@ -20,6 +20,7 @@ Updated on 2026-05-24
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
+import json
 import os
 import shutil
 from dataclasses import dataclass, field
@@ -153,10 +154,13 @@ def get_current_row_data(input_df, sample_id):
     # Filter the DataFrame for rows where the "SAMPLE_ID" column equals the provided sample_id
     current_row = input_df[input_df["SAMPLE_ID"] == sample_id].copy()
 
-    # Replace literal string "None" with actual NaN so downstream pd.isna()
+    # Replace literal string "None" with pd.NA so downstream pd.isna()
     # checks work correctly (some TSV editors write "None" instead of leaving
-    # cells empty).
-    current_row = current_row.replace(to_replace="None", value=pd.NA)
+    # cells empty). Use mask() rather than DataFrame.replace(): on pandas
+    # 1.4.x, replace() raises AttributeError when an object column already
+    # holds pd.NA (the elementwise comparison collapses to a scalar bool).
+    # mask() behaves identically on pandas 1.4.4, 2.0.3 and 3.x.
+    current_row = current_row.mask(current_row == "None", other=pd.NA)
 
     sample_stats_dict = gen_sample_stats_dict(current_row)
     current_index = current_row.index.tolist()
@@ -339,6 +343,20 @@ def load_sample_context(
     input_df = read_sample_table(input_tsv_abs)
     current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
     current_series = current_row.iloc[0]
+    # preprocess_refseq copies a local REF_SEQ to <species>/RefSeq/..._RefSeq.fasta
+    # (naming must match preprocess_refseq.place_assembly()). Hand every stage that
+    # copy when the original extension is one tools reject (SPAdes exits 255 on
+    # .fna). ``current_row`` keeps the raw cell, which preprocess_refseq reads.
+    # ponytail: .gz is left alone because place_assembly copies bytes verbatim;
+    # gunzip there if compressed local references need normalizing too.
+    ref_seq = current_series["REF_SEQ"]
+    if isinstance(ref_seq, str) and not ref_seq.lower().endswith((".fasta", ".fa", ".gz")):
+        species_id, gca = current_series["SPECIES_ID"], current_series["REF_SEQ_GCA"]
+        stem = f"{species_id}_{gca}_RefSeq" if pd.notna(gca) else f"{species_id}_RefSeq"
+        canonical = os.path.join(output_dir_abs, str(species_id), "RefSeq", f"{stem}.fasta")
+        if os.path.exists(canonical):
+            current_series = current_series.copy()
+            current_series["REF_SEQ"] = canonical
     return SampleContext(
         sample_id=sample_id,
         input_tsv=input_tsv_abs,
@@ -580,20 +598,87 @@ def select_long_reads(output_dir, input_tsv, sample_id, cpu_threads):
     print(f"Highest Mean Quality Long reads: {highest_mean_qual_long_reads}")
     print(f"Mean Quality: {highest_mean_qual}")
 
+    # What the chosen set is, for stages that must match a tool mode to it.
+    # *_corrected.fastq is only a symlink to the filtered reads when Ratatosk
+    # was skipped, so a symlink does not count as corrected.
+    if highest_mean_qual_long_reads == corrected_reads and not os.path.islink(corrected_reads):
+        reads_source = "corrected"
+    elif highest_mean_qual_long_reads == pacbio_raw_reads:
+        reads_source = "raw"
+    else:
+        reads_source = "filtered"
+
     renamed_highest_mean_qual_long_reads = f"{species_id}_{reads_type}_highest_mean_qual_long_reads.fastq"
     if not os.path.exists(highest_mean_qual_long_reads):
-        # try fallback: see if it's named like "Escherichia_coli_filtered.fastq"
-        fallback_file = os.path.join(reads_dir, f"{species_id}_filtered.fastq")
-        if os.path.exists(fallback_file):
-            print(f"FALLBACK:\tFound fallback filtered file: {fallback_file}")
-            highest_mean_qual_long_reads = fallback_file
+        reads_source = "filtered"
+        # The chosen set may never have been written: when Ratatosk yields
+        # nothing, preprocess_ont carries on with the filtered reads and no
+        # *_corrected.fastq exists. Use the filtered set rather than returning
+        # None, which makes every later stage fall back to the raw reads.
+        # The second name is the older "<species>_filtered.fastq" layout.
+        for fallback_file in (filtered_reads, os.path.join(reads_dir, f"{species_id}_filtered.fastq")):
+            if os.path.exists(fallback_file) and os.path.getsize(fallback_file) > 0:
+                print(f"FALLBACK:\t{highest_mean_qual_long_reads} does not exist; using filtered reads: {fallback_file}")
+                highest_mean_qual_long_reads = fallback_file
+                break
         else:
             print("ERROR:\tNo usable highest-mean-quality long read file found.")
             return None
 
     renamed_highest_mean_qual_long_reads = os.path.join(reads_dir, f"{species_id}_{reads_type}_highest_mean_qual_long_reads.fastq")
     shutil.copy(highest_mean_qual_long_reads, renamed_highest_mean_qual_long_reads)
+    with open(renamed_highest_mean_qual_long_reads + LONG_READ_INFO_SUFFIX, "w") as fh:
+        json.dump({"source": reads_source, "mean_quality": highest_mean_qual}, fh)
 
-    print(f"NOTE:\tSelected highest quality long reads: {renamed_highest_mean_qual_long_reads} with mean quality {highest_mean_qual}")
+    print(f"NOTE:\tSelected highest quality long reads: {renamed_highest_mean_qual_long_reads} "
+          f"({reads_source}) with mean quality {highest_mean_qual}")
 
     return renamed_highest_mean_qual_long_reads
+
+
+# --------------------------------------------------------------
+# Match Flye's ONT read-type mode to the selected reads
+# --------------------------------------------------------------
+LONG_READ_INFO_SUFFIX = ".info.json"
+
+# Flye documents --nano-hq for reads under 5% error, which is about Q13.
+NANO_HQ_MIN_MEAN_Q = 13.0
+
+
+def long_read_info(selected_reads):
+    """Return what select_long_reads recorded about *selected_reads*, or ``{}``.
+
+    Keys: ``source`` (``corrected``, ``filtered`` or ``raw``) and
+    ``mean_quality`` (NanoPlot mean read quality, may be ``None``).
+    """
+    try:
+        with open(str(selected_reads) + LONG_READ_INFO_SUFFIX) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def flye_ont_mode(reads_in_use, selected_reads):
+    """Choose ``--nano-corr``, ``--nano-hq`` or ``--nano-raw`` for Flye.
+
+    ``--nano-corr`` assumes error-corrected reads (under 3% error). Given
+    uncorrected reads of mean quality 11 it broke an E. coli chromosome into
+    10 contigs where the other two modes gave 3; at mean quality 21 all three
+    modes agreed. So it is used only for Ratatosk-corrected reads.
+
+    Parameters
+    ----------
+    reads_in_use : str
+        The file Flye will be given.
+    selected_reads : str
+        The canonical ``*_highest_mean_qual_long_reads.fastq`` path.
+    """
+    if os.path.abspath(str(reads_in_use)) != os.path.abspath(str(selected_reads)):
+        return "--nano-raw"      # fell back to the raw reads; quality unknown
+    info = long_read_info(selected_reads)
+    if not info:
+        return "--nano-corr"     # selected before this record existed; keep the old behaviour
+    if info.get("source") == "corrected":
+        return "--nano-corr"
+    mean_q = info.get("mean_quality") or 0.0
+    return "--nano-hq" if mean_q >= NANO_HQ_MIN_MEAN_Q else "--nano-raw"

@@ -21,7 +21,8 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import sys
 import pandas as pd
-from utilities import pigz_compress, get_current_row_data, read_sample_table
+from utilities import (compress_intermediate, fastb_compress_many, intermediate_format,
+                       load_sample_context)
 
 
 def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
@@ -50,9 +51,8 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     print(f"Compressing all FASTA and FASTQ files for {sample_id}...")
 
     # Read the sample table and filter to the row corresponding to the sample of interest
-    input_df = read_sample_table(input_tsv)
-    current_row, current_index, sample_stats_dict = get_current_row_data(input_df, sample_id)
-    current_series = current_row.iloc[0]  # Convert to Series (single row)
+    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    current_series = ctx.current_series
 
     # Identify read paths, reference, and BUSCO lineage info from TSV
     species_id = current_series["SPECIES_ID"]
@@ -62,12 +62,27 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - sample_dir - {sample_dir}")
 
     # Walk through directory and subdirectories and multi-thread compress ALL FASTA or FASTQ files
+    # Nucleotide FASTA files are collected and sent to one fastb process when
+    # the format is fastb (one Python start-up instead of one per file);
+    # everything else is compressed as it is found.
+    fastb_batch = []
     for root, dirs, files in os.walk(sample_dir):
         for file in files:
             if file.endswith((".fasta", ".fastq")):
                 full_path = os.path.join(root, file)
+                # MaSuRCA leaves symlinks to FASTA files this walk has already
+                # compressed and removed; pigz skips symlinks, so do the same.
+                if os.path.islink(full_path):
+                    print(f"SKIP:\tsymlink: {full_path}")
+                    continue
+                if file.endswith(".fasta") and intermediate_format() == "fastb":
+                    fastb_batch.append(full_path)
+                    continue
                 print(f"Compressing: {full_path}")
-                _ = pigz_compress(full_path, cpu_threads)
+                _ = compress_intermediate(full_path, cpu_threads)
+    if fastb_batch:
+        print(f"Compressing {len(fastb_batch)} FASTA file(s) with FASTB")
+        _ = fastb_compress_many(fastb_batch, cpu_threads)
 
     print("PASS:\tAll FASTA and FASTQ successfully compressed!")
             
@@ -75,12 +90,12 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 if __name__ == "__main__":
     # Handle command-line arguments
     if len(sys.argv) != 6:
-        print("Usage: python3 final_compress.py <input_tsv> "
-              "<sample_id> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+        print("Usage: python3 final_compress.py <sample_id> "
+              "<input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
         sys.exit(1)
 
-    final_compress(sys.argv[1],       # input_tsv
-                   sys.argv[2],       # sample_id
+    final_compress(sys.argv[1],       # sample_id
+                   sys.argv[2],       # input_tsv
                    sys.argv[3],       # output_dir
                    str(sys.argv[4]),  # cpu_threads
                    str(sys.argv[5]))  # ram_gb
