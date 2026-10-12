@@ -7,7 +7,7 @@ package:
 
 source:
   - url: https://github.com/iPsychonaut/EGAP/archive/refs/tags/v{{ version }}.tar.gz
-    sha256: c55568828315dff4dbefe24b619ac4adefd85a9630105d88e9d99516fd10ee7f
+    sha256: ab540a88dbb2248fc3f5d2012d72610725acbbdd8fb50dae92772697fe958007
   - url: https://github.com/iPsychonaut/runner/archive/refs/tags/v0.0.0.tar.gz
     sha256: 4e67bb1e970dadb86425cb2698e0e2e34f70d78cbf77a32f73c13f66dffb55fc
   - url: https://github.com/iPsychonaut/tiara-entheome/archive/refs/tags/v1.0.0.tar.gz
