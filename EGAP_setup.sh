@@ -142,13 +142,13 @@ create_egap_env() {
 
     if conda env list | awk '{print $1}' | grep -qx "EGAP_env"; then
         log_warn "EGAP_env already exists — updating the 'egap' package in place."
-        conda install -y -n EGAP_env -c bioconda -c conda-forge "egap" \
+        conda install -y -n EGAP_env --strict-channel-priority -c conda-forge -c bioconda "egap" \
             || die "Failed to update egap in existing EGAP_env"
     else
         conda create -y -n EGAP_env \
-            "python>=3.8,<3.9" \
+            "python>=3.12,<3.13" \
             egap \
-            -c bioconda -c conda-forge \
+            --strict-channel-priority -c conda-forge -c bioconda \
             || die "Failed to create EGAP_env"
     fi
 

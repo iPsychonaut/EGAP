@@ -26,31 +26,45 @@ RUN mamba install -n base --yes conda-pack
 # Generate EGAP_env
 ###############################################################################
 
-# Create EGAP_env with Python 3.8 and all EGAP v3.4.2 dependencies.
-# Pinning rationale (verified against conda list on 2026-09-05):
-#   pandas>=2.0.3     matches meta.yaml; 2.0.3 is the final Python 3.8 build.
-#   numpy>=1.24.3,<2  pandas 2.0.3 needs numpy>=1.20.3. The old numpy=1.19.5
-#                     pin existed only for upstream tiara=1.0.3 (numpy<1.20),
-#                     which is replaced by tiara-entheome (numpy>=1.21).
+# Create EGAP_env with Python 3.12 and all EGAP v3.4.2 dependencies.
+# Pinning rationale (Python 3.12 solve checked 2026-10-12):
+#   python 3.12       3.8 is end of life and blocks Flye 2.9.6, compleasm
+#                     0.2.9+ and BUSCO 6. tiara-entheome needs <3.13.
+#   pandas>=2.2,<3    pandas 3 changes copy and string semantics; move it in
+#                     its own round. 2.2 is the first pandas with py3.12.
+#   numpy>=1.26,<3    1.26 is the first numpy with py3.12.
+#   busco=5.8.3       held at the pre-3.12 version so the A/B round that moves
+#                     Python changes no tool versions.
+#   compleasm         installed below with --no-deps: its recipe pins
+#                     dendropy<4.6, but every py3.9+ sepp needs dendropy>=5.
+#                     compleasm never imports dendropy (it runs sepp), so the
+#                     pin is stale. hmmer and miniprot are its other deps.
 #   tiara-entheome    installed below via pip from the v1.0.0 tag (not yet on
 #                     bioconda). Its runtime deps (pytorch, skorch, numba,
 #                     tqdm, joblib) are resolved by conda in this create.
 #   kraken2=2.1.6     exact pin; tested working version.
 #   sra-tools=3.2.0   exact pin; API changes between minor versions.
 #   trimmomatic=0.40  exact pin; share-dir path used in adapter symlinks.
-#   flye=2.9.5        exact pin; >=3.0 changes assembly graph format.
+#   flye=2.9.5        exact pin; held for the Python-only A/B round. 2.9.6
+#                     makes the R10 setting the --nano-hq default, so ONT
+#                     assemblies may change; move it in the tool-version round.
 #   bbmap<39.76       from 39.76 on (tested through 40.02) BBDuk dies on
 #                     paired in1=/in2= input when it has fewer than 16
 #                     threads ("List size mismatch" in PairStreamer): exit
 #                     1 and no reads written. 39.52 works at 1-16 threads.
-RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
-    'python>=3.8,<3.9' \
-    'pandas>=2.0.3' \
-    'numpy>=1.24.3,<2' \
+#   channel order     conda-forge first with strict priority (Bioconda's
+#                     documented setup). With bioconda first, bioconda's stale
+#                     biopython/tqdm/openpyxl copies win and the 3.12 solve did
+#                     not finish in 20 min; this order solves in minutes.
+RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioconda \
+    'python>=3.12,<3.13' \
+    'pandas>=2.2,<3' \
+    'numpy>=1.26,<3' \
     'masurca=4.1.4' \
     'quast=5.3.0' \
-    'compleasm>=0.2.8' \
-    busco \
+    'busco=5.8.3' \
+    hmmer \
+    miniprot \
     biopython \
     ragtag \
     'nanoplot=1.46.2' \
@@ -103,10 +117,17 @@ RUN conda create -n EGAP_env -y -c bioconda -c conda-forge \
 RUN conda run -n EGAP_env quast-download-gridss && \
     conda run -n EGAP_env quast-download-silva
 
-# Clone and install runner in EGAP_env
+# compleasm without its stale dendropy<4.6 pin (see the rationale above).
+# Drop --no-deps once bioconda-recipes removes that pin.
+RUN conda install -n EGAP_env -y --no-deps -c bioconda 'compleasm=0.2.8' && \
+    conda run -n EGAP_env compleasm --help >/dev/null
+
+# Clone and install runner in EGAP_env. pip, not `setup.py install --user`:
+# --user put it in /root/.local, outside the env that conda-pack ships, and
+# Python 3.12 envs carry no setuptools for setup.py to import.
 RUN git clone https://github.com/dfguan/runner.git && \
-    cd runner && conda run -n EGAP_env python3 setup.py install --user && \
-    cd .. && rm -rf runner
+    conda run -n EGAP_env python -m pip install --no-cache-dir ./runner && \
+    rm -rf runner
 
 # Install tiara-entheome (modernised Tiara fork used for assembly
 # decontamination) from the pinned release tag. Not yet on bioconda.

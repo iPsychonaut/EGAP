@@ -21,14 +21,19 @@ build:
 
 requirements:
   host:
-    - python >=3.8,<3.9
+    - python >=3.12,<3.13
     - pip
   run:
-    - python >=3.8,<3.9
-    - pandas >=2.0.3
-    - numpy >=1.24.3
+    # tiara-entheome needs <3.13.
+    - python >=3.12,<3.13
+    # pandas 3 changes copy and string semantics; move it in its own round.
+    - pandas >=2.2,<3
+    - numpy >=1.26,<3
     - masurca >=4.1.2
     - quast >=5.2.0
+    # Release blocker: the compleasm recipe pins dendropy <4.6, but every
+    # py3.9+ sepp needs dendropy >=5, so this env does not solve on 3.12 until
+    # bioconda-recipes drops that pin.
     - compleasm >=0.2.8
     - busco >=5.8.2
     - biopython >=1.81
