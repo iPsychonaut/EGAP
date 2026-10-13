@@ -51,4 +51,5 @@ The upstream repo has had no commits for about 16 months. If it doesn't respond,
 ## Side findings (not steps yet)
 
 * The Dockerfile/`entheome.sif.def` comment claiming "Flye >=3.0 changes assembly graph format" was false (Flye 3 does not exist). Corrected on `chore/py312`.
-* `EGEP_env` (Dockerfile and `entheome.sif.def`) already asks for `python>=3.10` with `compleasm>=0.2.8`, so it hits the same dendropy conflict as step 2.
+* `entheome.sif.def`'s `EGEP_env` already asks for `python>=3.10` with `compleasm>=0.2.8`, so it hits the same dendropy conflict as step 2.
+* **The Docker `EGEP_env` solve hangs (found 2026-10-13).** The Dockerfile step that installs about 70 unpinned packages from five channels (`conda-forge bioconda prkrekel agbiome defaults`) sat with no output for more than 7 hours, and the build was stopped. This is not caused by `chore/py312`: those lines are unchanged from main and only re-ran because earlier layers changed, so a full rebuild of main would hit the same hang. Needs its own fix: pin versions, drop `defaults` and the personal channels, and use `--strict-channel-priority`. For the Round 1 A/B, `egap:py312` is `egap:v3.4.2` with only `/EGAP_env` replaced by the new py3.12 env.
