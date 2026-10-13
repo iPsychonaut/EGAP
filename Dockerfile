@@ -122,8 +122,7 @@ RUN conda run -n EGAP_env quast-download-gridss && \
 RUN conda install -n EGAP_env -y --no-deps -c bioconda 'compleasm=0.2.8' && \
     conda run -n EGAP_env compleasm --help >/dev/null
 
-# Clone and install runner in EGAP_env. pip, not `setup.py install --user`:
-# --user put it in /root/.local, outside the env that conda-pack ships, and
+# Clone and install runner in EGAP_env. pip, not `setup.py install`:
 # Python 3.12 envs carry no setuptools for setup.py to import.
 RUN git clone https://github.com/dfguan/runner.git && \
     conda run -n EGAP_env python -m pip install --no-cache-dir ./runner && \

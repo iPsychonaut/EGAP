@@ -18,7 +18,7 @@ Completed items are struck through with a note on where the work landed. Nothing
    * `numpy>=1.26,<3`, because 1.26 is the first numpy with 3.12 builds. `busco=5.8.3` pinned to the pre-3.12 version so Round 1 changes no tools.
    * compleasm is installed with `--no-deps` (step 2 workaround), with `hmmer` and `miniprot` added explicitly. The CI tools job drops upstream `tiara`, which needs numpy<1.20.
    * **Found and fixed: channel order.** The Dockerfile, `entheome.sif.def` and `EGAP_setup.sh` listed `-c bioconda` first. At 3.12, bioconda's stale biopython/tqdm/openpyxl copies win. The solve either fails (strict priority) or doesn't finish in 20 minutes (flexible priority, which is the Docker base image's default). All three now use `--strict-channel-priority -c conda-forge -c bioconda`, Bioconda's documented setup.
-   * **Found and fixed: `runner` was never in the Docker image.** It was installed with `setup.py install --user` into `/root/.local`, outside the env that conda-pack ships. It now goes in with `pip install ./runner`.
+   * `runner` now installs with `pip install ./runner`, because Python 3.12 envs have no setuptools for `setup.py install`. (An earlier note here said runner was missing from the v3.4.2 image. That was wrong: it is in `/EGAP_env/lib/python3.8/site-packages`.)
 
    Verified:
    * The Dockerfile's exact EGAP_env list solves at 3.12 with every tool version unchanged (542 packages; masurca 4.1.4, spades 4.2.0, flye 2.9.5, hifiasm 0.25.0, quast 5.3.0, busco 5.8.3, kraken2 2.1.6, sra-tools 3.2.0, trimmomatic 0.40, nanoplot 1.46.2, bbmap 39.52, racon 1.5.0, pilon 1.24, ragtag 2.1.0; sepp 4.5.6 with dendropy 5.1.0).

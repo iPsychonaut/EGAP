@@ -1,0 +1,107 @@
+# Round 1 of the Python 3.12 upgrade (audit/PY312_UPGRADE_PLAN.md, step 4):
+# the same EGAP v3.4.2 scripts and the same tool versions, on Python 3.8
+# (egap:v3.4.2) versus Python 3.12 (egap:py312, built from chore/py312).
+# If the assemblies differ, the change of Python and libraries is the cause.
+#
+# Samples: rows of input/EGAP_ab_py312.tsv, one pod per sample, one sample at a
+# time per variant (7 CPU + 24Gi each on the 16-thread / 55 GB host).
+#   0 Escherichia_coli-IlluminaTest     1 Escherichia_coli-HybridTest
+#   2 Escherichia_coli-PacBioTest       3 Klebsiella_pneumoniae-HybridTest
+# K. pneumoniae KPC2_202310: ONT SRR28370682 + Illumina SRR28370701, same
+# BioSample. No REF_SEQ on purpose, so RagTag cannot hide assembly differences;
+# grade against GCF_045345375.1 afterwards.
+#
+# Each pod prints one AB_SUMMARY line (wall seconds, peak cgroup memory) and
+# saves it as out/<variant>/<sample>_ab_summary.txt.
+#
+# Before applying:
+#   docker push localhost:5050/egap:v3.4.2
+#   docker push localhost:5050/egap:py312
+# Re-run: kubectl delete -f tests/ab/ab-py312.yaml   (Jobs are immutable)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: egap-py38
+  labels: {app: egap-ab-py312, variant: py38}
+spec:
+  completionMode: Indexed
+  completions: 4
+  parallelism: 1
+  backoffLimitPerIndex: 0
+  template:
+    metadata:
+      labels: {app: egap-ab-py312, variant: py38}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: egap
+          image: egap-registry:5050/egap:v3.4.2
+          imagePullPolicy: Always
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              sample=$(awk -F'\t' -v i=$((JOB_COMPLETION_INDEX + 2)) 'NR==i {print $2}' /data/input/EGAP_ab_py312.tsv)
+              awk -F'\t' -v s="$sample" 'NR==1 || $2==s' /data/input/EGAP_ab_py312.tsv > /tmp/sample.tsv
+              [ "$(wc -l < /tmp/sample.tsv)" -eq 2 ] || { echo "sample row $JOB_COMPLETION_INDEX not found" >&2; exit 1; }
+              /EGAP_env/bin/python --version
+              SECONDS=0
+              /EGAP_env/bin/EGAP --input_tsv /tmp/sample.tsv --output_dir /data/out --cpu_threads 7 --ram_gb 24
+              wall=$SECONDS
+              peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo NA)
+              # EGAP exits 0 even when a sample fails; its log is the only truth
+              grep -q "PASS:.Sample $sample completed successfully" "/data/out/${sample}_log.txt" || { echo "EGAP did not pass $sample" >&2; exit 1; }
+              echo "AB_SUMMARY sample=$sample wall_s=$wall peak_mem_bytes=$peak" | tee "/data/out/${sample}_ab_summary.txt"
+          resources:
+            requests: {cpu: "7", memory: 24Gi}
+            limits: {cpu: "7", memory: 24Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data/input, subPath: input, readOnly: true}
+            - {name: data, mountPath: /data/out, subPath: out/py38}
+      volumes:
+        - name: data
+          hostPath: {path: /data}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: egap-py312
+  labels: {app: egap-ab-py312, variant: py312}
+spec:
+  completionMode: Indexed
+  completions: 4
+  parallelism: 1
+  backoffLimitPerIndex: 0
+  template:
+    metadata:
+      labels: {app: egap-ab-py312, variant: py312}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: egap
+          image: egap-registry:5050/egap:py312
+          imagePullPolicy: Always
+          command: ["bash", "-c"]
+          args:   # same script as egap-py38 (YAML anchors do not cross documents)
+            - |
+              set -euo pipefail
+              sample=$(awk -F'\t' -v i=$((JOB_COMPLETION_INDEX + 2)) 'NR==i {print $2}' /data/input/EGAP_ab_py312.tsv)
+              awk -F'\t' -v s="$sample" 'NR==1 || $2==s' /data/input/EGAP_ab_py312.tsv > /tmp/sample.tsv
+              [ "$(wc -l < /tmp/sample.tsv)" -eq 2 ] || { echo "sample row $JOB_COMPLETION_INDEX not found" >&2; exit 1; }
+              /EGAP_env/bin/python --version
+              SECONDS=0
+              /EGAP_env/bin/EGAP --input_tsv /tmp/sample.tsv --output_dir /data/out --cpu_threads 7 --ram_gb 24
+              wall=$SECONDS
+              peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo NA)
+              # EGAP exits 0 even when a sample fails; its log is the only truth
+              grep -q "PASS:.Sample $sample completed successfully" "/data/out/${sample}_log.txt" || { echo "EGAP did not pass $sample" >&2; exit 1; }
+              echo "AB_SUMMARY sample=$sample wall_s=$wall peak_mem_bytes=$peak" | tee "/data/out/${sample}_ab_summary.txt"
+          resources:
+            requests: {cpu: "7", memory: 24Gi}
+            limits: {cpu: "7", memory: 24Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data/input, subPath: input, readOnly: true}
+            - {name: data, mountPath: /data/out, subPath: out/py312}
+      volumes:
+        - name: data
+          hostPath: {path: /data}
