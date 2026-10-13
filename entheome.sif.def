@@ -159,8 +159,11 @@ From: debian:buster
         -c bioconda -c conda-forge 'flye=2.9.5' || { echo "Failed to reinstall Flye"; exit 1; }
 
     # compleasm without its stale dendropy<4.6 pin (see the rationale above).
-    # Drop --no-deps once bioconda-recipes removes that pin.
-    /opt/conda/bin/conda install -n EGAP_env -y --no-deps -c bioconda 'compleasm=0.2.8' \
+    # pip from the release tag, as the bioconda recipe itself builds it: conda's
+    # --no-deps still has to satisfy the pin, so it fails too. Move compleasm back
+    # into the conda create once bioconda-recipes#60482 lands.
+    /opt/conda/envs/EGAP_env/bin/python -m pip install --no-cache-dir --no-deps \
+        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.8.tar.gz" \
         || { echo "Failed to install compleasm"; exit 1; }
     /opt/conda/envs/EGAP_env/bin/compleasm --help >/dev/null || { echo "compleasm smoke test failed"; exit 1; }
 

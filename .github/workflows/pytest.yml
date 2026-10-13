@@ -56,14 +56,15 @@ jobs:
           channels: conda-forge,bioconda
           channel-priority: strict
           activate-environment: EGAP_test
-      # compleasm goes in with --no-deps: its recipe's dendropy<4.6 pin cannot
-      # coexist with any py3.9+ sepp. Upstream tiara (numpy<1.20) is dropped;
-      # EGAP uses tiara-entheome.
+      # compleasm goes in with pip --no-deps: its recipe's dendropy<4.6 pin
+      # cannot coexist with any py3.9+ sepp, and conda's --no-deps still
+      # solves that pin. Upstream tiara (numpy<1.20) is dropped; EGAP uses
+      # tiara-entheome.
       - name: Install minimal tool subset
         shell: bash -l {0}
         run: |
           mamba install -y pytest "pandas>=2.2,<3" "numpy<3" biopython matplotlib-base psutil seqkit quast hmmer miniprot sepp
-          mamba install -y --no-deps compleasm
+          python -m pip install --no-deps "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.8.tar.gz"
       - name: Run tool-backed tests
         shell: bash -l {0}
         env:

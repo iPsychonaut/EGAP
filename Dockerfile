@@ -118,8 +118,11 @@ RUN conda run -n EGAP_env quast-download-gridss && \
     conda run -n EGAP_env quast-download-silva
 
 # compleasm without its stale dendropy<4.6 pin (see the rationale above).
-# Drop --no-deps once bioconda-recipes removes that pin.
-RUN conda install -n EGAP_env -y --no-deps -c bioconda 'compleasm=0.2.8' && \
+# pip from the release tag, as the bioconda recipe itself builds it: conda's
+# --no-deps still has to satisfy the pin, so it fails too. Move compleasm back
+# into the conda create once bioconda-recipes#60482 lands.
+RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
+        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.8.tar.gz" && \
     conda run -n EGAP_env compleasm --help >/dev/null
 
 # Clone and install runner in EGAP_env. pip, not `setup.py install`:
