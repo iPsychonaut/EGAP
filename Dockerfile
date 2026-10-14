@@ -215,15 +215,20 @@ RUN apt-get update && apt-get install -y \
     locales-all libgl1 procps && \
     rm -rf /var/lib/apt/lists/*
 
-# Create EGEP_env with Python (version greater than 3.10)
-RUN conda create -c conda-forge -c bioconda -c prkrekel -c agbiome -c defaults \
-    -n EGEP_env --yes python>=3.10
-
-# Install EGEP dependencies from bioconda
-RUN conda run -n EGEP_env mamba install -y -c conda-forge -c bioconda -c prkrekel -c agbiome -c defaults \
+# Create EGEP_env in one solve, conda-forge then bioconda with strict priority.
+# The old two-step create (python alone, then ~70 packages) over five channels
+# (conda-forge bioconda prkrekel agbiome defaults) sat in the solver for 7+ h on
+# 2026-10-13. Every package here is on conda-forge or bioconda; prkrekel and
+# agbiome supplied nothing, and defaults carries Anaconda's terms of service.
+# perl-perl4-corelibs is left out: its only builds are for perl 5.22/5.26, which
+# clashes with conda-forge's perl 5.32 libraries, and nothing in EGAP/EGEP uses
+# it. If a tool needs Perl 4 libraries (getopts.pl etc.), `cpanm Perl4::CoreLibs`.
+# This list solves at py3.12 in under a minute (688 packages, 2026-10-14).
+RUN conda create -n EGEP_env -y --strict-channel-priority -c conda-forge -c bioconda \
+    'python>=3.10,<3.13' \
     perl perl-yaml perl-file-which perl-local-lib perl-dbd-mysql perl-clone perl-hash-merge \
     perl-soap-lite perl-json perl-logger-simple perl-scalar-util-numeric perl-math-utils perl-mce \
-    perl-text-soundex perl-parallel-forkmanager perl-db-file perl-perl4-corelibs \
+    perl-text-soundex perl-parallel-forkmanager perl-db-file \
     ete3 distro glimmerhmm bamtools ucsc-pslcdnafilter trimmomatic raxml iqtree trimal \
     hisat2 tantan bedtools tbl2asn blat hmmer exonerate minimap2 stringtie goatools \
     matplotlib-base natsort numpy pigz pandas psutil requests scipy seaborn proteinortho \

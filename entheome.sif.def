@@ -178,8 +178,13 @@ From: debian:buster
     # Create EGEP_env (aux env)
     # -----------------------------
     /bin/bash -c "conda create -n EGEP_env --yes python>=3.10 glib=2.64.6 \
-                  mafft iqtree ete3 'compleasm>=0.2.8' trimal pandas biopython psutil \
+                  mafft iqtree ete3 hmmer miniprot sepp trimal pandas biopython psutil \
                   gffutils pysam matplotlib scipy clinker-py packaging meson" || { echo "Failed to create EGEP_env"; exit 1; }
+    # compleasm with pip --no-deps, as in EGAP_env: its recipe's dendropy<4.6 pin
+    # cannot coexist with any py3.9+ sepp (bioconda-recipes#60482).
+    /opt/conda/envs/EGEP_env/bin/python -m pip install --no-cache-dir --no-deps \
+        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.10.tar.gz" \
+        || { echo "Failed to install compleasm in EGEP_env"; exit 1; }
 
     # Debug: Check GLib installation
     echo "Checking GLib installation:"
