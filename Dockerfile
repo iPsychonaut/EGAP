@@ -37,8 +37,8 @@ RUN mamba install -n base --yes conda-pack
 #                     setuptools 81 removed; py3.12 envs otherwise get 84.
 #   plotly>=5.24,<6   NanoPlot 1.46.2 calls figure_factory.create_2d_density,
 #                     which plotly 6 removed; py3.12 envs otherwise get 7.
-#   busco=5.8.3       held at the pre-3.12 version so the A/B round that moves
-#                     Python changes no tool versions.
+#   busco=6.1.0       odb12.2 lineages and new scoring; checked against 5.8.3
+#                     in the round-2 A/B.
 #   compleasm         installed below with --no-deps: its recipe pins
 #                     dendropy<4.6, but every py3.9+ sepp needs dendropy>=5.
 #                     compleasm never imports dendropy (it runs sepp), so the
@@ -68,7 +68,7 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
     'plotly>=5.24,<6' \
     'masurca=4.1.4' \
     'quast=5.3.0' \
-    'busco=5.8.3' \
+    'busco=6.1.0' \
     hmmer \
     miniprot \
     biopython \
@@ -128,7 +128,7 @@ RUN conda run -n EGAP_env quast-download-gridss && \
 # --no-deps still has to satisfy the pin, so it fails too. Move compleasm back
 # into the conda create once bioconda-recipes#60482 lands.
 RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
-        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.8.tar.gz" && \
+        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.10.tar.gz" && \
     conda run -n EGAP_env compleasm --help >/dev/null
 
 # Clone and install runner in EGAP_env. pip, not `setup.py install`:

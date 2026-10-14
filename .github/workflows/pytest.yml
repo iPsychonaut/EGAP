@@ -64,7 +64,7 @@ jobs:
         shell: bash -l {0}
         run: |
           mamba install -y pytest "pandas>=2.2,<3" "numpy<3" biopython matplotlib-base psutil seqkit quast hmmer miniprot sepp
-          python -m pip install --no-deps "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.8.tar.gz"
+          python -m pip install --no-deps "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.10.tar.gz"
       - name: Run tool-backed tests
         shell: bash -l {0}
         env:
