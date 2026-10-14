@@ -26,7 +26,13 @@ Completed items are struck through with a note on where the work landed. Nothing
    * Unit tests on Python 3.12.15, pandas 2.3.3, numpy 2.5.4: 132 passed, 14 skipped (fastb/pigz binaries not present).
 
    Not yet verified: an actual image build. That happens in step 4.
-4. Round 1 A/B test: change only Python and the libraries, keeping every tool version the same. Assemblies should come out identical; if they don't, the change of Python is the cause. Run the existing E. coli tests plus one same-strain set, for example K. pneumoniae.
+4. ~~Round 1 A/B test: change only Python and the libraries, keeping every tool version the same. Assemblies should come out identical; if they don't, the change of Python is the cause. Run the existing E. coli tests plus one same-strain set, for example K. pneumoniae.~~
+   Done 2026-10-14. **Passed: no assembly difference attributable to Python 3.12.** Job file `tests/ab/ab-py312.yaml`, comparison `tests/ab/compare_ab.py`, output in `egap-ab/out/{py38,py38-rerun,py312}`.
+   * Runs: `egap:v3.4.2` (py3.8) twice, as a run-to-run noise control, and `egap:py312` once (the v3.4.2 image with only `/EGAP_env` replaced). Samples: the 3 E. coli tests plus K. pneumoniae KPC2_202310 (ONT R10 SRR28370682 + Illumina SRR28370701). All 12 sample runs passed.
+   * First py3.12 attempt failed all 4 samples on two library regressions, now pinned (`afb25d6`): tiara-entheome imports `pkg_resources` (gone in setuptools ≥81) → `setuptools<81`; NanoPlot 1.46.2 calls plotly's removed `create_2d_density` → `plotly>=5.24,<6`. Neither shows up in unit tests or `--help` checks.
+   * Assemblies (sequence content, gzip undone): py3.8 vs py3.8-rerun: 11 identical / 7 different. py3.8 vs py3.12: 11 identical / 7 different, the same 7 files. SPAdes (3/3), hifiasm, and Flye on PacBio are byte-identical in every pairing. MaSuRCA (3/3), Flye on ONT (2/2) and the K. pneumoniae final assembly vary between any two runs, including the two py3.8 runs, by BUSCO ≤0.01 points, N50 ≤0.6% and contig count ±2. Final assemblies of the three E. coli samples are identical in all runs.
+   * Resources (py3.12 vs py3.8-rerun, which ran at the same time on the same host): wall time 2209/2200 s Illumina, 6017/6519 s E. coli hybrid, 3049/3247 s PacBio, 5115/5516 s K. pneumoniae. That is 16,390 vs 17,482 s total (−6%). Peak memory is within 3% on every sample (9.4–18.5 GB). Read this as "no slower", not as a speedup.
+   * Follow-ups: replace `pkg_resources` in tiara-entheome with `importlib.resources` (needs a v1.0.1 tag of the fork), then drop the setuptools pin. MaSuRCA/Flye nondeterminism means future rounds should always include a same-image control run.
 5. Round 2: raise the tool versions to SPAdes 4.3.0, Flye 2.9.6, compleasm 0.2.10 and BUSCO 6.1. Score both images with the same BUSCO version so the measuring stick stays fixed.
 
 ## MaSuRCA: patch the package, then fork if needed
