@@ -10,8 +10,6 @@ source:
     sha256: ab540a88dbb2248fc3f5d2012d72610725acbbdd8fb50dae92772697fe958007
   - url: https://github.com/iPsychonaut/runner/archive/refs/tags/v0.0.0.tar.gz
     sha256: 4e67bb1e970dadb86425cb2698e0e2e34f70d78cbf77a32f73c13f66dffb55fc
-  - url: https://github.com/iPsychonaut/tiara-entheome/archive/refs/tags/v1.0.0.tar.gz
-    sha256: a5fe19d4d77eda6fd6608cce25b1a70a06a999fae7d35e98bb1b5a96ae228dee
 
 build:
   noarch: python
@@ -26,11 +24,11 @@ requirements:
   run:
     # tiara-entheome needs <3.13.
     - python >=3.12,<3.13
+    # 1.0.1: 1.0.0 imported pkg_resources, which current setuptools no longer ships.
+    - tiara-entheome >=1.0.1
     # pandas 3 changes copy and string semantics; move it in its own round.
     - pandas >=2.2,<3
     - numpy >=1.26,<3
-    # tiara-entheome 1.0.0 imports pkg_resources (removed in setuptools 81).
-    - setuptools <81
     # NanoPlot 1.46.2 calls figure_factory.create_2d_density (removed in plotly 6).
     - plotly >=5.24,<6
     - masurca >=4.1.2

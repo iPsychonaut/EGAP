@@ -182,18 +182,8 @@ install_aux_tools() {
         log_warn "runner import check failed — the package may not be functional."
     fi
 
-    # tiara-entheome is the modernised Tiara fork EGAP prefers for assembly
-    # decontamination (see bin/decontaminate_assembly.py). It is not on bioconda
-    # yet, so install its runtime deps with conda and the package itself from
-    # the pinned release tag with --no-deps.
-    log_info "Installing tiara-entheome v1.0.0 (Tiara fork) into EGAP_env..."
-    conda install -y -n EGAP_env -c conda-forge -c bioconda \
-        "pytorch>=1.10,<3" "skorch>=0.11" "numba>=0.56" tqdm joblib \
-        || die "Failed to install tiara-entheome runtime dependencies"
-    pip install --no-cache-dir --no-deps \
-        "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" \
-        || die "tiara-entheome installation failed"
-
+    # tiara-entheome (assembly decontamination, bin/decontaminate_assembly.py)
+    # comes from bioconda as a run dependency of the egap package.
     if command -v tiara-entheome >/dev/null 2>&1; then
         log_pass "tiara-entheome installed successfully."
     else

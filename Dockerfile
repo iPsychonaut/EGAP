@@ -33,8 +33,6 @@ RUN mamba install -n base --yes conda-pack
 #   pandas>=2.2,<3    pandas 3 changes copy and string semantics; move it in
 #                     its own round. 2.2 is the first pandas with py3.12.
 #   numpy>=1.26,<3    1.26 is the first numpy with py3.12.
-#   setuptools<81     tiara-entheome 1.0.0 imports pkg_resources, which
-#                     setuptools 81 removed; py3.12 envs otherwise get 84.
 #   plotly>=5.24,<6   NanoPlot 1.46.2 calls figure_factory.create_2d_density,
 #                     which plotly 6 removed; py3.12 envs otherwise get 7.
 #   busco=6.1.0       odb12.2 lineages and new scoring; checked against 5.8.3
@@ -43,9 +41,9 @@ RUN mamba install -n base --yes conda-pack
 #                     dendropy<4.6, but every py3.9+ sepp needs dendropy>=5.
 #                     compleasm never imports dendropy (it runs sepp), so the
 #                     pin is stale. hmmer and miniprot are its other deps.
-#   tiara-entheome    installed below via pip from the v1.0.0 tag (not yet on
-#                     bioconda). Its runtime deps (pytorch, skorch, numba,
-#                     tqdm, joblib) are resolved by conda in this create.
+#   tiara-entheome    1.0.1 from bioconda; 1.0.0 imported pkg_resources, which
+#                     current setuptools no longer ships. Brings pytorch,
+#                     skorch, numba, tqdm and joblib.
 #   kraken2=2.1.6     exact pin; tested working version.
 #   sra-tools=3.2.0   exact pin; API changes between minor versions.
 #   trimmomatic=0.40  exact pin; share-dir path used in adapter symlinks.
@@ -64,7 +62,6 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
     'python>=3.12,<3.13' \
     'pandas>=2.2,<3' \
     'numpy>=1.26,<3' \
-    'setuptools<81' \
     'plotly>=5.24,<6' \
     'masurca=4.1.4' \
     'quast=5.3.0' \
@@ -111,11 +108,7 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
     requests \
     rich \
     textual \
-    'pytorch>=1.10,<3' \
-    'skorch>=0.11' \
-    'numba>=0.56' \
-    tqdm \
-    joblib \
+    'tiara-entheome=1.0.1' \
     'kraken2=2.1.6' \
     pigz
 
@@ -136,13 +129,6 @@ RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
 RUN git clone https://github.com/dfguan/runner.git && \
     conda run -n EGAP_env python -m pip install --no-cache-dir ./runner && \
     rm -rf runner
-
-# Install tiara-entheome (modernised Tiara fork used for assembly
-# decontamination) from the pinned release tag. Not yet on bioconda.
-# --no-deps: pytorch, skorch, numba, tqdm and joblib were resolved by conda above.
-RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
-        "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" && \
-    conda run -n EGAP_env tiara-entheome --help >/dev/null
 
 # masurca 4.1.4 and flye 2.9.6 both ship bin/flye and bin/flye-minimap2.
 # Whichever conda links last wins; when masurca's copies win, Flye

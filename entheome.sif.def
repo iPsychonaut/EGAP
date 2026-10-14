@@ -70,8 +70,6 @@ From: debian:buster
     #   pandas>=2.2,<3    pandas 3 changes copy and string semantics; move it in
     #                     its own round. 2.2 is the first pandas with py3.12.
     #   numpy>=1.26,<3    1.26 is the first numpy with py3.12.
-    #   setuptools<81     tiara-entheome 1.0.0 imports pkg_resources, which
-    #                     setuptools 81 removed; py3.12 envs otherwise get 84.
     #   plotly>=5.24,<6   NanoPlot 1.46.2 calls figure_factory.create_2d_density,
     #                     which plotly 6 removed; py3.12 envs otherwise get 7.
     #   busco=6.1.0       odb12.2 lineages and new scoring; checked against 5.8.3
@@ -80,9 +78,9 @@ From: debian:buster
     #                     dendropy<4.6, but every py3.9+ sepp needs dendropy>=5.
     #                     compleasm never imports dendropy (it runs sepp), so the
     #                     pin is stale. hmmer and miniprot are its other deps.
-    #   tiara-entheome    installed below via pip from the v1.0.0 tag (not yet on
-    #                     bioconda). Its runtime deps (pytorch, skorch, numba,
-    #                     tqdm, joblib) are resolved by conda in this create.
+    #   tiara-entheome    1.0.1 from bioconda; 1.0.0 imported pkg_resources, which
+    #                     current setuptools no longer ships. Brings pytorch,
+    #                     skorch, numba, tqdm and joblib.
     #   kraken2=2.1.6     exact pin; tested working version.
     #   sra-tools=3.2.0   exact pin; API changes between minor versions.
     #   trimmomatic=0.40  exact pin; share-dir path used in symlinks below.
@@ -97,7 +95,6 @@ From: debian:buster
                  'python>=3.12,<3.13' \
                  'pandas>=2.2,<3' \
                  'numpy>=1.26,<3' \
-                 'setuptools<81' \
                  'plotly>=5.24,<6' \
                  'masurca=4.1.4' \
                  'quast=5.3.0' \
@@ -143,11 +140,7 @@ From: debian:buster
                  requests \
                  rich \
                  textual \
-                 'pytorch>=1.10,<3' \
-                 'skorch>=0.11' \
-                 'numba>=0.56' \
-                 tqdm \
-                 joblib \
+                 'tiara-entheome=1.0.1' \
                  'kraken2=2.1.6'" || { echo "Failed to create EGAP_env"; exit 1; }
 
     # Per-env pin file — belt-and-suspenders guard against Flye being pulled up
@@ -173,11 +166,6 @@ From: debian:buster
         || { echo "Failed to install compleasm"; exit 1; }
     /opt/conda/envs/EGAP_env/bin/compleasm --help >/dev/null || { echo "compleasm smoke test failed"; exit 1; }
 
-    # tiara-entheome (modernised Tiara fork used for assembly decontamination)
-    # from the pinned release tag. Not yet on bioconda. --no-deps: pytorch,
-    # skorch, numba, tqdm and joblib were resolved by conda above.
-    /opt/conda/envs/EGAP_env/bin/python -m pip install --no-cache-dir --no-deps \
-        "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" || { echo "Failed to install tiara-entheome"; exit 1; }
     /opt/conda/envs/EGAP_env/bin/tiara-entheome --help >/dev/null || { echo "tiara-entheome smoke test failed"; exit 1; }
 
     # Trimmomatic adapter symlinks — path encodes version=0.40, build=0
