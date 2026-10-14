@@ -34,6 +34,16 @@ Completed items are struck through with a note on where the work landed. Nothing
    * Resources (py3.12 vs py3.8-rerun, which ran at the same time on the same host): wall time 2209/2200 s Illumina, 6017/6519 s E. coli hybrid, 3049/3247 s PacBio, 5115/5516 s K. pneumoniae. That is 16,390 vs 17,482 s total (−6%). Peak memory is within 3% on every sample (9.4–18.5 GB). Read this as "no slower", not as a speedup.
    * Follow-ups: replace `pkg_resources` in tiara-entheome with `importlib.resources` (needs a v1.0.1 tag of the fork), then drop the setuptools pin. MaSuRCA/Flye nondeterminism means future rounds should always include a same-image control run.
 5. Round 2: raise the tool versions to SPAdes 4.3.0, Flye 2.9.6, compleasm 0.2.10 and BUSCO 6.1. Score both images with the same BUSCO version so the measuring stick stays fixed.
+   In progress 2026-10-14. Commits `77d956b` (2a: SPAdes 4.3.0, Flye 2.9.6) and `fb64e8b` (2b: BUSCO 6.1.0, compleasm 0.2.10). Two images, each the v3.4.2 image with `/EGAP_env` rebuilt from that commit:
+   * `egap:r2-asm`: new assemblers, old QC tools. Compare with Round 1 `out/py312` for the assembler effect; the QC measuring stick is unchanged.
+   * `egap:r2-qc`: new assemblers and new QC tools. Compare with `out/r2-asm` for the QC effect on the same assembler versions.
+   * Launched with:
+     ```
+     sed -e 's/name: egap-py38$/name: egap-r2-asm/' -e 's#egap:v3.4.2#egap:r2-asm#' -e 's#out/py38}#out/r2-asm}#' \
+         -e 's/name: egap-py312$/name: egap-r2-qc/' -e 's#egap:py312$#egap:r2-qc#' -e 's#out/py312}#out/r2-qc}#' \
+         tests/ab/ab-py312.yaml | kubectl apply -f -
+     ```
+   * Noise range from Round 1: MaSuRCA, Flye-on-ONT and the K. pneumoniae final assembly vary run to run (BUSCO ≤0.01 points, N50 ≤0.6%, contigs ±2). Anything inside that range is not a version effect.
 
 ## MaSuRCA: patch the package, then fork if needed
 
