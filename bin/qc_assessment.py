@@ -18,6 +18,7 @@ Updated on Wed Feb 25 2026
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 
+import glob
 import os
 import sys
 import shutil
@@ -468,6 +469,22 @@ def plot_busco(sample_id, busco_type, busco_odb, input_busco_tsv, input_fasta, a
 # --------------------------------------------------------------
 # Run BUSCO on an assembly
 # --------------------------------------------------------------
+def busco_output_paths(busco_dir, lineage, busco_tag):
+    """Return (short summary, full_table.tsv) paths for a BUSCO run.
+
+    BUSCO 6.1 names the dataset with its minor release (``enterobacterales_odb12.2``)
+    where 5.x used ``enterobacterales_odb12``, so look for both. Falls back to
+    the unversioned names, which is what callers check before BUSCO has run.
+    """
+    summaries = sorted(glob.glob(os.path.join(
+        busco_dir, f"short_summary.specific.{lineage}*.{busco_tag}.txt")))
+    tables = sorted(glob.glob(os.path.join(busco_dir, f"run_{lineage}*", "full_table.tsv")))
+    return (summaries[-1] if summaries else
+            os.path.join(busco_dir, f"short_summary.specific.{lineage}.{busco_tag}.txt"),
+            tables[-1] if tables else
+            os.path.join(busco_dir, f"run_{lineage}", "full_table.tsv"))
+
+
 def busco_assembly(assembly_path, sample_id, sample_stats_dict,
                    busco_count, busco_odb, assembly_type, cpu_threads):
     """
@@ -507,18 +524,8 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
     
     # Normalize lineage dir name to avoid double _odb12
     lineage = lineage_dirname(busco_odb)
-    
-    busco_summary = os.path.join(
-        busco_dir,
-        f"short_summary.specific.{lineage}.{busco_tag}.txt"
-    )
-    
-    busco_tsv = os.path.join(
-        busco_dir,
-        f"run_{lineage}",
-        "full_table.tsv"
-    )
- 
+    busco_summary, busco_tsv = busco_output_paths(busco_dir, lineage, busco_tag)
+
     # Run BUSCO if the summary does not already exist
     if os.path.exists(busco_summary):
         print(f"SKIP:\tBUSCO Summary already exists: {busco_summary}.")
@@ -529,14 +536,17 @@ def busco_assembly(assembly_path, sample_id, sample_stats_dict,
             "-l", busco_odb,
             "-c", str(cpu_threads),
             "-o", busco_tag,                # NOTE: matches _b tag
-            "--out_path", assembly_dir
+            "--out_path", assembly_dir,
+            # BUSCO 6 uploads run statistics (and looks up the host IP) by default.
+            "--opt-out-run-stats",
         ]
         print(f"DEBUG - Running BUSCO: {' '.join(busco_cmd)}")
         rc = run_subprocess_cmd(busco_cmd, shell_check=False)
         if rc != 0:
             print(f"WARN:\tBUSCO failed with return code {rc}. Skipping BUSCO metrics.")
             return assembly_path
-    
+        busco_summary, busco_tsv = busco_output_paths(busco_dir, lineage, busco_tag)
+
     # Generate BUSCO plot if needed (NOTE: writes .svg/.png with _b)
     comp_busco_svg = os.path.join(assembly_dir, f"{busco_tag}.svg")
     
