@@ -49,9 +49,9 @@ RUN mamba install -n base --yes conda-pack
 #   kraken2=2.1.6     exact pin; tested working version.
 #   sra-tools=3.2.0   exact pin; API changes between minor versions.
 #   trimmomatic=0.40  exact pin; share-dir path used in adapter symlinks.
-#   flye=2.9.5        exact pin; held for the Python-only A/B round. 2.9.6
-#                     makes the R10 setting the --nano-hq default, so ONT
-#                     assemblies may change; move it in the tool-version round.
+#   flye=2.9.6        exact pin. 2.9.6 tunes the --nano-hq default for R10
+#                     reads (3% error), so ONT assemblies can differ from
+#                     2.9.5 builds; checked in the round-2 A/B.
 #   bbmap<39.76       from 39.76 on (tested through 40.02) BBDuk dies on
 #                     paired in1=/in2= input when it has fewer than 16
 #                     threads ("List size mismatch" in PairStreamer): exit
@@ -93,9 +93,9 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
     'bbmap>=39.15,<39.76' \
     racon \
     kmc \
-    'spades=4.2.0' \
+    'spades=4.3.0' \
     purge_dups \
-    'flye=2.9.5' \
+    'flye=2.9.6' \
     pbccs \
     'hifiasm=0.25.0' \
     gfatools \
@@ -144,14 +144,14 @@ RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
         "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" && \
     conda run -n EGAP_env tiara-entheome --help >/dev/null
 
-# masurca 4.1.4 and flye 2.9.5 both ship bin/flye and bin/flye-minimap2.
-# Whichever conda links last wins; when masurca's copies win, Flye 2.9.5
+# masurca 4.1.4 and flye 2.9.6 both ship bin/flye and bin/flye-minimap2.
+# Whichever conda links last wins; when masurca's copies win, Flye
 # gets a Python 2.7 launcher and minimap2 2.17, which rejects Flye's
 # --secondary-seq option, so every Flye assembly aborts at the consensus
 # stage. Make the env hold Flye's own copies; they are the source for the
 # repair after conda-pack below.
 RUN conda install -n EGAP_env -y --force-reinstall --no-deps \
-        -c bioconda -c conda-forge 'flye=2.9.5' && \
+        -c bioconda -c conda-forge 'flye=2.9.6' && \
     conda run -n EGAP_env flye --version && \
     conda run -n EGAP_env flye-minimap2 --secondary-seq=yes --version
 
