@@ -141,11 +141,27 @@ RUN conda install -n EGAP_env -y --force-reinstall --no-deps \
     conda run -n EGAP_env flye --version && \
     conda run -n EGAP_env flye-minimap2 --secondary-seq=yes --version
 
+# conda-pack rewrites the shebang of every launcher it does not manage
+# (pip-installed: compleasm, runner, funannotate, ...) to `#!/usr/bin/env python`.
+# In the runtime image PATH starts with /EGEP_env/bin, so those launchers would
+# run under EGEP_env's python and fail to import their own package. Point each
+# one at its own env's python. Symlinks are skipped so links stay links.
+RUN cat > /usr/local/bin/pin-env-shebangs <<'EOF' && chmod +x /usr/local/bin/pin-env-shebangs
+#!/bin/sh
+# usage: pin-env-shebangs <env dir>
+for f in "$1"/bin/*; do
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    head -c 40 "$f" | grep -q '^#!/usr/bin/env python' || continue
+    sed -i "1s|^#!/usr/bin/env python[0-9.]*|#!$1/bin/python|" "$f"
+done
+EOF
+
 # Package EGAP_env with conda-pack
 RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
     mkdir /EGAP_env && cd /EGAP_env && tar xf /tmp/EGAP_env.tar && \
     rm /tmp/EGAP_env.tar && \
-    /EGAP_env/bin/conda-unpack
+    /EGAP_env/bin/conda-unpack && \
+    pin-env-shebangs /EGAP_env
 
 # conda-pack writes masurca's copies of the two shared files into the packed
 # env even when the env itself holds Flye's. Put Flye's back: the helper
@@ -153,7 +169,7 @@ RUN conda-pack --ignore-missing-files -n EGAP_env -o /tmp/EGAP_env.tar && \
 # env's own launcher has the build path in its shebang). Fail the build if
 # Flye would still get the old minimap2.
 RUN cp /opt/conda/envs/EGAP_env/bin/flye-minimap2 /EGAP_env/bin/flye-minimap2 && \
-    printf '#!/usr/bin/env python\nimport sys\nfrom flye.main import main\nsys.exit(main())\n' \
+    printf '#!/EGAP_env/bin/python\nimport sys\nfrom flye.main import main\nsys.exit(main())\n' \
         > /EGAP_env/bin/flye && chmod +x /EGAP_env/bin/flye && \
     PATH="/EGAP_env/bin:$PATH" flye --version && \
     /EGAP_env/bin/flye-minimap2 --secondary-seq=yes --version
@@ -202,7 +218,7 @@ RUN apt-get update && apt-get install -y wget && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a wrapper script in EGAP_env/bin called "EGAP"
-RUN printf '#!/bin/bash\npython /EGAP_env/EGAP.py "$@"\n' > /EGAP_env/bin/EGAP && \
+RUN printf '#!/bin/bash\nexec /EGAP_env/bin/python /EGAP_env/EGAP.py "$@"\n' > /EGAP_env/bin/EGAP && \
     chmod +x /EGAP_env/bin/EGAP
 
 ###############################################################################
@@ -245,7 +261,8 @@ RUN pip install genomicsqlite
 RUN conda-pack --ignore-missing-files -n EGEP_env -o /tmp/EGEP_env.tar && \
     mkdir /EGEP_env && cd /EGEP_env && tar xf /tmp/EGEP_env.tar && \
     rm /tmp/EGEP_env.tar && \
-    /EGEP_env/bin/conda-unpack
+    /EGEP_env/bin/conda-unpack && \
+    pin-env-shebangs /EGEP_env
 
 ###############################################################################
 # Generate funannotate_env
@@ -270,7 +287,8 @@ RUN python -m pip install git+https://github.com/nextgenusfs/funannotate.git
 RUN conda-pack --ignore-missing-files -n funannotate_env -o /tmp/funannotate_env.tar && \
     mkdir /funannotate_env && cd /funannotate_env && tar xf /tmp/funannotate_env.tar && \
     rm /tmp/funannotate_env.tar && \
-    /funannotate_env/bin/conda-unpack
+    /funannotate_env/bin/conda-unpack && \
+    pin-env-shebangs /funannotate_env
 
 ###############################################################################
 # Create Final Debian Build for Augustus
