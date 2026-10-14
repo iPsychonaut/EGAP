@@ -33,6 +33,10 @@ RUN mamba install -n base --yes conda-pack
 #   pandas>=2.2,<3    pandas 3 changes copy and string semantics; move it in
 #                     its own round. 2.2 is the first pandas with py3.12.
 #   numpy>=1.26,<3    1.26 is the first numpy with py3.12.
+#   setuptools<81     tiara-entheome 1.0.0 imports pkg_resources, which
+#                     setuptools 81 removed; py3.12 envs otherwise get 84.
+#   plotly>=5.24,<6   NanoPlot 1.46.2 calls figure_factory.create_2d_density,
+#                     which plotly 6 removed; py3.12 envs otherwise get 7.
 #   busco=5.8.3       held at the pre-3.12 version so the A/B round that moves
 #                     Python changes no tool versions.
 #   compleasm         installed below with --no-deps: its recipe pins
@@ -60,6 +64,8 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
     'python>=3.12,<3.13' \
     'pandas>=2.2,<3' \
     'numpy>=1.26,<3' \
+    'setuptools<81' \
+    'plotly>=5.24,<6' \
     'masurca=4.1.4' \
     'quast=5.3.0' \
     'busco=5.8.3' \

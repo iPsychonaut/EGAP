@@ -18,6 +18,13 @@
 #   docker push localhost:5050/egap:v3.4.2
 #   docker push localhost:5050/egap:py312
 # Re-run: kubectl delete -f tests/ab/ab-py312.yaml   (Jobs are immutable)
+#
+# MaSuRCA and multi-threaded Flye are not run-to-run deterministic, so also run
+# the old image a second time as a noise control, into out/py38-rerun:
+#   sed 's/name: egap-py38$/name: egap-py38-rerun/; s#out/py38}#out/py38-rerun}#' \
+#       tests/ab/ab-py312.yaml | kubectl apply -l variant=py38 -f -
+# Compare with tests/ab/compare_ab.py out/py38 out/py38-rerun (noise) and
+# out/py38 out/py312 (effect of the change).
 apiVersion: batch/v1
 kind: Job
 metadata:
