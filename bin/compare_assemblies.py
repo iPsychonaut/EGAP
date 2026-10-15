@@ -20,6 +20,7 @@ import os
 import sys
 import shutil
 import glob
+import subprocess
 import pandas as pd
 from pathlib import Path
 from collections import Counter
@@ -121,6 +122,72 @@ def get_quast_stats(assembly, cpu_threads, sample_dir, assembler):
     except FileNotFoundError:
         print(f"ERROR:\tQUAST report not found: {report}")
     return None, None
+
+
+# --------------------------------------------------------------
+# Replicons one assembly lacks that the others agree on
+# --------------------------------------------------------------
+MIN_REPLICON_BP = 5000     # contigs shorter than this are not checked
+MIN_ALIGNED_FRACTION = 0.5  # a contig is "present" if at least this much aligns
+
+
+def aligned_fraction(intervals, length):
+    """Fraction of a contig of *length* bp covered by (start, end) intervals, overlaps merged."""
+    covered, cur_s, cur_e = 0, None, None
+    for s, e in sorted(intervals):
+        if cur_e is None or s > cur_e:
+            if cur_e is not None:
+                covered += cur_e - cur_s
+            cur_s, cur_e = s, e
+        else:
+            cur_e = max(cur_e, e)
+    if cur_e is not None:
+        covered += cur_e - cur_s
+    return covered / length if length else 0.0
+
+
+def contigs_absent_from(target, query, cpu_threads, work_dir):
+    """Contigs of *query* (>= MIN_REPLICON_BP) with < MIN_ALIGNED_FRACTION aligned to *target*."""
+    lengths = {r.id: len(r.seq) for r in SeqIO.parse(query, "fasta") if len(r.seq) >= MIN_REPLICON_BP}
+    if not lengths:
+        return set()
+    paf = os.path.join(work_dir, f"{Path(query).stem}__vs__{Path(target).stem}.paf")
+    with open(paf, "w") as out:
+        rc = subprocess.run(["minimap2", "-x", "asm10", "-t", str(cpu_threads), target, query],
+                            stdout=out, stderr=subprocess.DEVNULL).returncode
+    if rc != 0:
+        print(f"WARN:\tminimap2 failed comparing {query} to {target}; skipping the replicon check.")
+        return set()
+    hits = {}
+    with open(paf) as fh:
+        for line in fh:
+            f = line.split("\t")
+            if f[0] in lengths:
+                hits.setdefault(f[0], []).append((int(f[2]), int(f[3])))
+    return {c for c, n in lengths.items() if aligned_fraction(hits.get(c, []), n) < MIN_ALIGNED_FRACTION}
+
+
+def missing_shared_replicons(assemblies, cpu_threads, work_dir):
+    """Per assembly: contigs it lacks that two other assemblies both have.
+
+    A contig of assembly A counts against candidate C when it is absent from C
+    but present in some third assembly B, so two assemblers agree it is real.
+    Returns {method: [(source method, contig, length), ...]}.
+    """
+    os.makedirs(work_dir, exist_ok=True)
+    lengths = {m: {r.id: len(r.seq) for r in SeqIO.parse(a, "fasta")} for m, a in assemblies.items()}
+    absent = {(c, q): contigs_absent_from(assemblies[c], assemblies[q], cpu_threads, work_dir)
+              for c in assemblies for q in assemblies if c != q}
+    missing = {}
+    for cand in assemblies:
+        for src in assemblies:
+            if src == cand:
+                continue
+            for contig in absent[(cand, src)]:
+                if any(contig not in absent[(third, src)]
+                       for third in assemblies if third not in (cand, src)):
+                    missing.setdefault(cand, []).append((src, contig, lengths[src][contig]))
+    return missing
 
 
 # --------------------------------------------------------------
@@ -335,6 +402,22 @@ def compare_assemblies(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
     # Dynamic list of methods
     methods = list(assemblies.keys())
+
+    # Prokaryotes: fewer contigs must not win by dropping a replicon. Rule out
+    # an assembly that lacks a contig two other assemblers both have (a
+    # Flye-mode MaSuRCA assembly once won without a 13.8 kb plasmid). If that
+    # would rule out every assembly, keep them all.
+    if str(current_series.get("ORGANISM_KARYOTE", "")).strip().lower() == "prokaryote" and len(methods) >= 3:
+        missing = missing_shared_replicons(assemblies, cpu_threads,
+                                           os.path.join(sample_dir, "replicon_check"))
+        for m, items in missing.items():
+            for src, contig, length in items:
+                print(f"WARN:\t{m} assembly lacks {src} contig {contig} ({length} bp), "
+                      f"which another assembler also has.")
+        kept = [m for m in methods if m not in missing]
+        if kept and len(kept) < len(methods):
+            print(f"NOTE:\tRuled out for missing replicons: {', '.join(m for m in methods if m in missing)}")
+            methods = kept
 
     # Compare each metric
     labels = [
