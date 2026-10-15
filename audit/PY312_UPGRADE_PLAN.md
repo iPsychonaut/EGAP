@@ -65,6 +65,12 @@ The real MaSuRCA bugs are the ones EGAP currently works around:
 * Calls to `python2.7`. EGAP patches these to point at Python 3.
 * A leftover overlap store after an interrupted run (`*.ovlStore.BUILDING`) blocks every rerun until it's deleted. `clear_stale_overlap_store` does that cleanup.
 
+Progress 2026-10-15: recipe PR opened, [bioconda/bioconda-recipes#70313](https://github.com/bioconda/bioconda-recipes/pull/70313) (branch `masurca-flye-layout`). What the source showed:
+* The bundled Flye is **2.5**. Its launcher is `#!/usr/bin/env python2.7` and refuses any other interpreter, so the `bin/flye` the recipe installs can never run.
+* Every MaSuRCA Flye call goes through `<bin>/../Flye/bin` (`masurca -a $RealBin/../Flye/bin`, `samba.sh`, `chromosome_scaffolder.sh`, `mega_reads_assemble_cluster2.sh`), and the recipe never created that directory.
+
+The PR drops the bundled Flye build, adds `flye` as a run dependency, and installs `$PREFIX/Flye/bin/{flye,flye-minimap2}` wrappers that call the flye package; build number 2. Built and tested locally with conda-build: the tests pass, `bin/flye` and the wrappers report Flye 2.9.6, `flye-minimap2` accepts `--secondary-seq`. Once a build 2 is on bioconda, A/B-test EGAP with its MaSuRCA shims and Dockerfile Flye repair removed, then delete them. The `python2.7` references left in MaSuRCA are in `CA8/src/AS_PBR` (PBcR scripts EGAP doesn't use); that's an upstream report, not a recipe fix. `clear_stale_overlap_store` stays, because it handles MaSuRCA's own behaviour after an interrupted run.
+
 The cheapest fix is a pull request to MaSuRCA's Bioconda recipe so it stops installing `bin/flye` and `flye-minimap2` into the shared `bin/` folder. That fixes the problem for every MaSuRCA user, not just EGAP. Send the Flye-path and Python 3 fixes upstream as well.
 The upstream repo has had no commits for about 16 months. If it doesn't respond, fork it as `masurca-entheome`, the same way you forked tiara-entheome. With the package fixed, roughly 150 lines of workarounds in `assemble_masurca.py` and the Dockerfile repair could be deleted.
 
