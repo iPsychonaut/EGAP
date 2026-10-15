@@ -20,8 +20,10 @@ case $step in
       cur=$work/r$i.fasta
     done
     cp "$cur" "$out" ;;
-  medaka)  # Medaka 2 bacterial model, as recommended for ONT R10 bacterial assemblies
-    /bench_env/bin/medaka_consensus -i /in/ont.fastq -d "$in" -o "$work/m" -t "$t" --bacteria > "$work/medaka.log" 2>&1 &&
+  medaka)  # Medaka 2 bacterial model, as recommended for ONT R10 bacterial assemblies.
+    # Named explicitly: --bacteria auto-detects from read headers, which SRA strips.
+    PATH=/bench_env/bin:$PATH medaka_consensus -i /in/ont.fastq -d "$in" -o "$work/m" -t "$t" \
+        -m r1041_e82_400bps_bacterial_methylation > "$work/medaka.log" 2>&1 &&
     cp "$work/m/consensus.fasta" "$out" ;;
   pilon)   # EGAP's short-read polish: bwa-mem2 + samtools sort + Pilon at 80% of 24 GB
     cp "$in" "$work/a.fasta" && bwa-mem2 index "$work/a.fasta" > /dev/null 2>&1 &&
