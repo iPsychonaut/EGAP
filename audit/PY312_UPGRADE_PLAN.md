@@ -80,18 +80,18 @@ Results 2026-10-15. Method: a baseline run of E. coli Illumina, E. coli hybrid a
 
 | Candidate | Result | Decision |
 |---|---|---|
-| SPAdes `--frugal` | Hybrids byte-identical; peak 1.67 GB either way (no saving on bacteria). E. coli Illumina-only: N50 1.11 Mb → 139 kb, contigs 1,055 → 1,345 | **Awaiting decision**: the `< 8 threads` rule is implemented (`274f291`), but the data argues for opt-in only |
+| SPAdes `--frugal` | Hybrids byte-identical; peak 1.67 GB either way (no saving on bacteria). E. coli Illumina-only: N50 1.11 Mb → 139 kb, contigs 1,055 → 1,345 | **Removed** (`dc1362e`, your call 2026-10-15): no `--frugal` in EGAP at all |
 | MaSuRCA `FLYE_ASSEMBLY=1` | K. pneumoniae: 0 vs 5 misassemblies, 0.73 + 0.58 vs 3.20 + 6.33 mismatches + indels /100 kbp, 5.65 Mb (ref 5.66) vs 6.04 Mb, 496 s / 2.6 GB vs 858 s / 7.9 GB. E. coli hybrid: 3 vs 6 contigs, 678 s / 2.5 GB vs 914 s / 5.9 GB | **Adopted** (`054ee39`). Needed: drop MaSuRCA's `--kmer-size 21` (a Flye 2.5-only option) in EGAP's Flye shim, and pick up `flye.*/assembly.scaffolds.fasta` |
 | Pilon → Polypolish + Pypolca `--careful` | after Racon ×2: ~6 vs ~12 errors (0.00 + 0.11 vs 0.02 + 0.19 /100 kbp); short-read step 74 s / 2.8 GB vs 92 s / 4.0 GB | **Adopted** (`846396f`) |
 | Racon → Medaka 2.2 (bacterial model) | alone 24 vs 41 errors, but the final result with Polypolish+Pypolca is ~11 vs ~6; 185 s / 7.7 GB vs 182 s / 1.3 GB | **Rejected**, Racon stays. Note: SRA strips the read-header info Medaka uses to pick a model |
 | Dorado polish | not on bioconda, GPU-oriented | not tested |
 
-Still to do: a confirming end-to-end A/B with the adopted defaults, and fix the `--kmer-size` handling in the MaSuRCA recipe PR (#70313), whose description wrongly says MaSuRCA uses only Flye options current Flye supports.
+Recipe PR #70313 fixed 2026-10-15: its `Flye/bin/flye` wrapper now drops `--kmer-size` too, with a recipe test for it, and a comment corrects the description ([comment](https://github.com/bioconda/bioconda-recipes/pull/70313#issuecomment-6194004192)). Still to do: a confirming end-to-end A/B with the adopted defaults.
 
-* SPAdes 4.3: uses less memory, only use `--frugal` when CPU threads is less than 8.
-* MaSuRCA: EGAP currently forces its slower internal assembler (`flye assembly: 0`). Setting `FLYE_ASSEMBLY=1` makes MaSuRCA use Flye for the final assembly step, which is typically much faster and uses less memory. That's worth an A/B test.
-* Pilon is a Java tool that needs a lot of memory. Polypolish or Pypolca do the same job with far less, and the fungal and bacterial benchmarks in the audit favour them.
-* Racon: no release in nearly five years. `dorado polish` replaces it for nanopore data, and Medaka 2.2 is the other current option. Both need Python 3.12, so after this move they could run in the main environment.
+* ~~SPAdes 4.3: uses less memory, only use `--frugal` when CPU threads is less than 8.~~ Tested: no memory saving on bacteria and an 8x contiguity loss on Illumina-only data, so `--frugal` was dropped.
+* ~~MaSuRCA: EGAP currently forces its slower internal assembler (`flye assembly: 0`). Setting `FLYE_ASSEMBLY=1` makes MaSuRCA use Flye for the final assembly step, which is typically much faster and uses less memory. That's worth an A/B test.~~ Adopted (`054ee39`).
+* ~~Pilon is a Java tool that needs a lot of memory. Polypolish or Pypolca do the same job with far less, and the fungal and bacterial benchmarks in the audit favour them.~~ Replaced by Polypolish + Pypolca (`846396f`).
+* ~~Racon: no release in nearly five years. `dorado polish` replaces it for nanopore data, and Medaka 2.2 is the other current option. Both need Python 3.12, so after this move they could run in the main environment.~~ Medaka 2.2 tested and rejected (no final accuracy gain, 6x memory); Racon stays. Dorado not tested.
 
 ## Side findings (not steps yet)
 
