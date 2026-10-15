@@ -4,12 +4,12 @@
 polish_assembly.py
 
 This module processes genomic assembly data by applying polishing steps using Racon
-for long reads (ONT or PacBio) and Pilon for Illumina reads. It handles input validation,
+for long reads (ONT or PacBio) and Polypolish + Pypolca for Illumina reads. It handles input validation,
 subprocess execution, and file management for assembly refinement.
 
 Stage:
     Polishing (minimap2 + Racon, for long reads)
-    Polishing (bwa + samtools + bamtools + Pilon, for Illumina)
+    Polishing (bwa + Polypolish + Pypolca, for Illumina)
 
 Created on Wed Aug 16 2023
 
@@ -25,7 +25,7 @@ from typing import Optional
 import pandas as pd
 from pathlib import Path  # <<< NEW
 from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context
-from file_manager import remove_file, remove_dir, remove_glob, remove_bwa_indices
+from file_manager import remove_file, remove_dir, remove_glob
 
 
 # --------------------------------------------------------------
@@ -66,131 +66,59 @@ def racon_polish_assembly(input_assembly, long_reads, racon_out_dir, sample_id, 
 
 
 # --------------------------------------------------------------
-# Prepare alignment for Pilon polishing
+# Polish assembly with Illumina reads: Polypolish, then Pypolca
 # --------------------------------------------------------------
-def pilon_prep(input_assembly, illu_f_dedup, illu_r_dedup, assembly_out_dir, cpu_threads):
-    """Prepare BAM file for Pilon polishing using Illumina reads."""
-    if not os.path.exists(input_assembly):
-        print(f"ERROR:\tInput assembly not found: {input_assembly}")
-        return None
-    if not os.path.exists(illu_f_dedup) or not os.path.exists(illu_r_dedup):
-        print(f"ERROR:\tIllumina reads not found: {illu_f_dedup}, {illu_r_dedup}")
-        return None
+def short_read_polish(input_assembly, illu_f_dedup, illu_r_dedup, work_dir, sample_id, cpu_threads):
+    """Polish with Illumina reads: Polypolish, then Pypolca --careful.
 
-    pilon_bam = os.path.join(assembly_out_dir, os.path.basename(input_assembly).replace(".fasta", ".bam"))
-    output_sam = pilon_bam.replace(".bam", ".sam")
-    sorted_bam = pilon_bam.replace(".bam", "_sorted.bam")
+    Replaced Pilon after the speed/memory A/B (K. pneumoniae KPC2_202310,
+    graded against its same-strain reference): Racon x2 + Polypolish + Pypolca
+    left ~6 errors against ~12 for Racon x2 + Pilon, with a faster short-read
+    step and ~30% less peak memory. Polypolish needs every alignment of each
+    read (``bwa mem -a``), with the two read files aligned separately.
 
-    os.makedirs(assembly_out_dir, exist_ok=True)
+    Returns the Pypolca assembly, the Polypolish assembly if Pypolca fails, or
+    the input assembly if Polypolish fails.
+    """
+    for path in (input_assembly, illu_f_dedup, illu_r_dedup):
+        if not path or not os.path.exists(path):
+            print(f"ERROR:\tShort-read polishing input not found: {path}")
+            return input_assembly
+    os.makedirs(work_dir, exist_ok=True)
+    pypolca_dir = os.path.join(work_dir, "pypolca")
+    pypolca_out = os.path.join(pypolca_dir, "pypolca_corrected.fasta")
+    if os.path.exists(pypolca_out):
+        print(f"SKIP:\tPypolca assembly already exists: {pypolca_out}.")
+        return pypolca_out
 
-    if not os.path.exists(output_sam):
-        bwa_index_cmd = ["bwa-mem2", "index", input_assembly]
-        print(f"DEBUG - Running BWA index: {' '.join(bwa_index_cmd)}")
-        result = run_subprocess_cmd(bwa_index_cmd, shell_check=False)
-        if result != 0:
-            print(f"WARN:\tBWA index failed. Skipping Pilon prep.")
-            return None
+    asm = os.path.join(work_dir, f"{sample_id}_short_polish_input.fasta")
+    shutil.copy(input_assembly, asm)
+    sam1, sam2 = os.path.join(work_dir, "r1.sam"), os.path.join(work_dir, "r2.sam")
+    filt1, filt2 = os.path.join(work_dir, "r1.filtered.sam"), os.path.join(work_dir, "r2.filtered.sam")
+    polypolish_out = os.path.join(work_dir, f"{sample_id}_polypolish.fasta")
+    for cmd in (f"bwa index {asm}",
+                f"bwa mem -t {cpu_threads} -a {asm} {illu_f_dedup} > {sam1}",
+                f"bwa mem -t {cpu_threads} -a {asm} {illu_r_dedup} > {sam2}",
+                f"polypolish filter --in1 {sam1} --in2 {sam2} --out1 {filt1} --out2 {filt2}",
+                f"polypolish polish {asm} {filt1} {filt2} > {polypolish_out}"):
+        print(f"DEBUG - Running: {cmd}")
+        if run_subprocess_cmd(cmd, shell_check=True) != 0:
+            print(f"WARN:\tPolypolish step failed: {cmd.split()[0]} {cmd.split()[1]}. Returning input assembly.")
+            return input_assembly
+    if not os.path.exists(polypolish_out) or os.path.getsize(polypolish_out) < 1000:
+        print("WARN:\tPolypolish output missing or suspiciously small. Returning input assembly.")
+        return input_assembly
+    # The SAM files can be several GB; Polypolish is done with them.
+    for p in (sam1, sam2, filt1, filt2):
+        remove_file(p)
 
-        bwa_cmd = f"bwa-mem2 mem -t {cpu_threads} {input_assembly} {illu_f_dedup} {illu_r_dedup} > {output_sam}"
-        print(f"DEBUG - Running BWA: {bwa_cmd}")
-        result = run_subprocess_cmd(bwa_cmd, shell_check=True)
-        if result != 0 or not os.path.exists(output_sam):
-            print(f"WARN:\tBWA mapping failed. Skipping Pilon prep.")
-            return None
-
-    if os.path.exists(output_sam) and os.path.getsize(output_sam) < 1000:
-        print(f"WARN:\tGenerated SAM file is suspiciously small: {output_sam}")
-        return None
-
-    if not os.path.exists(sorted_bam):
-        samview_cmd = f"samtools view -@ {cpu_threads} -S -b {output_sam} > {sorted_bam}"
-        print(f"DEBUG - Running samtools view: {samview_cmd}")
-        result = run_subprocess_cmd(samview_cmd, shell_check=True)
-        if result != 0 or not os.path.exists(sorted_bam):
-            print(f"WARN:\tsamtools view failed. Skipping Pilon prep.")
-            return None
-
-    # The SAM file can be 10+ GB — free it now that sorted BAM exists.
-    remove_file(output_sam)
-
-    if not os.path.exists(pilon_bam):
-        bamsort_cmd = ["bamtools", "sort", "-in", sorted_bam, "-out", pilon_bam]
-        print(f"DEBUG - Running bamtools sort: {' '.join(bamsort_cmd)}")
-        result = run_subprocess_cmd(bamsort_cmd, shell_check=False)
-        if result != 0 or not os.path.exists(pilon_bam):
-            print(f"WARN:\tbamtools sort failed. Skipping Pilon prep.")
-            return None
-
-        samtools_index_cmd = ["samtools", "index", pilon_bam]
-        print(f"DEBUG - Running samtools index: {' '.join(samtools_index_cmd)}")
-        result = run_subprocess_cmd(samtools_index_cmd, shell_check=False)
-        if result != 0 or not os.path.exists(pilon_bam + ".bai"):
-            print(f"WARN:\tsamtools index failed. Skipping Pilon prep.")
-            return None
-
-    if os.path.exists(pilon_bam) and os.path.getsize(pilon_bam) < 1000:
-        print(f"WARN:\tSorted BAM file is suspiciously small: {pilon_bam}")
-        return None
-
-    # Final BAM is confirmed and indexed — the intermediate sorted BAM is redundant.
-    if os.path.exists(pilon_bam) and os.path.exists(pilon_bam + ".bai"):
-        remove_file(sorted_bam)
-
-    return pilon_bam
-
-
-# --------------------------------------------------------------
-# Polish assembly with Pilon using Illumina reads
-# --------------------------------------------------------------
-def pilon_polish(best_assembly, second_racon_assembly, pilon_bam, assembly_out_dir, sample_id, cpu_threads, ram_gb):
-    """Polish an assembly with Pilon using aligned Illumina reads."""
-    if not os.path.exists(second_racon_assembly):
-        print(f"ERROR:\tRacon assembly not found: {second_racon_assembly}")
-        return second_racon_assembly
-    if not os.path.exists(pilon_bam):
-        print(f"ERROR:\tPilon BAM not found: {pilon_bam}")
-        return second_racon_assembly
-
-    pilon_out_prefix = f"{sample_id}_pilon_assembly"
-    pilon_out_dir = assembly_out_dir
-    os.makedirs(pilon_out_dir, exist_ok=True)
-
-    pilon_assembly = os.path.join(pilon_out_dir, f"{sample_id}_pilon_assembly.fasta")
-    if os.path.exists(pilon_assembly):
-        print(f"SKIP:\tPilon Polished Assembly already exists: {pilon_assembly}.")
-    else:
-        # Pilon runs on the JVM, which needs memory beyond its heap (metaspace,
-        # GC, thread stacks) plus room for the OS and any concurrent tools.
-        # Passing the full ram_gb as -Xmx claimed nearly all RAM and triggered
-        # the Linux OOM killer mid-polish on constrained hosts (e.g. a 56 GB
-        # WSL2 VM where -Xmx52g was killed). Cap the heap at 80% of the budget
-        # (minimum 4 GB) so the JVM and everything else have headroom.
-        try:
-            pilon_xmx_gb = max(4, int(float(ram_gb) * 0.8))
-        except (TypeError, ValueError):
-            pilon_xmx_gb = 4
-        pilon_cmd = [
-            "pilon", f"-Xmx{pilon_xmx_gb}g",
-            "--genome", second_racon_assembly,
-            "--frags", pilon_bam,
-            "--output", pilon_out_prefix,
-            "--outdir", pilon_out_dir,
-            "--changes", "--vcf", "--tracks",
-            "--chunksize", str(5000000),
-            "--fix", ",".join(["indels", "local", "snps"])
-        ]
-        print(f"DEBUG - Running Pilon: {' '.join(pilon_cmd)}")
-        result = run_subprocess_cmd(pilon_cmd, shell_check=False)
-        if result != 0 or not os.path.exists(pilon_assembly):
-            print(f"WARN:\tPilon failed: pilon returned {result}. Returning Racon assembly.")
-            return second_racon_assembly
-
-    if os.path.exists(pilon_assembly) and os.path.getsize(pilon_assembly) < 1000:
-        print(f"WARN:\tPilon assembly is suspiciously small: {pilon_assembly}. Returning Racon assembly.")
-        return second_racon_assembly
-
-    print(f"DEBUG - pilon_assembly - {pilon_assembly}")
-    return pilon_assembly
+    pypolca_cmd = (f"pypolca run -a {polypolish_out} -1 {illu_f_dedup} -2 {illu_r_dedup} "
+                   f"-t {cpu_threads} -o {pypolca_dir} --careful --force")
+    print(f"DEBUG - Running Pypolca: {pypolca_cmd}")
+    if run_subprocess_cmd(pypolca_cmd, shell_check=True) != 0 or not os.path.exists(pypolca_out):
+        print("WARN:\tPypolca failed. Returning the Polypolish assembly.")
+        return polypolish_out
+    return pypolca_out
 
 
 # --------------------------------------------------------------
@@ -203,7 +131,7 @@ def polish_assembly(
     cpu_threads: int,
     ram_gb: int,
 ) -> Optional[str]:
-    """Polish an assembly by running Racon (two rounds with long reads) and Pilon."""
+    """Polish an assembly: Racon (two rounds, long reads), then Polypolish + Pypolca (Illumina)."""
     ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
     current_series = ctx.current_series
 
@@ -334,25 +262,16 @@ def polish_assembly(
             print(f"ERROR:\tFailed to copy Racon assembly to {racon_final}")
             return None
 
-    # ---- Step 2: Pilon polishing (if Illumina) ----
-    pilon_work_dir = os.path.join(polish_out_dir, "pilon_polish")
-    os.makedirs(pilon_work_dir, exist_ok=True)
-    pilon_final = os.path.join(polish_out_dir, f"{sample_id}_pilon.fasta")
+    # ---- Step 2: Short-read polishing (if Illumina): Polypolish, then Pypolca ----
+    short_work_dir = os.path.join(polish_out_dir, "short_read_polish")
+    short_final = os.path.join(polish_out_dir, f"{sample_id}_short_polish.fasta")
 
     if pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads):
-        print("Pilon Polishing with Illumina Reads...")
-        pilon_bam = pilon_prep(racon_final,
-                               illu_dedup_f_reads, illu_dedup_r_reads,
-                               pilon_work_dir, cpu_threads)
-        if pilon_bam is None:
-            print(f"WARN:\tPilon prep failed. Falling back to Racon assembly.")
-            polished_assembly = racon_final
-        else:
-            polished_assembly = pilon_polish(best_assembly, racon_final,
-                                             pilon_bam, pilon_work_dir, sample_id,
-                                             cpu_threads, ram_gb)
+        print("Polypolish + Pypolca Polishing with Illumina Reads...")
+        polished_assembly = short_read_polish(racon_final, illu_dedup_f_reads, illu_dedup_r_reads,
+                                              short_work_dir, sample_id, cpu_threads)
     else:
-        print("SKIP:\tPilon Polish; No Illumina Reads Provided.")
+        print("SKIP:\tShort-read Polish; No Illumina Reads Provided.")
         polished_assembly = racon_final
 
     print(f"DEBUG - polished_assembly - {polished_assembly}")
@@ -368,16 +287,16 @@ def polish_assembly(
         print(f"WARN:\tPolished assembly is suspiciously small: {polished_assembly}. Falling back to Racon assembly.")
         polished_assembly = racon_final
 
-    if os.path.exists(pilon_final):
-        print(f"SKIP:\tPilon final already exists: {pilon_final}")
+    if os.path.exists(short_final):
+        print(f"SKIP:\tShort-read polished assembly already exists: {short_final}")
     else:
-        print(f"DEBUG - Copying polished assembly: {polished_assembly} to {pilon_final}")
-        shutil.copy(polished_assembly, pilon_final)
-        if not os.path.exists(pilon_final):
-            print(f"ERROR:\tFailed to copy polished assembly to {pilon_final}")
+        print(f"DEBUG - Copying polished assembly: {polished_assembly} to {short_final}")
+        shutil.copy(polished_assembly, short_final)
+        if not os.path.exists(short_final):
+            print(f"ERROR:\tFailed to copy polished assembly to {short_final}")
             return None
 
-    print(f"DEBUG - pilon_final - {pilon_final}")
+    print(f"DEBUG - short_final - {short_final}")
 
     # Prepare final polished assembly path (in the main assembly directory)
     final_polished_assembly = os.path.join(sample_dir, f"{sample_id}_final_polish_assembly.fasta")
@@ -386,14 +305,14 @@ def polish_assembly(
     if os.path.exists(final_polished_assembly):
         print(f"SKIP:\tFinal polished assembly already exists: {final_polished_assembly}")
     else:
-        if os.path.exists(pilon_final):
-            print(f"DEBUG - Copying pilon final: {pilon_final} to {final_polished_assembly}")
-            shutil.copy(pilon_final, final_polished_assembly)
+        if os.path.exists(short_final):
+            print(f"DEBUG - Copying short-read polished assembly: {short_final} to {final_polished_assembly}")
+            shutil.copy(short_final, final_polished_assembly)
             if not os.path.exists(final_polished_assembly):
-                print(f"ERROR:\tFailed to copy pilon final to {final_polished_assembly}")
+                print(f"ERROR:\tFailed to copy short-read polished assembly to {final_polished_assembly}")
                 return None
         else:
-            print(f"WARN:\tPilon final not found: {pilon_final}. Falling back to Racon assembly.")
+            print(f"WARN:\tShort-read polished assembly not found: {short_final}. Falling back to Racon assembly.")
             if os.path.exists(racon_final):
                 print(f"DEBUG - Copying Racon final: {racon_final} to {final_polished_assembly}")
                 shutil.copy(racon_final, final_polished_assembly)
@@ -413,8 +332,8 @@ def polish_assembly(
         # Per-round Racon FASTA outputs (final is kept as racon_final)
         remove_file(os.path.join(racon_work_dir, f"{sample_id}_racon_polish_1.fasta"))
         remove_file(os.path.join(racon_work_dir, f"{sample_id}_racon_polish_2.fasta"))
-        # BWA-mem2 index sidecars created alongside racon_final during Pilon prep
-        remove_bwa_indices(racon_final)
+        # Short-read polishing work dir (bwa index, Polypolish/Pypolca intermediates)
+        remove_dir(short_work_dir)
 
     return final_polished_assembly
 

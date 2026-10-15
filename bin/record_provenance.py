@@ -49,7 +49,7 @@ _SKIP_TOOLS = {
 _CONDA_ALIASES = {
     "bbmerge": "bbmap", "reformat": "bbmap", "bbduk": "bbmap", "bbmap": "bbmap",
     "quast": "quast", "spades": "spades", "ragtag": "ragtag",
-    "compleasm": "compleasm", "nanoplot": "nanoplot", "pilon": "pilon",
+    "compleasm": "compleasm", "nanoplot": "nanoplot",
     "purge_dups": "purge_dups", "pbccs": "pbccs", "gfatools": "gfatools",
 }
 

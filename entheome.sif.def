@@ -117,7 +117,9 @@ From: debian:buster
                  ncbi-datasets-cli \
                  matplotlib-base \
                  'trimmomatic=0.40' \
-                 pilon \
+                 bwa \
+                 'polypolish=0.7.1' \
+                 'pypolca=0.5.0' \
                  fastqc \
                  'bbmap>=39.15,<39.76' \
                  racon \

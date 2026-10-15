@@ -85,7 +85,9 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
     ncbi-datasets-cli \
     matplotlib-base \
     'trimmomatic=0.40' \
-    pilon \
+    bwa \
+    'polypolish=0.7.1' \
+    'pypolca=0.5.0' \
     fastqc \
     'bbmap>=39.15,<39.76' \
     racon \

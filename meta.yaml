@@ -60,7 +60,10 @@ requirements:
     - ncbi-datasets-cli >=18.3.1
     - matplotlib-base >=3.7.3
     - trimmomatic >=0.39
-    - pilon >=1.22
+    # Illumina polishing (replaced Pilon after the speed/memory A/B).
+    - bwa
+    - polypolish >=0.6
+    - pypolca >=0.3
     - fastqc >=0.12.1
     # <39.76: from 39.76 through 40.02, BBDuk fails on paired in1=/in2= input
     # below 16 threads and writes no reads. 39.52 works at 1-16 threads.
