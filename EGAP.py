@@ -133,7 +133,7 @@ MASURCA_SETTINGS = {
     "ca parameters": "cgwErrorRate=0.15",
     "jellyfish hash size": "based on the estimated size of the genome provided",
     "soap assembly": "0 (disabled to force CABOG assembly)",
-    "flye assembly": "0 (disabled to force CABOG assembly)",
+    "flye assembly": "(1 if Hybrid assembly, else 0; EGAP_MASURCA_FLYE_ASSEMBLY=0 forces CABOG)",
 }
 
 SPADES_SETTINGS = {
@@ -657,7 +657,7 @@ if __name__ == "__main__":
         \033[94mca parameters                    \033[0m: cgwErrorRate=0.15
         \033[94mjellyfish hash size              \033[0m: based on the estimated size of the genome provided
         \033[94msoap assembly                    \033[0m: 0 (disabled to force CABOG assembly)
-        \033[94mflye assembly                    \033[0m: 0 (disabled to force CABOG assembly)
+        \033[94mflye assembly                    \033[0m: (1 if Hybrid assembly, else 0; EGAP_MASURCA_FLYE_ASSEMBLY=0 forces CABOG)
                                     
     \033[92mspades settings
         \033[94mhigh-cov. isolate & multi-cell   \033[0m: --isolate

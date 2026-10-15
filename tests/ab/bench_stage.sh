@@ -12,7 +12,7 @@ BASE=$1 BENCH=$2 TSV=$3 SPECIES=$4 SAMPLE=$5 STAGE=$6 CASE=$7 ENVSET=${8:-}
 IMG=localhost:5050/egap:py312-bench
 w() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
 D=$BENCH/$SAMPLE/$STAGE-$CASE
-rm -rf "$D" && mkdir -p "$D/$SPECIES/Illumina" "$D/$SPECIES/$SAMPLE"
+rm -rf "${D:?}" && mkdir -p "$D/$SPECIES/Illumina" "$D/$SPECIES/$SAMPLE"
 cp "$BASE/$SPECIES/Illumina/"*_dedup.fastq "$D/$SPECIES/Illumina/"
 if ls "$BASE/$SPECIES/ONT/"*_highest_mean_qual_long_reads.fastq > /dev/null 2>&1; then
   mkdir -p "$D/$SPECIES/ONT" && cp "$BASE/$SPECIES/ONT/"*_highest_mean_qual_long_reads.fastq "$D/$SPECIES/ONT/"
@@ -22,12 +22,13 @@ awk -F'\t' -v s="$SAMPLE" 'NR==1 || $2==s' "$TSV" > "$D/sample.tsv"
 MSYS_NO_PATHCONV=1 docker run --rm --cpus 7 --memory 24g -v "$(w "$D")":/w ${ENVSET:+-e "$ENVSET"} \
   --entrypoint bash "$IMG" -c "
     export PATH=/EGAP_env/bin:\$PATH CONDA_PREFIX=/EGAP_env
+    ${PRE:-}
     cd /w && SECONDS=0
     /EGAP_env/bin/python /EGAP_env/bin/assemble_$STAGE.py $SAMPLE /w/sample.tsv /w 7 24 > /w/stage.log 2>&1
     rc=\$?
     echo \"BENCH sample=$SAMPLE stage=$STAGE case=$CASE env=${ENVSET:-none} wall_s=\$SECONDS peak_mem_bytes=\$(cat /sys/fs/cgroup/memory.peak) rc=\$rc\"
   " | tee -a "$BENCH/results.tsv"
-# keep the assembly, its stats and the log; drop reads and work dirs
+# keep the assembly, its stats and the log; drop reads and work dirs (KEEP=1 keeps them)
 find "$D" -name "*_${STAGE}.fasta" -exec cp {} "$D/" \;
 find "$D/$SPECIES/$SAMPLE" -maxdepth 1 -name "*_${STAGE}_stats.txt" -exec cp {} "$D/" \;
-rm -rf "$D/$SPECIES"
+[ -n "${KEEP:-}" ] || rm -rf "${D:?}/${SPECIES:?}"
