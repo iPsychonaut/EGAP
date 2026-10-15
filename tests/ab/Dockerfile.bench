@@ -1,0 +1,17 @@
+# Speed/memory A/B image: the full py3.12 image, this checkout's stage scripts,
+# and a separate /bench_env with the candidate polishers (Polypolish, Pypolca,
+# Medaka). Medaka pins pytorch 2.9 while EGAP_env has 2.14, so they stay apart.
+#
+# Build from the repo root (named context, so the repo folder is not sent):
+#   docker build -f tests/ab/Dockerfile.bench --build-context egap=bin \
+#       -t localhost:5050/egap:py312-bench tests/ab
+FROM condaforge/miniforge3 AS bench
+# -p /bench_env: created at its final path, so no conda-pack or shebang fix-up.
+RUN conda create -p /bench_env -y --strict-channel-priority -c conda-forge -c bioconda \
+        'python=3.12' 'polypolish=0.7.1' 'pypolca=0.5.0' 'medaka=2.2.2' && \
+    conda clean -a -y && \
+    /bench_env/bin/polypolish --version && /bench_env/bin/pypolca --version && /bench_env/bin/medaka --version
+
+FROM localhost:5050/egap:py312-full
+COPY --from=bench /bench_env /bench_env
+COPY --from=egap *.py /EGAP_env/bin/

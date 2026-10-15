@@ -591,7 +591,9 @@ def masurca_config_gen(
         f"NUM_THREADS={cpu_threads}\n",
         f"JF_SIZE={jf_size}\n",
         "SOAP_ASSEMBLY=0\n",
-        "FLYE_ASSEMBLY=0\n",
+        # EGAP_MASURCA_FLYE_ASSEMBLY=1: Flye builds the final contigs from the
+        # mega-reads instead of CABOG (speed/memory A/B; default stays CABOG).
+        f"FLYE_ASSEMBLY={1 if os.environ.get('EGAP_MASURCA_FLYE_ASSEMBLY') == '1' and has_long_reads else 0}\n",
         "END\n",
     ]
 
