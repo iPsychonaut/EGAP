@@ -27,21 +27,6 @@ from estimate_runtime import log_estimate_for
 from record_provenance import record_file
 
 
-def spades_frugal(cpu_threads) -> bool:
-    """Whether to pass SPAdes --frugal (lower memory, may cost some quality).
-
-    Used on small hosts: fewer than 8 CPU threads. EGAP_SPADES_FRUGAL=1/0
-    forces it on/off (the speed/memory A/B uses this).
-    """
-    forced = os.environ.get("EGAP_SPADES_FRUGAL", "").strip()
-    if forced in ("0", "1"):
-        return forced == "1"
-    try:
-        return int(cpu_threads) < 8
-    except (TypeError, ValueError):
-        return False
-
-
 # --------------------------------------------------------------
 # Run SPAdes assembly with Illumina and optional long reads
 # --------------------------------------------------------------
@@ -208,8 +193,6 @@ def assemble_spades(
         "-m", str(ram_gb),
         "--cov-cutoff", "auto",
     ]
-    if spades_frugal(cpu_threads):
-        spades_cmd.append("--frugal")
     if illu_dedup_f_reads and illu_dedup_r_reads:
         spades_cmd += ["-1", illu_dedup_f_reads, "-2", illu_dedup_r_reads]
     if highest_mean_qual_long_reads and pd.notna(ont_raw_reads):
