@@ -531,7 +531,7 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     if os.path.exists(_fqc_r1) and os.path.exists(_fqc_r2):
         log_print(f"SKIP:\tFastQC results already exist: {_fqc_r1} & {_fqc_r2}")
     else:
-        run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", fastqc_results_dir, illu_raw_f_reads, illu_raw_r_reads], False)
+        run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "--outdir", fastqc_results_dir, illu_raw_f_reads, illu_raw_r_reads], False)
 
     # ---------- Trimmomatic ----------
     # Derive paired/unpaired output names from input
@@ -702,7 +702,7 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     if os.path.exists(_dd_fqc_f) and os.path.exists(_dd_fqc_r):
         log_print(f"SKIP:\tDedup FastQC results already exist: {_dd_fqc_f} & {_dd_fqc_r}")
     else:
-        run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "-o", dedup_fastqc_results_dir, illu_dedup_f_reads, illu_dedup_r_reads], False)
+        run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "--outdir", dedup_fastqc_results_dir, illu_dedup_f_reads, illu_dedup_r_reads], False)
 
     # ---------- Kraken2 Decontamination ----------
     # Resolve Kraken2 DB — if not configured, skip gracefully (non-fatal)

@@ -218,7 +218,11 @@ RUN apt-get update && apt-get install -y wget && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a wrapper script in EGAP_env/bin called "EGAP"
-RUN printf '#!/bin/bash\nexec /EGAP_env/bin/python /EGAP_env/EGAP.py "$@"\n' > /EGAP_env/bin/EGAP && \
+# EGAP_env goes first on PATH for EGAP and every tool it calls: the image PATH
+# lists EGEP_env first, and EGEP_env ships its own trimmomatic (0.41) and
+# python. CONDA_PREFIX is how preprocess_illumina finds TruSeq3-PE.fa
+# ($CONDA_PREFIX/share/trimmomatic*/adapters); the packed envs do not set it.
+RUN printf '#!/bin/bash\nexport PATH="/EGAP_env/bin:$PATH" CONDA_PREFIX=/EGAP_env\nexec /EGAP_env/bin/python /EGAP_env/EGAP.py "$@"\n' > /EGAP_env/bin/EGAP && \
     chmod +x /EGAP_env/bin/EGAP
 
 ###############################################################################

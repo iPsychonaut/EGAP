@@ -349,16 +349,22 @@ PY
           -B /host/kraken2_db:/kraken2_db \
           -B /host/data:/data \
           entheome.sif \
-          python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-              --input-tsv /data/samples.tsv \
-              --output /data/output \
-              --threads 16 --ram 64
+          env PATH=/opt/conda/envs/EGAP_env/bin:$PATH CONDA_PREFIX=/opt/conda/envs/EGAP_env \
+          /opt/conda/envs/EGAP_env/bin/python /opt/conda/envs/EGAP_env/bin/EGAP.py \
+              --input_tsv /data/samples.tsv \
+              --output_dir /data/output \
+              --cpu_threads 16 --ram_gb 64
 
     Without Kraken2 (read decontamination skipped):
 
       singularity run -B /host/data:/data entheome.sif \
-          python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-              --input-tsv /data/samples.tsv --output /data/output
+          env PATH=/opt/conda/envs/EGAP_env/bin:$PATH CONDA_PREFIX=/opt/conda/envs/EGAP_env \
+          /opt/conda/envs/EGAP_env/bin/python /opt/conda/envs/EGAP_env/bin/EGAP.py \
+              --input_tsv /data/samples.tsv --output_dir /data/output
+
+    EGAP_env must come first on PATH for EGAP: EGEP_env also ships trimmomatic
+    (a different version) and its own python, and the image PATH lists EGEP_env
+    first. CONDA_PREFIX is how EGAP finds Trimmomatic's TruSeq3-PE.fa adapters.
 
     ---------------------------------------------------------------------------
     Environment variables
