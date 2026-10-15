@@ -76,6 +76,18 @@ The upstream repo has had no commits for about 16 months. If it doesn't respond,
 
 ## Speed and memory gains to A/B test after the move
 
+Results 2026-10-15. Method: a baseline run of E. coli Illumina, E. coli hybrid and K. pneumoniae hybrid (`egap:py312-bench`, `EGAP_SPADES_FRUGAL=0`, output `egap-ab/out/speed-base`). Each candidate then ran on that baseline's inputs in its own container (7 CPU, 24 GB), with wall time and cgroup peak memory recorded (`tests/ab/bench_polish.sh`, `tests/ab/bench_stage.sh`, results under `egap-ab/bench/`). K. pneumoniae assemblies were graded with QUAST against the same-strain reference GCF_045345375.1. The reference was itself built from these reads, and this is one genome, so read these as strong single-sample evidence that agrees with the published benchmarks.
+
+| Candidate | Result | Decision |
+|---|---|---|
+| SPAdes `--frugal` | Hybrids byte-identical; peak 1.67 GB either way (no saving on bacteria). E. coli Illumina-only: N50 1.11 Mb → 139 kb, contigs 1,055 → 1,345 | **Awaiting decision**: the `< 8 threads` rule is implemented (`274f291`), but the data argues for opt-in only |
+| MaSuRCA `FLYE_ASSEMBLY=1` | K. pneumoniae: 0 vs 5 misassemblies, 0.73 + 0.58 vs 3.20 + 6.33 mismatches + indels /100 kbp, 5.65 Mb (ref 5.66) vs 6.04 Mb, 496 s / 2.6 GB vs 858 s / 7.9 GB. E. coli hybrid: 3 vs 6 contigs, 678 s / 2.5 GB vs 914 s / 5.9 GB | **Adopted** (`054ee39`). Needed: drop MaSuRCA's `--kmer-size 21` (a Flye 2.5-only option) in EGAP's Flye shim, and pick up `flye.*/assembly.scaffolds.fasta` |
+| Pilon → Polypolish + Pypolca `--careful` | after Racon ×2: ~6 vs ~12 errors (0.00 + 0.11 vs 0.02 + 0.19 /100 kbp); short-read step 74 s / 2.8 GB vs 92 s / 4.0 GB | **Adopted** (`846396f`) |
+| Racon → Medaka 2.2 (bacterial model) | alone 24 vs 41 errors, but the final result with Polypolish+Pypolca is ~11 vs ~6; 185 s / 7.7 GB vs 182 s / 1.3 GB | **Rejected**, Racon stays. Note: SRA strips the read-header info Medaka uses to pick a model |
+| Dorado polish | not on bioconda, GPU-oriented | not tested |
+
+Still to do: a confirming end-to-end A/B with the adopted defaults, and fix the `--kmer-size` handling in the MaSuRCA recipe PR (#70313), whose description wrongly says MaSuRCA uses only Flye options current Flye supports.
+
 * SPAdes 4.3: uses less memory, only use `--frugal` when CPU threads is less than 8.
 * MaSuRCA: EGAP currently forces its slower internal assembler (`flye assembly: 0`). Setting `FLYE_ASSEMBLY=1` makes MaSuRCA use Flye for the final assembly step, which is typically much faster and uses less memory. That's worth an A/B test.
 * Pilon is a Java tool that needs a lot of memory. Polypolish or Pypolca do the same job with far less, and the fungal and bacterial benchmarks in the audit favour them.
