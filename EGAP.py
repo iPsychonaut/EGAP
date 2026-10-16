@@ -133,7 +133,7 @@ MASURCA_SETTINGS = {
     "ca parameters": "cgwErrorRate=0.15",
     "jellyfish hash size": "based on the estimated size of the genome provided",
     "soap assembly": "0 (disabled to force CABOG assembly)",
-    "flye assembly": "0 (disabled to force CABOG assembly)",
+    "flye assembly": "(1 if Hybrid assembly, else 0; EGAP_MASURCA_FLYE_ASSEMBLY=0 forces CABOG)",
 }
 
 SPADES_SETTINGS = {
@@ -155,12 +155,10 @@ RACON_SETTINGS = {
     "settings": "default",
 }
 
-PILON_SETTINGS = {
-    "change file generation": "-changes",
-    "vcf file generation": "-vcf",
-    "tracks file generation": "-tracks",
-    "largest chunksize limit": 5000000,
-    "fix list": "indels, local, snps",
+SHORT_READ_POLISH_SETTINGS = {
+    "alignment": "bwa mem -a (each read file separately)",
+    "polypolish": "filter, then polish",
+    "pypolca": "--careful",
 }
 
 RAGTAG_SETTINGS = {
@@ -253,7 +251,7 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output
         "flye settings": FLYE_SETTINGS,
         "hifiasm settings": HIFIASM_SETTINGS,
         "racon settings": RACON_SETTINGS,
-        "pilon settings": PILON_SETTINGS,
+        "short-read polish settings": SHORT_READ_POLISH_SETTINGS,
         "ragtag settings": RAGTAG_SETTINGS,
         "tgs-gapcloser settings": TGSGAPCLOSER_SETTINGS,
         "abyss-sealer settings": ABYSSSEALER_SETTINGS,
@@ -659,7 +657,7 @@ if __name__ == "__main__":
         \033[94mca parameters                    \033[0m: cgwErrorRate=0.15
         \033[94mjellyfish hash size              \033[0m: based on the estimated size of the genome provided
         \033[94msoap assembly                    \033[0m: 0 (disabled to force CABOG assembly)
-        \033[94mflye assembly                    \033[0m: 0 (disabled to force CABOG assembly)
+        \033[94mflye assembly                    \033[0m: (1 if Hybrid assembly, else 0; EGAP_MASURCA_FLYE_ASSEMBLY=0 forces CABOG)
                                     
     \033[92mspades settings
         \033[94mhigh-cov. isolate & multi-cell   \033[0m: --isolate
@@ -680,12 +678,10 @@ if __name__ == "__main__":
     \033[92mracon settings 
         \033[0mdefault settings
 
-    \033[92mpilon settings 
-        \033[94mchange file generation           \033[0m: -changes
-        \033[94mvcf file generation              \033[0m: -vcf
-        \033[94mtracks file generation           \033[0m: -tracks
-        \033[94mlargest chunksize limit          \033[0m: 5000000
-        \033[94mfix list                         \033[0m: indels, local, snps
+    \033[92mshort-read polish settings (Polypolish, then Pypolca)
+        \033[94malignment                        \033[0m: bwa mem -a (each read file separately)
+        \033[94mpolypolish                       \033[0m: filter, then polish
+        \033[94mpypolca                          \033[0m: --careful
 
     \033[96m-----------------------------------------------------------------------\033[0m
     """)

@@ -32,7 +32,7 @@ import shutil
 # Stable-named binaries that exist in EGAP_env and nowhere in base conda.
 # If these are missing, the wrong environment is active -- abort.
 SENTINEL_TOOLS = [
-    "samtools", "minimap2", "masurca", "flye", "racon", "pilon",
+    "samtools", "minimap2", "masurca", "flye", "racon", "polypolish",
     "kraken2", "datasets", "prefetch", "fasterq-dump", "busco", "compleasm",
 ]
 

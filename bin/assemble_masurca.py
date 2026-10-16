@@ -219,12 +219,17 @@ def skip_gap_closing_section(assembly_sh_path):
 # --------------------------------------------------------------
 # NEW: Relax Flye check to allow PATH-based Flye
 # --------------------------------------------------------------
+_FLYE_SHIM_MARKER = "# EGAP MaSuRCA Flye shim"
+
+
 def _masurca_vendor_flye_ensure_shim():
-    """
-    Make MaSuRCA happy regardless of where Conda installed Flye by ensuring
-    $CONDA_PREFIX/Flye/bin/flye exists (the path MaSuRCA probes).
-    Creates a symlink to the real flye if possible, else a tiny wrapper script.
-    Safe on Linux and macOS. No effect if already present.
+    """Put Flye where MaSuRCA calls it: <prefix>/Flye/bin/{flye,flye-minimap2}.
+
+    MaSuRCA runs <bin>/../Flye/bin/flye and flye-minimap2. The flye entry is a
+    wrapper, not a link: MaSuRCA 4.1.4's FLYE_ASSEMBLY path passes
+    ``--kmer-size 21``, which only its bundled Flye 2.5 accepted, so the wrapper
+    drops that option. An existing flye entry that is not this wrapper (a
+    symlink, or a package's plain wrapper) is replaced.
     """
     masurca_bin = shutil.which("masurca")
     flye_bin = shutil.which("flye")
@@ -235,25 +240,40 @@ def _masurca_vendor_flye_ensure_shim():
     env_prefix = os.path.realpath(os.path.join(os.path.dirname(masurca_bin), ".."))
     vendor_dir = os.path.join(env_prefix, "Flye", "bin")
     vendor_exe = os.path.join(vendor_dir, "flye")
-
-    # If already present and executable, we’re done
-    if os.path.exists(vendor_exe) and os.access(vendor_exe, os.X_OK):
-        return
-
-    os.makedirs(vendor_dir, exist_ok=True)
     try:
-        if os.path.exists(vendor_exe):
-            os.remove(vendor_exe)
-        os.symlink(flye_bin, vendor_exe)
-        made = "symlink"
-    except Exception:
-        # Symlinks may be blocked; fall back to a tiny wrapper
-        with open(vendor_exe, "w") as w:
-            w.write(f'#!/usr/bin/env bash\nexec "{flye_bin}" "$@"\n')
-        os.chmod(vendor_exe, 0o755)
-        made = "wrapper"
+        os.makedirs(vendor_dir, exist_ok=True)
+        try:
+            with open(vendor_exe) as fh:
+                current = fh.read()
+        except (OSError, UnicodeDecodeError):
+            current = ""
+        if _FLYE_SHIM_MARKER not in current:
+            if os.path.lexists(vendor_exe):
+                os.remove(vendor_exe)
+            with open(vendor_exe, "w") as w:
+                w.write("#!/usr/bin/env bash\n"
+                        f"{_FLYE_SHIM_MARKER}: drop --kmer-size N (Flye 2.5 only)\n"
+                        "args=(); skip=0\n"
+                        'for a in "$@"; do\n'
+                        '  if [ $skip = 1 ]; then skip=0; continue; fi\n'
+                        '  if [ "$a" = "--kmer-size" ]; then skip=1; continue; fi\n'
+                        '  args+=("$a")\n'
+                        "done\n"
+                        f'exec "{flye_bin}" "${{args[@]}}"\n')
+            os.chmod(vendor_exe, 0o755)
+            print(f"INFO:\tInstalled Flye wrapper for MaSuRCA: {vendor_exe} -> {flye_bin}")
 
-    print(f"INFO:\tInstalled Flye vendor {made} for MaSuRCA: {vendor_exe} -> {flye_bin}")
+        minimap2_bin = shutil.which("flye-minimap2")
+        vendor_minimap2 = os.path.join(vendor_dir, "flye-minimap2")
+        if minimap2_bin and not os.path.exists(vendor_minimap2):
+            if os.path.lexists(vendor_minimap2):
+                os.remove(vendor_minimap2)  # dangling link
+            os.symlink(minimap2_bin, vendor_minimap2)
+            print(f"INFO:\tLinked flye-minimap2 for MaSuRCA: {vendor_minimap2} -> {minimap2_bin}")
+    except OSError as e:
+        # e.g. a read-only environment (Singularity image): MaSuRCA's own path
+        # check then reports what is missing.
+        print(f"WARN:\tCould not set up Flye for MaSuRCA under {vendor_dir}: {e}")
 
 
 def _masurca_vendor_flye_patch_environment(env_sh_path: str) -> str:
@@ -591,7 +611,11 @@ def masurca_config_gen(
         f"NUM_THREADS={cpu_threads}\n",
         f"JF_SIZE={jf_size}\n",
         "SOAP_ASSEMBLY=0\n",
-        "FLYE_ASSEMBLY=0\n",
+        # Hybrid runs: Flye builds the final contigs from the mega-reads instead
+        # of CABOG. Speed/memory A/B (K. pneumoniae, vs reference): 0 vs 5
+        # misassemblies, ~5x fewer errors, ~40% faster, a third of the memory.
+        # EGAP_MASURCA_FLYE_ASSEMBLY=0 goes back to CABOG.
+        f"FLYE_ASSEMBLY={1 if has_long_reads and os.environ.get('EGAP_MASURCA_FLYE_ASSEMBLY') != '0' else 0}\n",
         "END\n",
     ]
 
@@ -653,16 +677,21 @@ def masurca_config_gen(
         ca_dir = Path(find_ca_folder(str(masurca_out_dir))).resolve()
         primary_genome_scf = ca_dir / "primary.genome.scf.fasta"
         terminator_genome_scf = ca_dir / "9-terminator" / "genome.scf.fasta"
-        
+        # FLYE_ASSEMBLY=1 writes flye.<mega-reads prefix>/assembly.scaffolds.fasta instead
+        flye_scf = next((p for p in sorted(masurca_out_dir.glob("flye.*/assembly.scaffolds.fasta"))
+                         if p.stat().st_size > 0), None)
+
         if rc != 0:
-            if terminator_genome_scf.exists() or primary_genome_scf.exists():
-                log_print("WARN:\tassemble.sh exited non-zero, but CA output exists; continuing.")
+            if flye_scf or terminator_genome_scf.exists() or primary_genome_scf.exists():
+                log_print("WARN:\tassemble.sh exited non-zero, but assembly output exists; continuing.")
             else:
                 log_print("ERROR:\tAssembly run failed.")
                 return None
 
         egap_masurca_assembly_path = masurca_out_dir / f"{sample_id}_masurca.fasta"
-        if terminator_genome_scf.exists():
+        if flye_scf:
+            shutil.copy(str(flye_scf), str(egap_masurca_assembly_path))
+        elif terminator_genome_scf.exists():
             shutil.copy(str(terminator_genome_scf), str(egap_masurca_assembly_path))
         elif primary_genome_scf.exists():
             shutil.copy(str(primary_genome_scf), str(egap_masurca_assembly_path))

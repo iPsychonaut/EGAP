@@ -10,8 +10,6 @@ source:
     sha256: ab540a88dbb2248fc3f5d2012d72610725acbbdd8fb50dae92772697fe958007
   - url: https://github.com/iPsychonaut/runner/archive/refs/tags/v0.0.0.tar.gz
     sha256: 4e67bb1e970dadb86425cb2698e0e2e34f70d78cbf77a32f73c13f66dffb55fc
-  - url: https://github.com/iPsychonaut/tiara-entheome/archive/refs/tags/v1.0.0.tar.gz
-    sha256: a5fe19d4d77eda6fd6608cce25b1a70a06a999fae7d35e98bb1b5a96ae228dee
 
 build:
   noarch: python
@@ -21,14 +19,23 @@ build:
 
 requirements:
   host:
-    - python >=3.8,<3.9
+    - python >=3.12,<3.13
     - pip
   run:
-    - python >=3.8,<3.9
-    - pandas >=2.0.3
-    - numpy >=1.24.3
+    # tiara-entheome needs <3.13.
+    - python >=3.12,<3.13
+    # 1.0.1: 1.0.0 imported pkg_resources, which current setuptools no longer ships.
+    - tiara-entheome >=1.0.1
+    # pandas 3 changes copy and string semantics; move it in its own round.
+    - pandas >=2.2,<3
+    - numpy >=1.26,<3
+    # NanoPlot 1.46.2 calls figure_factory.create_2d_density (removed in plotly 6).
+    - plotly >=5.24,<6
     - masurca >=4.1.2
     - quast >=5.2.0
+    # Release blocker: the compleasm recipe pins dendropy <4.6, but every
+    # py3.9+ sepp needs dendropy >=5, so this env does not solve on 3.12 until
+    # bioconda-recipes drops that pin.
     - compleasm >=0.2.8
     - busco >=5.8.2
     - biopython >=1.81
@@ -53,7 +60,10 @@ requirements:
     - ncbi-datasets-cli >=18.3.1
     - matplotlib-base >=3.7.3
     - trimmomatic >=0.39
-    - pilon >=1.22
+    # Illumina polishing (replaced Pilon after the speed/memory A/B).
+    - bwa
+    - polypolish >=0.6
+    - pypolca >=0.3
     - fastqc >=0.12.1
     # <39.76: from 39.76 through 40.02, BBDuk fails on paired in1=/in2= input
     # below 16 threads and writes no reads. 39.52 works at 1-16 threads.

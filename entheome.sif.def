@@ -64,26 +64,43 @@ From: debian:buster
     # -----------------------------
     # Create EGAP_env (primary env)
     # -----------------------------
-    # Pinning rationale (verified against conda list on 2026-09-05):
-    #   pandas>=2.0.3     matches meta.yaml; 2.0.3 is the final Python 3.8 build.
-    #   numpy>=1.24.3,<2  pandas 2.0.3 needs numpy>=1.20.3. The old numpy=1.19.5
-    #                     pin existed only for upstream tiara=1.0.3 (numpy<1.20),
-    #                     which is replaced by tiara-entheome (numpy>=1.21).
-    #   tiara-entheome    installed below via pip from the v1.0.0 tag (not yet on
-    #                     bioconda). Its runtime deps (pytorch, skorch, numba,
-    #                     tqdm, joblib) are resolved by conda in this create.
+    # Pinning rationale (Python 3.12 solve checked 2026-10-12):
+    #   python 3.12       3.8 is end of life and blocks Flye 2.9.6, compleasm
+    #                     0.2.9+ and BUSCO 6. tiara-entheome needs <3.13.
+    #   pandas>=2.2,<3    pandas 3 changes copy and string semantics; move it in
+    #                     its own round. 2.2 is the first pandas with py3.12.
+    #   numpy>=1.26,<3    1.26 is the first numpy with py3.12.
+    #   plotly>=5.24,<6   NanoPlot 1.46.2 calls figure_factory.create_2d_density,
+    #                     which plotly 6 removed; py3.12 envs otherwise get 7.
+    #   busco=6.1.0       odb12.2 lineages and new scoring; checked against 5.8.3
+    #                     in the round-2 A/B.
+    #   compleasm         installed below with --no-deps: its recipe pins
+    #                     dendropy<4.6, but every py3.9+ sepp needs dendropy>=5.
+    #                     compleasm never imports dendropy (it runs sepp), so the
+    #                     pin is stale. hmmer and miniprot are its other deps.
+    #   tiara-entheome    1.0.1 from bioconda; 1.0.0 imported pkg_resources, which
+    #                     current setuptools no longer ships. Brings pytorch,
+    #                     skorch, numba, tqdm and joblib.
     #   kraken2=2.1.6     exact pin; tested working version.
     #   sra-tools=3.2.0   exact pin; API changes between minor versions.
     #   trimmomatic=0.40  exact pin; share-dir path used in symlinks below.
-    #   flye=2.9.5        exact pin; >=3.0 changes assembly graph format.
-    /bin/bash -c "conda create -n EGAP_env -y -c bioconda -c conda-forge \
-                 'python>=3.8,<3.9' \
-                 'pandas>=2.0.3' \
-                 'numpy>=1.24.3,<2' \
+    #   flye=2.9.6        exact pin. 2.9.6 tunes the --nano-hq default for R10
+    #                     reads (3% error), so ONT assemblies can differ from
+    #                     2.9.5 builds; checked in the round-2 A/B.
+    #   channel order     conda-forge first with strict priority (Bioconda's
+    #                     documented setup). With bioconda first, bioconda's stale
+    #                     biopython/tqdm/openpyxl copies win and the 3.12 solve did
+    #                     not finish in 20 min; this order solves in minutes.
+    /bin/bash -c "conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioconda \
+                 'python>=3.12,<3.13' \
+                 'pandas>=2.2,<3' \
+                 'numpy>=1.26,<3' \
+                 'plotly>=5.24,<6' \
                  'masurca=4.1.4' \
                  'quast=5.3.0' \
-                 'compleasm>=0.2.8' \
-                 busco \
+                 'busco=6.1.0' \
+                 hmmer \
+                 miniprot \
                  biopython \
                  ragtag \
                  'nanoplot=1.46.2' \
@@ -100,14 +117,16 @@ From: debian:buster
                  ncbi-datasets-cli \
                  matplotlib-base \
                  'trimmomatic=0.40' \
-                 pilon \
+                 bwa \
+                 'polypolish=0.7.1' \
+                 'pypolca=0.5.0' \
                  fastqc \
                  'bbmap>=39.15,<39.76' \
                  racon \
                  kmc \
-                 'spades=4.2.0' \
+                 'spades=4.3.0' \
                  purge_dups \
-                 'flye=2.9.5' \
+                 'flye=2.9.6' \
                  pbccs \
                  'hifiasm=0.25.0' \
                  gfatools \
@@ -123,18 +142,14 @@ From: debian:buster
                  requests \
                  rich \
                  textual \
-                 'pytorch>=1.10,<3' \
-                 'skorch>=0.11' \
-                 'numba>=0.56' \
-                 tqdm \
-                 joblib \
+                 'tiara-entheome=1.0.1' \
                  'kraken2=2.1.6'" || { echo "Failed to create EGAP_env"; exit 1; }
 
     # Per-env pin file — belt-and-suspenders guard against Flye being pulled up
     mkdir -p /opt/conda/envs/EGAP_env/conda-meta
-    printf "flye 2.9.5\n" >> /opt/conda/envs/EGAP_env/conda-meta/pinned
+    printf "flye 2.9.6\n" >> /opt/conda/envs/EGAP_env/conda-meta/pinned
 
-    # masurca 4.1.4 and flye 2.9.5 both ship bin/flye and bin/flye-minimap2.
+    # masurca 4.1.4 and flye 2.9.6 both ship bin/flye and bin/flye-minimap2.
     # Whichever conda links last wins; when masurca's copies win, Flye gets a
     # Python 2.7 launcher and minimap2 2.17, which rejects Flye's
     # --secondary-seq option, so every Flye assembly aborts at the consensus
@@ -142,13 +157,17 @@ From: debian:buster
     # here (no conda-pack), so this is enough; the Docker image also needs a
     # copy step after packing. Untested in a Singularity build.
     /opt/conda/bin/conda install -n EGAP_env -y --force-reinstall --no-deps \
-        -c bioconda -c conda-forge 'flye=2.9.5' || { echo "Failed to reinstall Flye"; exit 1; }
+        -c bioconda -c conda-forge 'flye=2.9.6' || { echo "Failed to reinstall Flye"; exit 1; }
 
-    # tiara-entheome (modernised Tiara fork used for assembly decontamination)
-    # from the pinned release tag. Not yet on bioconda. --no-deps: pytorch,
-    # skorch, numba, tqdm and joblib were resolved by conda above.
+    # compleasm without its stale dendropy<4.6 pin (see the rationale above).
+    # pip from the release tag, as the bioconda recipe itself builds it: conda's
+    # --no-deps still has to satisfy the pin, so it fails too. Move compleasm back
+    # into the conda create once bioconda-recipes#60482 lands.
     /opt/conda/envs/EGAP_env/bin/python -m pip install --no-cache-dir --no-deps \
-        "git+https://github.com/iPsychonaut/tiara-entheome@v1.0.0" || { echo "Failed to install tiara-entheome"; exit 1; }
+        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.10.tar.gz" \
+        || { echo "Failed to install compleasm"; exit 1; }
+    /opt/conda/envs/EGAP_env/bin/compleasm --help >/dev/null || { echo "compleasm smoke test failed"; exit 1; }
+
     /opt/conda/envs/EGAP_env/bin/tiara-entheome --help >/dev/null || { echo "tiara-entheome smoke test failed"; exit 1; }
 
     # Trimmomatic adapter symlinks — path encodes version=0.40, build=0
@@ -161,8 +180,13 @@ From: debian:buster
     # Create EGEP_env (aux env)
     # -----------------------------
     /bin/bash -c "conda create -n EGEP_env --yes python>=3.10 glib=2.64.6 \
-                  mafft iqtree ete3 'compleasm>=0.2.8' trimal pandas biopython psutil \
+                  mafft iqtree ete3 hmmer miniprot sepp trimal pandas biopython psutil \
                   gffutils pysam matplotlib scipy clinker-py packaging meson" || { echo "Failed to create EGEP_env"; exit 1; }
+    # compleasm with pip --no-deps, as in EGAP_env: its recipe's dendropy<4.6 pin
+    # cannot coexist with any py3.9+ sepp (bioconda-recipes#60482).
+    /opt/conda/envs/EGEP_env/bin/python -m pip install --no-cache-dir --no-deps \
+        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.10.tar.gz" \
+        || { echo "Failed to install compleasm in EGEP_env"; exit 1; }
 
     # Debug: Check GLib installation
     echo "Checking GLib installation:"
@@ -327,16 +351,22 @@ PY
           -B /host/kraken2_db:/kraken2_db \
           -B /host/data:/data \
           entheome.sif \
-          python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-              --input-tsv /data/samples.tsv \
-              --output /data/output \
-              --threads 16 --ram 64
+          env PATH=/opt/conda/envs/EGAP_env/bin:$PATH CONDA_PREFIX=/opt/conda/envs/EGAP_env \
+          /opt/conda/envs/EGAP_env/bin/python /opt/conda/envs/EGAP_env/bin/EGAP.py \
+              --input_tsv /data/samples.tsv \
+              --output_dir /data/output \
+              --cpu_threads 16 --ram_gb 64
 
     Without Kraken2 (read decontamination skipped):
 
       singularity run -B /host/data:/data entheome.sif \
-          python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-              --input-tsv /data/samples.tsv --output /data/output
+          env PATH=/opt/conda/envs/EGAP_env/bin:$PATH CONDA_PREFIX=/opt/conda/envs/EGAP_env \
+          /opt/conda/envs/EGAP_env/bin/python /opt/conda/envs/EGAP_env/bin/EGAP.py \
+              --input_tsv /data/samples.tsv --output_dir /data/output
+
+    EGAP_env must come first on PATH for EGAP: EGEP_env also ships trimmomatic
+    (a different version) and its own python, and the image PATH lists EGEP_env
+    first. CONDA_PREFIX is how EGAP finds Trimmomatic's TruSeq3-PE.fa adapters.
 
     ---------------------------------------------------------------------------
     Environment variables

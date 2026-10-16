@@ -1,0 +1,532 @@
+<title>EGAP Assembler Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one 68rem reading column; nucleotide colors (A/C/G/T, the genome-browser convention) carry chart series. */
+:root{
+  --bg:#f6f8f7; --paper:#ffffff; --ink:#14201d; --muted:#55645f; --line:#d6dfdb; --soft:#e9efec;
+  --accent:#0b6e62;
+  --A:#2f8f46; --C:#2b66c2; --G:#c98a12; --T:#c2413a;
+  --ok:#2f8f46; --warn:#b57a0c; --bad:#c2413a;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1614; --paper:#162120; --ink:#e3ece8; --muted:#9aaba5; --line:#2b3a36; --soft:#1d2a27;
+  --accent:#4fc3b0; --A:#5cc171; --C:#6f9ff0; --G:#e3ad45; --T:#ee6f66;
+  --ok:#5cc171; --warn:#e3ad45; --bad:#ee6f66; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1614; --paper:#162120; --ink:#e3ece8; --muted:#9aaba5; --line:#2b3a36; --soft:#1d2a27;
+  --accent:#4fc3b0; --A:#5cc171; --C:#6f9ff0; --G:#e3ad45; --T:#ee6f66;
+  --ok:#5cc171; --warn:#e3ad45; --bad:#ee6f66; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:16px/1.6 var(--body);padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:68rem;margin:0 auto}
+h1,h2,h3{font-family:var(--display);line-height:1.15;text-wrap:balance;margin:0}
+h1{font-size:clamp(1.8rem,5vw,3.1rem);overflow-wrap:break-word;font-weight:700;letter-spacing:-.02em}
+h2{font-size:clamp(1.45rem,3vw,1.9rem);font-weight:700;margin-block:0 .4rem}
+h3{font-size:1.15rem;font-weight:700}
+p{margin:0;max-width:68ch}
+a{color:var(--accent)}
+code,.mono{font-family:var(--mono);font-size:.86em}
+.eyebrow{font:600 .74rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+header{padding-block:48px 28px;display:grid;gap:14px;border-bottom:1px solid var(--line)}
+.seq{font:600 .8rem/1 var(--mono);letter-spacing:.18em;overflow:hidden;white-space:nowrap}
+.seq b{font-weight:600}.sA{color:var(--A)}.sC{color:var(--C)}.sG{color:var(--G)}.sT{color:var(--T)}
+.lede{font-size:1.12rem;color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;gap:8px 18px;font:.82rem var(--mono);color:var(--muted)}
+section{padding-block:44px 8px;display:grid;gap:18px}
+.stack{display:grid;gap:14px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:16px}
+.grid2>*{min-width:0}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:18px;display:grid;gap:10px;min-width:0}
+.find{display:grid;gap:12px;counter-reset:f}
+.find li{list-style:none;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.find{padding:0;margin:0}
+.pill{display:inline-block;font:600 .7rem/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:5px 8px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.p-ok{color:var(--ok)}.p-warn{color:var(--warn)}.p-bad{color:var(--bad)}.p-info{color:var(--C)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 .72rem/1.3 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--soft)}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:.84rem}
+.src{font-size:.8rem;color:var(--muted)}
+.src a{color:var(--muted)}
+.note{border-left:3px solid var(--G);padding:4px 0 4px 14px;color:var(--ink)}
+.note.bad{border-color:var(--bad)}.note.ok{border-color:var(--ok)}
+svg text{fill:var(--ink);font-family:var(--mono);font-size:11px}
+svg .mut{fill:var(--muted)}
+svg .grid{stroke:var(--line)}
+.chart{overflow-x:auto}
+.chart svg{display:block;width:100%;min-width:520px;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font:.78rem var(--mono);color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+/* matrix */
+.mx td{text-align:center}.mx td:first-child{text-align:left}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--accent)}
+.dot.no{background:transparent;border:1.5px solid var(--line)}
+/* kingdom cards */
+.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr));gap:16px}
+.k{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:18px;display:grid;gap:10px;align-content:start;min-width:0}
+.k .pick{font:700 1.35rem/1.1 var(--display)}
+.k dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:.9rem}
+.k dt{font:600 .72rem/1.6 var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.k dd{margin:0}
+.swatch{width:100%;height:4px;border-radius:2px}
+/* jargon */
+button.j{all:unset;cursor:help;border-bottom:1.5px dotted var(--accent);color:inherit}
+button.j:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+#pop{position:fixed;z-index:10;max-width:min(24rem,calc(100vw - 32px));background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.18);font-size:.92rem;line-height:1.5}
+#pop b{font-family:var(--display);display:block;margin-bottom:2px}
+.gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,18rem),1fr));gap:10px 24px}
+.gloss div{min-width:0}.gloss b{font-family:var(--display)}
+details.panel summary{cursor:pointer;font:700 1.05rem var(--display)}
+ol.plan{margin:0;padding-left:1.3rem;display:grid;gap:10px;max-width:72ch}
+.refs{font-size:.86rem;display:grid;gap:6px;padding-left:1.3rem;margin:0}
+.toc{display:flex;flex-wrap:wrap;gap:8px}
+.toc a{font:.8rem var(--mono);text-decoration:none;border:1px solid var(--line);padding:5px 10px;border-radius:999px;color:var(--ink);background:var(--paper)}
+.toc a:hover{border-color:var(--accent)}
+.upd{margin-top:6px;padding:6px 10px;border-radius:6px;background:var(--soft);font-size:.92rem}
+.verdict{font:600 .7rem/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+@media (prefers-reduced-motion:no-preference){.toc a{transition:border-color .15s}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="seq" aria-hidden="true"><b class="sA">A</b><b class="sT">T</b><b class="sG">G</b><b class="sC">C</b><b class="sG">G</b><b class="sA">A</b><b class="sT">T</b><b class="sC">C</b><b class="sC">C</b><b class="sG">G</b><b class="sA">A</b><b class="sT">T</b><b class="sT">T</b><b class="sA">A</b><b class="sG">G</b><b class="sC">C</b><b class="sA">A</b><b class="sT">T</b><b class="sG">G</b><b class="sC">C</b><b class="sA">A</b><b class="sA">A</b><b class="sT">T</b><b class="sG">G</b><b class="sC">C</b><b class="sT">T</b><b class="sA">A</b><b class="sG">G</b></div>
+  <span class="eyebrow">EGAP v3.4.2 · audit 2026-10-12 · A/B results added 2026-10-16</span>
+  <h1>Assembler audit: versions, upgrade room, and the right tool per kingdom</h1>
+  <p class="lede">EGAP builds a genome by running several <button class="j" data-k="assembler">assemblers</button> on the same reads and keeping the best result. This audit checks how old those assemblers are, what stops us upgrading them, whether newer tools win for specific kinds of organism, and which organisms we would need to test them fairly.</p>
+  <div class="meta"><span>Audit 2026-10-12</span><span>A/B tests 2026-10-13 to 16</span><span>Changes: branch chore/py312, <a href="https://github.com/iPsychonaut/EGAP/pull/37">EGAP PR #37</a></span><span>Sources: GitHub releases, Bioconda API, peer-reviewed papers, EGAP's own test and A/B runs</span></div>
+  <p class="src">Words with a dotted underline are jargon. Click or tap one for a plain-English definition. All of them are also listed in the glossary at the end.</p>
+  <nav class="toc" aria-label="Sections"><a href="#summary">Summary</a><a href="#results">A/B results</a><a href="#today">EGAP today</a><a href="#versions">Versions</a><a href="#python">Python 3.8 wall</a><a href="#ecoli">E. coli results</a><a href="#kingdoms">Per kingdom</a><a href="#benchmarks">Test organisms</a><a href="#plan">Original plan</a><a href="#sources">Sources</a><a href="#glossary">Glossary</a></nav>
+</header>
+
+<section id="summary">
+  <span class="eyebrow">Summary</span>
+  <h2>Your plan makes sense, and the audit found six things</h2>
+  <p>Making a separate branch, raising the version <button class="j" data-k="pin">pins</button>, and comparing old and new images with an <button class="j" data-k="ab">A/B test</button> is the right way to do this. Three findings change how that branch should be set up.</p>
+  <ul class="find">
+    <li><span class="pill p-bad">Blocker</span><div><b>Python 3.8 is what holds EGAP back, not the assemblers.</b> The <button class="j" data-k="env">conda environment</button> is pinned to Python 3.8. Flye 2.9.6, compleasm 0.2.9+, BUSCO 6 and most of the newer bacterial tools publish no Python 3.8 build. The upgrade branch has to move to Python 3.10 first, and the pandas/numpy pins will have to move with it.<p class="upd"><b>Update:</b> done, on Python 3.12, since 3.10 reaches end of life in October 2026. The only real blocker was a stale pin in compleasm's recipe, worked around in EGAP and reported upstream.</p></div></li>
+    <li><span class="pill p-bad">Test data</span><div><b>The three E. coli read sets are three different strains, and none of them is K-12.</b> The reference is K-12 MG1655 (GCA_000005845.2). The PacBio reads are O157:H7, which has a genome about 0.8 Mb bigger. Comparing against the wrong reference makes <button class="j" data-k="quast">QUAST</button> error counts meaningless. An A/B test needs reads and a reference from the same strain.<p class="upd"><b>Update:</b> the A/B tests added <i>K. pneumoniae</i> KPC2_202310: nanopore reads, Illumina reads and a complete reference, all from one isolate. Every accuracy number in the results comes from it.</p></div></li>
+    <li><span class="pill p-warn">Wrong comment</span><div><b>The Dockerfile's reason for pinning Flye is not true.</b> Line 41 says "&gt;=3.0 changes assembly graph format". Flye 3.0 does not exist; the newest release is 2.9.6. The real reason to stay on 2.9.5 is that 2.9.6 has no Python 3.8 build.<p class="upd"><b>Update:</b> comment corrected, and EGAP now uses Flye 2.9.6.</p></div></li>
+    <li><span class="pill p-info">Versions</span><div><b>Only two assemblers have newer releases.</b> SPAdes 4.3.0 is a straightforward bump. Flye 2.9.6 is a small fix release, but it changes the default for nanopore R10 reads. MaSuRCA 4.1.4 and hifiasm 0.25.0 are already the newest releases. RagTag 2.1.1 fixes a wrong-orientation bug but is not on Bioconda yet.<p class="upd"><b>Update:</b> SPAdes 4.3.0, Flye 2.9.6, BUSCO 6.1.0 and compleasm 0.2.10 are in. None of them changed an assembly's quality.</p></div></li>
+    <li><span class="pill p-info">Per kingdom</span><div><b>The read type matters more than the kingdom, but there are clear winners.</b> For animals and plants, use hifiasm, including its newer nanopore mode. For fungi, use Flye plus short-read <button class="j" data-k="polish">polishing</button>. For bacteria and archaea, build an Autocycler <button class="j" data-k="consensus">consensus</button>. Long-read-first assembly has overtaken hybrid assemblers like MaSuRCA in every recent benchmark we found.<p class="upd"><b>Update:</b> the bacterial A/B agreed. Polypolish + Pypolca beat Pilon, and Racon stayed ahead of Medaka.</p></div></li>
+    <li><span class="pill p-warn">Our own runs</span><div><b>On the nanopore + Illumina E. coli test, Flye and MaSuRCA did badly.</b> They recovered 75% and 49% of the <button class="j" data-k="busco">BUSCO</button> genes, while SPAdes recovered 99.7%. The raw nanopore data covers the genome hundreds of times over, so low <button class="j" data-k="coverage">coverage</button> doesn't explain it. Diagnose this before blaming the versions.<p class="upd"><b>Update:</b> those June numbers predate two fixes already on main: the hybrid sample re-paired with Illumina reads from the same isolate, and Flye's nanopore mode chosen from the reads. In every A/B run on current main, Flye scored 99.7% and MaSuRCA 99.1–99.4%.</p></div></li>
+  </ul>
+</section>
+
+<section id="results">
+  <span class="eyebrow">A/B results · 2026-10-13 to 16</span>
+  <h2>What the A/B tests found</h2>
+  <p>Every change was tested by running EGAP's old and new versions on the same reads, with the same 7 CPUs and 24 GB, on the local k3d cluster. Accuracy is graded against the <i>K. pneumoniae</i> KPC2_202310 <button class="j" data-k="reference">reference</button>, which was assembled from the same isolate as the reads. The changes are on branch <code>chore/py312</code> (<a href="https://github.com/iPsychonaut/EGAP/pull/37">EGAP PR #37</a>), and the full log is in <code>audit/PY312_UPGRADE_PLAN.md</code>.</p>
+
+  <div class="tbl"><table>
+    <thead><tr><th>Round</th><th>What changed</th><th>Result</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Python 3.8 → 3.12 and its libraries; every tool version held the same</td><td>All 12 sample runs passed. SPAdes, hifiasm and Flye on PacBio were byte-identical. MaSuRCA and Flye on nanopore varied, but by the same amount as between two Python 3.8 runs (<button class="j" data-k="noise">run-to-run noise</button>). Two library breaks were found and pinned: tiara needed setuptools &lt;81, later fixed by tiara-entheome 1.0.1, and NanoPlot needs plotly &lt;6.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>2</td><td>SPAdes 4.3.0, Flye 2.9.6; compleasm 0.2.10, BUSCO 6.1.0</td><td>No quality change. SPAdes was byte-identical on E. coli and 3 bp different on <i>K. pneumoniae</i>. compleasm scores were identical. BUSCO 6.1 broke EGAP's fallback path (new <code>odb12.2</code> folder names) and uploads usage data by default; both are fixed.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>Speed</td><td>MaSuRCA builds its final contigs with Flye instead of its older CABOG assembler</td><td>0 vs 5 <button class="j" data-k="misassembly">misassemblies</button>, about 5× fewer errors, 42% faster, a third of the memory. But it dropped a small plasmid; see the replicon check below.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>Speed</td><td>Pilon → Polypolish + Pypolca for Illumina polishing</td><td>About 6 errors left vs 12; the polishing step was 20% faster and used 30% less memory.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>Speed</td><td>Racon → Medaka 2.2 for nanopore polishing</td><td>Better on its own (24 vs 41 errors) but worse once short-read polishing ran after it (11 vs 6), and it used 7.7 GB vs 1.3 GB.</td><td><span class="verdict p-bad">Rejected</span></td></tr>
+      <tr><td>Speed</td><td>SPAdes <code>--frugal</code> (a low-memory mode)</td><td>No memory saved on bacteria (1.67 GB either way). Illumina-only N50 fell from 1.11 Mb to 139 kb.</td><td><span class="verdict p-bad">Rejected</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="stack">
+    <div class="panel">
+      <h3>Polishing: errors left in the <i>K. pneumoniae</i> assembly</h3>
+      <p class="src">Mismatches plus indels across the 5.68 Mb genome, counted by QUAST against the reference. Fewer is better. The pre-polish assembly had about 40.</p>
+      <div class="chart" id="c-polish"></div>
+      <p>Two rounds of Racon then Polypolish + Pypolca is the most accurate path. Racon alone slightly <i>raised</i> the indel count, because these R10 nanopore reads were already very accurate; the short-read step is what cleans up.</p>
+    </div>
+    <div class="panel">
+      <h3>MaSuRCA stage: old CABOG vs Flye mode</h3>
+      <p class="src">Wall-clock seconds and peak memory (GB) for the MaSuRCA stage alone, measured from the container's own counters.</p>
+      <div class="chart" id="c-masurca"></div>
+      <p>Flye mode also produced a cleaner chromosome: 0 vs 5 misassemblies and 0.73 + 0.58 vs 3.20 + 6.33 mismatches + indels per 100 kb.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>The plasmid problem, and the replicon check</h3>
+    <p>The first full run with the new defaults picked Flye-mode MaSuRCA for <i>K. pneumoniae</i>, because it had the fewest <button class="j" data-k="contig">contigs</button>. But it was missing the reference's 13.8 kb <button class="j" data-k="plasmid">plasmid</button>. EGAP's scoring (BUSCO, contig count, N50) can't see a lost <button class="j" data-k="replicon">replicon</button>, so it rewarded the loss.</p>
+    <p>EGAP now aligns every assembly against every other. For bacteria and archaea, it rules out an assembly that lacks a contig of at least 5 kb that two other assemblers both made. With no reference, it leans towards keeping plasmids: the assembly must hold 95% of such a contig, not just half. On both hybrid test samples this rules out Flye-mode MaSuRCA, so the final choice goes back to the assembly that keeps every plasmid.</p>
+    <div class="tbl" style="border:0"><table>
+      <thead><tr><th><i>K. pneumoniae</i> final assembly vs reference</th><th class="num">Before (v3.4.2 defaults)</th><th class="num">New defaults, no check</th><th class="num">New defaults + check</th></tr></thead>
+      <tbody>
+        <tr><td>Contigs / share of the reference genome recovered</td><td class="num">4 / 99.999%</td><td class="num" style="color:var(--bad)">3 / 99.745%</td><td class="num">4 / 99.999%</td></tr>
+        <tr><td>Mismatches + indels per 100 kb</td><td class="num">0.02 + 0.19</td><td class="num">0.07 + 0.00</td><td class="num"><b>0.00 + 0.11</b></td></tr>
+        <tr><td>Whole-run wall time</td><td class="num">4352 s</td><td class="num">4321 s</td><td class="num">4407 s</td></tr>
+      </tbody>
+    </table></div>
+    <p class="src">Whole runs stayed within about 7% of the old timings and peaked around 12 GB either way. The stages that got cheaper are a small share of a run, and the 12 GB peak comes from another stage.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h3>Bugs the tests uncovered</h3>
+      <ul class="refs" style="padding-left:1.1rem">
+        <li><b>FastQC never ran</b> in the shipped image. Conda installed FastQC 0.13, which rejects the <code>-o</code> flag EGAP used, so read-QC reports were silently missing.</li>
+        <li><b>The full Docker image ran tools with the wrong Python.</b> Funannotate failed outright, and EGAP picked up the annotation environment's Trimmomatic.</li>
+        <li><b>The annotation environment's install hung for 7+ hours.</b> It now solves in under a minute.</li>
+        <li><b>MaSuRCA's Flye mode</b> passed an option only Flye 2.5 understood. EGAP now filters it out, and the Bioconda recipe fix is in <a href="https://github.com/bioconda/bioconda-recipes/pull/70313">bioconda-recipes #70313</a>.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Still open</h3>
+      <ul class="refs" style="padding-left:1.1rem">
+        <li>The Bioconda release on Python 3.12 waits on compleasm's recipe fix (<a href="https://github.com/bioconda/bioconda-recipes/pull/60482">#60482</a>).</li>
+        <li>pandas 3 gets its own round later.</li>
+        <li>All accuracy evidence comes from one bacterium. A plasmid-rich hybrid with a same-strain reference, and one test organism per kingdom (see <a href="#benchmarks">Test organisms</a>), would strengthen it.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="today">
+  <span class="eyebrow">How EGAP assembles today</span>
+  <h2>Which assembler runs for which reads</h2>
+  <p>EGAP looks at the reads in each row of the input table and runs every assembler that can use them. It then scores each result on BUSCO/compleasm completeness, <button class="j" data-k="contig">contig</button> count and <button class="j" data-k="n50">N50</button>, and keeps the best one. These rules come from <code>bin/assemble_*.py</code>.</p>
+  <div class="tbl"><table class="mx">
+    <thead><tr><th>Reads in the sample</th><th>SPAdes 4.2.0</th><th>MaSuRCA 4.1.4</th><th>Flye 2.9.5</th><th>hifiasm 0.25.0</th></tr></thead>
+    <tbody>
+      <tr><td><button class="j" data-k="short">Illumina</button> only</td><td><span class="dot" title="runs"></span></td><td><span class="dot" title="runs"></span></td><td><span class="dot no" title="skipped"></span></td><td><span class="dot no" title="skipped"></span></td></tr>
+      <tr><td><button class="j" data-k="ont">Nanopore</button> + Illumina (<button class="j" data-k="hybrid">hybrid</button>)</td><td><span class="dot"></span></td><td><span class="dot"></span></td><td><span class="dot"></span></td><td><span class="dot no"></span></td></tr>
+      <tr><td>Nanopore only</td><td><span class="dot no"></span></td><td><span class="dot no"></span></td><td><span class="dot"></span></td><td><span class="dot no"></span></td></tr>
+      <tr><td><button class="j" data-k="pacbio">PacBio</button> (± Illumina)</td><td><span class="dot no"></span></td><td><span class="dot" title="only with Illumina"></span>*</td><td><span class="dot"></span></td><td><span class="dot"></span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="legend"><span><i style="background:var(--accent)"></i>runs</span><span><i style="border:1.5px solid var(--line)"></i>skipped</span><span>* only when Illumina reads are also present</span></div>
+  <div class="grid2">
+    <p class="note"><b>Flye's PacBio mode is always <code>--pacbio-corr</code></b> (<code>assemble_flye.py:146</code>). That is the mode for pre-corrected long reads. Flye has a dedicated <code>--pacbio-hifi</code> mode for <button class="j" data-k="hifi">HiFi</button> reads, which suits them better. This is a small fix for the new branch.</p>
+    <p class="note"><b>hifiasm runs on any PacBio input, but it is built for HiFi reads.</b> On older <button class="j" data-k="clr">CLR</button> data it can give poor results. EGAP already calculates HiFi read statistics, so it could skip hifiasm when the reads are not HiFi.</p>
+  </div>
+</section>
+
+<section id="versions">
+  <span class="eyebrow">Version check</span>
+  <h2>How far behind is each tool?</h2>
+  <p>Each row shows the release EGAP uses (hollow ring) and the newest release (filled dot). If the two coincide, EGAP already has the newest release. Tools with no release since 2023 are effectively finished projects, which is fine for stable tools like Pilon, but it means nobody will fix their bugs.</p>
+  <div class="panel">
+    <div class="chart" id="timeline" role="img" aria-label="Timeline of pinned versus latest release dates for EGAP tools"></div>
+    <div class="legend"><span><i style="border:2px solid var(--muted);border-radius:50%"></i>version EGAP pins or resolves</span><span><i style="background:var(--C);border-radius:50%"></i>newest upstream release</span><span><i style="background:var(--T);border-radius:50%"></i>newest release needs Python ≥3.9</span></div>
+    <p class="src">Release dates come from GitHub releases (<code>gh release list</code>) or the BUSCO GitLab tags. Bioconda availability comes from api.anaconda.org. EGAP's versions come from the Dockerfile pins and the <code>*_provenance.json</code> files of the June 2026 test runs.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Tool</th><th>Role</th><th>EGAP uses</th><th>Newest</th><th>Last release</th><th>Last code change</th><th>Status</th><th>What changed / risk</th></tr></thead>
+    <tbody>
+      <tr><td><b>SPAdes</b></td><td>Short-read &amp; hybrid assembler</td><td class="mono">4.2.0</td><td class="mono">4.3.0</td><td class="mono">2026-06-14</td><td class="mono">2026-10-05</td><td><span class="pill p-ok">Active</span></td><td>Uses less RAM, adds a <code>--frugal</code> low-memory mode, and gives clearer exit codes. Adds openmpi to the env. Works on Python 3.8.</td></tr>
+      <tr><td><b>MaSuRCA</b></td><td>Hybrid assembler</td><td class="mono">4.1.4</td><td class="mono">4.1.4</td><td class="mono">2025-06-26</td><td class="mono">2025-06-26</td><td><span class="pill p-warn">Slow</span></td><td>Already the newest. It still ships its own <code>bin/flye</code>, so the workaround at Dockerfile lines 118–144 stays.</td></tr>
+      <tr><td><b>Flye</b></td><td>Long-read assembler</td><td class="mono">2.9.5</td><td class="mono">2.9.6</td><td class="mono">2025-05-02</td><td class="mono">2026-04-03 (dev)</td><td><span class="pill p-warn">Slow</span></td><td>A minor fix release. The <code>--nano-hq</code> default becomes the nanopore <button class="j" data-k="r10">R10</button> setting. <b>No Python 3.8 build.</b></td></tr>
+      <tr><td><b>hifiasm</b></td><td>HiFi / nanopore assembler</td><td class="mono">0.25.0</td><td class="mono">0.25.0</td><td class="mono">2025-03-18</td><td class="mono">2026-05-31 (dev)</td><td><span class="pill p-ok">Active</span></td><td>Already the newest. A <code>hybrid_v1</code> development branch (HiFi + nanopore together) is unreleased.</td></tr>
+      <tr><td>RagTag</td><td>Reference-guided <button class="j" data-k="scaffold">scaffolding</button></td><td class="mono">2.1.0</td><td class="mono">2.1.1</td><td class="mono">2026-10-01</td><td class="mono">2026-10-01</td><td><span class="pill p-ok">Active</span></td><td>Fixes a 2.1.0 bug that could flip contig orientation, so scaffold output will change. Not on Bioconda yet.</td></tr>
+      <tr><td>compleasm</td><td>Completeness check</td><td class="mono">0.2.8</td><td class="mono">0.2.10</td><td class="mono">2026-10-07</td><td class="mono">2026-10-07</td><td><span class="pill p-ok">Active</span></td><td>Adds odb12 lineage support. Needs <b>Python ≥3.9</b>.</td></tr>
+      <tr><td>BUSCO</td><td>Completeness check</td><td class="mono">≥5.8.2</td><td class="mono">6.1.0</td><td class="mono">2026-06-05</td><td class="mono">2026-06-05</td><td><span class="pill p-ok">Active</span></td><td>odb12.2 lineages and a new scoring method, so completeness numbers can shift. Its sepp dependency needs Python ≥3.9.</td></tr>
+      <tr><td>QUAST</td><td>Assembly statistics</td><td class="mono">5.3.0</td><td class="mono">5.3.0</td><td class="mono">2024-11-10</td><td class="mono">2026-06-10</td><td><span class="pill p-warn">Maint.</span></td><td>Already the newest.</td></tr>
+      <tr><td>ABySS</td><td>Used for gap-filling helpers</td><td class="mono">≥2.0.2</td><td class="mono">2.3.10</td><td class="mono">2024-10-18</td><td class="mono">2026-04-30</td><td><span class="pill p-warn">Maint.</span></td><td>Not pinned in the Dockerfile, so conda already picks the newest.</td></tr>
+      <tr><td>Racon</td><td>Long-read polishing</td><td class="mono">1.5.0</td><td class="mono">1.5.0</td><td class="mono">2021-12-19</td><td class="mono">2021-12-19</td><td><span class="pill p-bad">Dormant</span></td><td>No release in almost 5 years. Dorado polish (nanopore) and Medaka are the current options.</td></tr>
+      <tr><td>Pilon</td><td>Short-read polishing</td><td class="mono">1.24</td><td class="mono">1.24</td><td class="mono">2021-01-28</td><td class="mono">2021-01-28</td><td><span class="pill p-bad">Dormant</span></td><td>No release in more than 5 years. Polypolish and Pypolca are now preferred for bacteria and fungi.</td></tr>
+      <tr><td>TGS-GapCloser</td><td>Gap closing</td><td class="mono">1.2.1</td><td class="mono">1.2.1</td><td class="mono">2022-12-29</td><td class="mono">2024-09-06</td><td><span class="pill p-bad">Dormant</span></td><td>No release in almost 4 years.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="python">
+  <span class="eyebrow">What blocks upgrades</span>
+  <h2>The Python 3.8 wall</h2>
+  <p>Conda installs every tool into one environment, and each tool's package says which Python versions it supports. EGAP's environment is fixed at Python 3.8, which reached end of life in October 2024. More and more packages no longer publish 3.8 builds, so conda quietly settles on an older version or refuses to install.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Tool</th><th>Newest</th><th>Newest on Python 3.8</th><th>Blocked?</th></tr></thead>
+    <tbody id="pytable"></tbody>
+  </table></div>
+  <p class="note bad"><b>Consequence for the branch:</b> step one is <code>python&gt;=3.10,&lt;3.13</code>, and then the <code>pandas</code>/<code>numpy</code> pins it frees up (the Dockerfile notes that pandas 2.0.3 is the last 3.8 build). Medaka 2.2 needs Python 3.12, and Verkko and Hybracter are pipelines with many dependencies. These three belong in a separate side environment, the same way <code>funannotate_env</code> is already separate.</p>
+</section>
+
+<section id="ecoli">
+  <span class="eyebrow">EGAP's own numbers</span>
+  <h2>What the current assemblers did on the E. coli tests</h2>
+  <p>These are the per-assembler scores from <code>egap_test_out/</code> (June 2026, same versions as the v3.4.2 image). They are the baseline a new branch would have to match or beat.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Test</th><th>Assembler</th><th class="num">BUSCO % (1st / 2nd lineage)</th><th class="num">Contigs</th><th class="num">N50 (bp)</th><th>Picked?</th></tr></thead>
+    <tbody>
+      <tr><td rowspan="2">Illumina<br><span class="src">SRR32496875, MiSeq</span></td><td>SPAdes</td><td class="num">99.71 / 100.0</td><td class="num">1,055</td><td class="num">1,108,266</td><td><span class="pill p-ok">Yes</span></td></tr>
+      <tr><td>MaSuRCA</td><td class="num">99.14 / 99.45</td><td class="num">112</td><td class="num">345,254</td><td></td></tr>
+      <tr><td rowspan="3">Nanopore + Illumina<br><span class="src">SRR32405433 + SRR15116275</span></td><td>SPAdes</td><td class="num">99.71 / 100.0</td><td class="num">97</td><td class="num">470,899</td><td><span class="pill p-ok">Yes</span></td></tr>
+      <tr><td>Flye</td><td class="num" style="color:var(--bad)">75.79 / 73.99</td><td class="num">57</td><td class="num">54,449</td><td></td></tr>
+      <tr><td>MaSuRCA</td><td class="num" style="color:var(--bad)">48.70 / 48.89</td><td class="num">24</td><td class="num">70,864</td><td></td></tr>
+      <tr><td rowspan="2">PacBio<br><span class="src">SRR31460895, Sequel</span></td><td>hifiasm</td><td class="num">99.71 / 100.0</td><td class="num">2</td><td class="num">5,365,323</td><td></td></tr>
+      <tr><td>Flye</td><td class="num">99.71 / 100.0</td><td class="num">7</td><td class="num">2,935,422</td><td><span class="pill p-ok">Yes</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="src">Source: <code>*_spades_stats.txt</code>, <code>*_flye_stats.txt</code>, <code>*_masurca_stats.txt</code> and <code>*_hifiasm_stats.txt</code> in each sample folder. "Picked" is inferred by matching N50 and contig count against <code>*_final_EGAP_assembly_final_stats.csv</code>. The final PacBio assembly has 3 contigs and N50 2,935,414 after curation, which matches Flye's assembly.</p>
+  <p class="upd"><b>Update:</b> the PacBio pick was a bug. hifiasm's assembly is the better one: a complete 5.37 Mb chromosome plus one plasmid. Flye split the chromosome into 2.94 Mb and 2.43 Mb pieces and left four 1.8 kb fragments. These June runs predate a fix to EGAP's assembly selection (commit <code>51ef6bf</code>, 2026-10-07). Before it, the contig count was never read, because the code looked for a QUAST label that doesn't exist. Tied BUSCO scores also cast "votes" through floating-point differences such as 99.71000000000001 vs 99.71. With current code, every A/B run picked hifiasm for this sample. One open question: hifiasm's plasmid contig is 123 kb, Flye's is 94 kb, and the known O157:H7 plasmid pO157 is about 92 kb. hifiasm's may carry extra sequence, and with no reference for this isolate it can't be settled.</p>
+  <div class="grid2">
+    <div class="panel">
+      <h3>The three read sets are three different bacteria</h3>
+      <div class="tbl" style="border:0"><table>
+        <thead><tr><th>Run</th><th>Instrument</th><th>Organism / strain (ENA)</th><th class="num">Bases</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">SRR32496875</td><td>Illumina MiSeq</td><td><i>E. coli</i> 25SC02GT02-EC</td><td class="num">318 M</td></tr>
+          <tr><td class="mono">SRR32405433</td><td>ONT PromethION</td><td><i>E. coli</i> AUSMDU00031899</td><td class="num">3.32 G</td></tr>
+          <tr><td class="mono">SRR15116275</td><td>Illumina NextSeq</td><td><i>E. coli</i> AUSMDU00031899</td><td class="num">793 M</td></tr>
+          <tr><td class="mono">SRR31460895</td><td>PacBio Sequel</td><td><i>E. coli</i> O157:H7 GTVSS-023</td><td class="num">1.22 G</td></tr>
+        </tbody>
+      </table></div>
+      <p class="src">Source: ENA portal API, <code>filereport?result=read_run</code>, queried 2026-10-12.</p>
+    </div>
+    <div class="panel">
+      <h3>Why this matters for an A/B test</h3>
+      <p>The reference genome, GCA_000005845.2, is K-12 MG1655 at 4,641,652 bp. The PacBio assemblies come out at about 5.4 Mb because O157:H7 really is bigger. That is correct biology, but QUAST counts it as errors against K-12.</p>
+      <p>The Illumina test's final assembly is exactly 4,641,652 bp in 1 contig, the length of the reference itself. RagTag ordered the contigs along K-12 and filled the gaps with <button class="j" data-k="n">N</button>s. That is fine for a smoke test, but it hides real assembly differences between two versions.</p>
+      <p>The nanopore + Illumina pair is a good pair: same strain, about 700× nanopore coverage. It has no matching finished reference, though.</p>
+    </div>
+  </div>
+</section>
+
+<section id="kingdoms">
+  <span class="eyebrow">Newer assemblers</span>
+  <h2>Best assembler for each kingdom</h2>
+  <p>In short, the type of reads decides more than the kingdom. Kingdom still matters through genome size, how repetitive the DNA is, and whether the cells carry one, two or many copies of each chromosome (<button class="j" data-k="ploidy">ploidy</button>). Each card names the tool that recent, independent evidence supports best, followed by alternatives for each read type.</p>
+  <div class="kgrid">
+    <article class="k"><div class="swatch" style="background:var(--T)"></div><span class="eyebrow">Animals</span><div class="pick">hifiasm</div>
+      <dl><dt>HiFi</dt><dd>hifiasm → purge_dups → YaHS (<button class="j" data-k="hic">Hi-C</button>)</dd><dt>HiFi + UL</dt><dd>Verkko2 or hifiasm <code>--ul</code></dd><dt>ONT R10</dt><dd>hifiasm <code>--ont</code></dd><dt>Short only</dt><dd>Not recommended for animals</dd></dl>
+      <p class="src">The Darwin Tree of Life production pipeline. The Earth BioGenome Project (2026) recommends a haplotype-resolving assembler such as hifiasm or Verkko2.</p></article>
+    <article class="k"><div class="swatch" style="background:var(--A)"></div><span class="eyebrow">Plants</span><div class="pick">hifiasm</div>
+      <dl><dt>HiFi</dt><dd>hifiasm (+ Hi-C)</dd><dt>HiFi + UL</dt><dd>hifiasm <code>--ul</code></dd><dt>ONT R10</dt><dd>hifiasm <code>--ont</code> or NextDenovo</dd><dt>Organelles</dt><dd>Oatk (chloroplast + mitochondrion)</dd></dl>
+      <p class="src">Yu et al. 2024 compared 11 HiFi assemblers and found hifiasm the first choice. Verkko does not phase <button class="j" data-k="ploidy">polyploids</button>. No peer-reviewed polyploid benchmark exists yet.</p></article>
+    <article class="k"><div class="swatch" style="background:var(--G)"></div><span class="eyebrow">Fungi</span><div class="pick">Flye + Polypolish</div>
+      <dl><dt>ONT / HiFi</dt><dd>Flye at 30–40×, then Polypolish with Illumina</dd><dt>HiFi</dt><dd>hifiasm (recovers equal or more of the genome)</dd><dt>ONT R10</dt><dd>try hifiasm <code>--ont</code> (not yet benchmarked on fungi)</dd><dt>Hybrid</dt><dd>MaSuRCA is the most contiguous but makes more errors</dd></dl>
+      <p class="src">de Albuquerque Silva et al. 2026 (<i>Microbial Genomics</i>) tested 66 fungal genomes with the same SPAdes, MaSuRCA and hifiasm versions EGAP uses.</p></article>
+    <article class="k"><div class="swatch" style="background:var(--C)"></div><span class="eyebrow">Bacteria &amp; archaea</span><div class="pick">Autocycler</div>
+      <dl><dt>ONT R10</dt><dd>Autocycler (combining Flye, Canu, Myloasm and metaMDBG), then <code>dorado polish --bacteria</code></dd><dt>Hybrid</dt><dd>Hybracter, or Autocycler + Polypolish/Pypolca</dd><dt>HiFi</dt><dd>Autocycler or Flye</dd><dt>Short only</dt><dd>SPAdes <code>--isolate</code> (keep)</dd></dl>
+      <p class="src">Wick et al. 2025 (<i>Bioinformatics</i>) and Wick's 2026 benchmark updates. Archaea use the same tools. We found no archaea-specific benchmark.</p></article>
+  </div>
+  <p class="note">A fifth group, <button class="j" data-k="metagenome">metagenomes</button> (mixed samples), is outside EGAP's scope today. If it is ever added: metaMDBG / nanoMDBG and Myloasm for long reads, MEGAHIT for short reads.</p>
+
+  <div class="grid2">
+    <div class="panel">
+      <h3>Animals and plants: hifiasm on nanopore reads vs Verkko + HERRO</h3>
+      <p class="src">Wall-clock hours to assemble a human genome from about 47× nanopore simplex reads. Fewer is better.</p>
+      <div class="chart" id="c-human"></div>
+      <p>hifiasm gave 15 of 23 HG002 chromosomes as <button class="j" data-k="t2t">T2T</button> scaffolds, against 3 for Verkko. Verkko was slightly more accurate (<button class="j" data-k="qv">QV</button> 49.0 vs 47.5) but needed GPUs. On EGAP's 16-thread machine, hifiasm is the only one of the two that is practical.</p>
+      <p class="src">Cheng et al., <i>Nature</i> 2026, doi:10.1038/s41586-026-10105-6. Numbers are from the preprint's Table 1 (PMC12667832).</p>
+    </div>
+    <div class="panel">
+      <h3>Fungi: speed of each long-read assembler</h3>
+      <p class="src">Seconds of compute per million bases of genome at 50× coverage. Log scale, fewer is better. SPAdes is measured on 100× Illumina.</p>
+      <div class="chart" id="c-fungi"></div>
+      <p>Canu is the most accurate (0.21 errors per 100 kb vs 1.23 for Flye) but about 34 times slower. Flye has the best balance and the lowest RAM (0.32 GB per Mb). SPAdes on Illumina made about 3.5 times more errors than Flye.</p>
+      <p class="src">de Albuquerque Silva et al., <i>Microbial Genomics</i> 2026, doi:10.1099/mgen.0.001824.</p>
+    </div>
+    <div class="panel">
+      <h3>Bacteria: hybrid assemblers compared</h3>
+      <p class="src">Median SNP + small-indel errors per 100 kb of chromosome. Fewer is better.</p>
+      <div class="chart" id="c-hybrid"></div>
+      <p>Hybracter also recovered 65 of 69 <button class="j" data-k="plasmid">plasmids</button>, against 60 for Unicycler. Dragonflye, without hybrid input, recovered 44 of 69.</p>
+      <p class="src">Bouras et al., <i>Microbial Genomics</i> 2024, doi:10.1099/mgen.0.001244. Numbers are from the preprint table.</p>
+    </div>
+    <div class="panel">
+      <h3>Bacteria: what Dorado polishing did to 147 assemblies</h3>
+      <p class="src">Number of assemblies that got worse, stayed the same, or got better after one round of polishing.</p>
+      <div class="chart" id="c-dorado"></div>
+      <p>The bacterial model improved 129 of 147 assemblies. This is the modern replacement for Racon + Medaka on nanopore data.</p>
+      <p class="src">R. Wick, "Dorado v2 polishing", rrwick.github.io, 2026-06-19. This is a blog post with data, not a peer-reviewed paper.</p>
+    </div>
+  </div>
+</section>
+
+<section id="benchmarks">
+  <span class="eyebrow">New test data</span>
+  <h2>Benchmark organisms for each kingdom</h2>
+  <p>E. coli only exercises the bacterial path. A new animal-, plant- or fungus-tuned assembler needs a test organism from that kingdom. A good test organism has four things: a small genome, so it runs on the 16-thread / 55 GB A/B host; a finished reference to grade against; reads from the <i>same strain</i> as that reference; and the kind of difficulty the kingdom is known for. Every <button class="j" data-k="accession">accession</button> below was checked against ENA and NCBI on 2026-10-12.</p>
+  <div class="panel">
+    <h3>How big each candidate genome is</h3>
+    <p class="src">Millions of bases (Mb), log scale. Human is shown for scale only and is not proposed as a test.</p>
+    <div class="chart" id="c-size"></div>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Kingdom</th><th>Organism (strain)</th><th class="num">Size</th><th>Truth reference</th><th>Illumina</th><th>Nanopore</th><th>PacBio HiFi</th><th>What it stresses</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill" style="color:var(--G)">Fungi</span></td><td><b><i>Saccharomyces cerevisiae</i> S288C</b><br><span class="src">PRJNA792930, built as an assembler benchmark (Brief Bioinform 2022, doi:10.1093/bib/bbac146)</span></td><td class="num">12.1 Mb</td><td class="mono">GCF_000146045.2<br><span class="src">complete</span></td><td class="mono">SRR17374239<br><span class="src">BGISEQ PE, ~300×</span></td><td class="mono">SRR17374240<br><span class="src">PromethION, ~800×, likely R9</span></td><td class="mono">SRR18210286<br><span class="src">~380×</span></td><td>Transposon repeats, rDNA, mitochondrion</td></tr>
+      <tr><td></td><td><i>Candida albicans</i> SC5314 <span class="src">(alt)</span></td><td class="num">14.6 Mb</td><td class="mono">GCA_032688725.1</td><td class="mono">SRR39218567</td><td class="mono">SRR24449796</td><td class="mono">SRR23724250</td><td>Diploid and heterozygous, so tests <button class="j" data-k="haplotype">haplotype</button> handling. Reads come from different labs.</td></tr>
+      <tr><td><span class="pill" style="color:var(--A)">Plants</span></td><td><b><i>Arabidopsis thaliana</i> Col-0</b><br><span class="src">PRJNA734474, one BioSample for all reads, plus Hi-C SRR14723051</span></td><td class="num">~135 Mb</td><td class="mono">GCA_028009825.2<br><span class="src">Col-CC, complete</span></td><td class="mono">SRR14715607<br><span class="src">NovaSeq, ~100×</span></td><td class="mono">SRR14739179<br><span class="src">~420×, likely R9</span></td><td class="mono">SRR14728885<br><span class="src">~170×</span></td><td>Megabase centromere repeats; chloroplast reads crowd the data</td></tr>
+      <tr><td></td><td><i>Chlamydomonas reinhardtii</i> CC-5816 <span class="src">(alt)</span></td><td class="num">114 Mb</td><td class="mono">GCA_026108075.1</td><td>none</td><td class="mono">SRR22216322</td><td class="mono">SRR22216323</td><td>64% GC, which is hard for nanopore</td></tr>
+      <tr><td><span class="pill" style="color:var(--T)">Animals</span></td><td><b><i>Caenorhabditis elegans</i> CGC1</b><br><span class="src">PRJDB19205 (Genome Res 2025, doi:10.1101/gr.280274.124)</span></td><td class="num">106 Mb</td><td class="mono">GCA_052911875.1<br><span class="src">T2T</span></td><td class="mono">SRR7594466<br><span class="src">parent strain VC2010, ~95×</span></td><td class="mono">DRR656639<br><span class="src">R10 ultra-long, ~630×</span></td><td class="mono">DRR619744<br><span class="src">~85×</span></td><td>A gapless truth set; tests hifiasm <code>--ont</code> and <code>--ul</code></td></tr>
+      <tr><td></td><td><i>Drosophila melanogaster</i> ISO-1 <span class="src">(alt)</span></td><td class="num">144 Mb</td><td class="mono">GCF_000001215.4</td><td class="mono">SRR29479671</td><td class="mono">SRR22822929<br><span class="src">R10.4.1</span></td><td class="mono">SRR29479668</td><td>All three platforms from one strain; satellite DNA</td></tr>
+      <tr><td><span class="pill" style="color:var(--C)">Archaea</span></td><td><b><i>Methanocaldococcus jannaschii</i> DSM 2661</b><br><span class="src">MicroBench PRJEB85558</span></td><td class="num">1.74 Mb</td><td class="mono">GCF_000091665.1<br><span class="src">3 replicons</span></td><td>none</td><td class="mono">ERR15459741<br><span class="src">Dorado 1.0 sup, ~410×</span></td><td>none</td><td>31% GC and two plasmids. The same flowcell is available at fast, hac and sup basecalling.</td></tr>
+      <tr><td></td><td><i>Halobacterium salinarum</i> NRC-1 <span class="src">(alt)</span></td><td class="num">2.57 Mb</td><td class="mono">GCF_000006805.1</td><td class="mono">SRR29296959<br><span class="src">deletion strain</span></td><td>none</td><td class="mono">SRR27007071<br><span class="src">likely CLR</span></td><td>66% GC; IS elements; long repeats shared by the plasmids</td></tr>
+      <tr><td><span class="pill" style="color:var(--C)">Bacteria</span></td><td><b><i>Klebsiella pneumoniae</i> KPC2_202310</b><br><span class="src">PRJNA1087001 (eLife 2024, doi:10.7554/eLife.98300)</span></td><td class="num">5.66 Mb</td><td class="mono">GCF_045345375.1<br><span class="src">4 replicons</span></td><td class="mono">SRR28370701<br><span class="src">MiSeq; ENA lists it as single-end</span></td><td class="mono">SRR28370682<br><span class="src">R10.4.1 sup, ~76×</span></td><td>none</td><td>Recovering three plasmids. A harder, same-strain replacement for the mixed E. coli set.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="grid2">
+    <div class="panel">
+      <h3>What it costs to run these</h3>
+      <p><b>Archaea, bacteria and yeast</b> (2–15 Mb) finish in minutes with under 8 GB of RAM, so they can run in full on every A/B run.</p>
+      <p><b>Arabidopsis, C. elegans and Drosophila</b> (100–145 Mb) need <button class="j" data-k="downsample">downsampling</button> first. At 30× HiFi, hifiasm takes about 8–15 GB and 20–60 minutes. Short-read SPAdes or MaSuRCA at 50× needs 30–50 GB, which is close to the 55 GB limit.</p>
+      <p class="src">These are the research agent's estimates from typical tool behaviour, not EGAP measurements. Round 1 of the A/B plan would measure them.</p>
+    </div>
+    <div class="panel">
+      <h3>Suggested depth for tests</h3>
+      <div class="tbl" style="border:0"><table>
+        <thead><tr><th>Read type</th><th class="num">Target</th><th>Tool</th></tr></thead>
+        <tbody>
+          <tr><td>Illumina, eukaryote</td><td class="num">40×</td><td><code>rasusa</code> / <code>seqtk sample</code></td></tr>
+          <tr><td>Illumina, prokaryote</td><td class="num">50×</td><td><code>rasusa</code></td></tr>
+          <tr><td>Nanopore</td><td class="num">30–40×</td><td><code>filtlong --target_bases</code> (already in EGAP_env)</td></tr>
+          <tr><td>PacBio HiFi</td><td class="num">25–30×</td><td><code>rasusa</code></td></tr>
+          <tr><td>Quick pre-merge smoke test, 100+ Mb</td><td class="num">10×</td><td>only checks that the run finishes</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  <p class="note"><b>Gaps to know about.</b> The yeast short reads are BGISEQ, which is similar to Illumina but not identical. CGC1 has no deep Illumina run of its own. The archaea have no complete set of all three platforms. The yeast and Arabidopsis nanopore runs are probably the older R9 chemistry. No Basidiomycota (the mushroom group Psilocybe belongs to) has a public same-strain truth set, so the Psilocybe sample stays as a real-world check rather than a graded test.</p>
+</section>
+
+<section id="plan">
+  <span class="eyebrow">Original proposal · carried out, see <a href="#results">A/B results</a></span>
+  <h2>How an upgrade branch would be A/B tested</h2>
+  <p class="upd">This is the plan as written before the tests. It was followed, with two changes: Python went to 3.12 instead of 3.10, and new tools came in as tested replacements (Polypolish, Pypolca, MaSuRCA's Flye mode), not in a side environment.</p>
+  <p>This reuses the existing k3d A/B harness in <code>tests/ab/ab-test.yaml</code>. It runs the same samples under the same CPU and RAM limits, with <code>egap:old</code> against <code>egap:new</code>.</p>
+  <ol class="plan">
+    <li><b>Fix the test data first.</b> Use read sets and references from the same strain, for example <i>K. pneumoniae</i> KPC2_202310 for bacteria and one primary organism per kingdom from the table above. Otherwise QUAST's misassembly and error counts can't tell old and new apart.</li>
+    <li><b>Branch <code>chore/assembler-refresh</code> from main.</b> Move the env to Python 3.10, then raise the pins in Dockerfile and meta.yaml together: SPAdes 4.3.0, Flye 2.9.6, compleasm 0.2.10, BUSCO 6.1, and RagTag 2.1.1 once it reaches Bioconda. Correct the Flye comment.</li>
+    <li><b>Change one thing per round.</b> Round 1 changes only Python and the dependencies, and its output should match the old image exactly. Round 2 changes the assembler versions. Round 3 adds new assemblers (hifiasm <code>--ont</code>, Flye <code>--pacbio-hifi</code>). That way any difference can be traced to a single cause.</li>
+    <li><b>Decide pass or fail in advance.</b> For each sample the new image must keep BUSCO/compleasm completeness within 0.5 points, must not increase QUAST misassemblies or <button class="j" data-k="indel">indels</button> per 100 kb against the same-strain reference, and must stay within 125% of the old runtime and peak RAM.</li>
+    <li><b>Treat completeness tools separately.</b> BUSCO 6 and compleasm 0.2.10 with odb12 lineages change the measuring stick itself. Score both images with the same BUSCO version, or the comparison is unfair.</li>
+    <li><b>Add the new assemblers in a side env</b> (Autocycler, Medaka/Dorado, Verkko). That keeps EGAP_env installable and limits the Python fallout.</li>
+  </ol>
+</section>
+
+<section id="sources">
+  <span class="eyebrow">Sources</span>
+  <h2>Where every number came from</h2>
+  <ol class="refs">
+    <li>Cheng H et al. Efficient near-telomere-to-telomere assembly of nanopore simplex reads. <i>Nature</i> (2026). <a href="https://doi.org/10.1038/s41586-026-10105-6">doi:10.1038/s41586-026-10105-6</a> · preprint table: <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12667832/">PMC12667832</a></li>
+    <li>Antipov D et al. Verkko2. <i>Genome Research</i> 35:1583 (2025). <a href="https://genome.cshlp.org/content/35/7/1583">genome.cshlp.org/content/35/7/1583</a></li>
+    <li>Rautiainen M et al. Telomere-to-telomere assembly of diploid chromosomes with Verkko. <i>Nat Biotechnol</i> (2023). <a href="https://doi.org/10.1038/s41587-023-01662-6">doi:10.1038/s41587-023-01662-6</a></li>
+    <li>Yu W et al. Comprehensive assessment of 11 de novo HiFi assemblers. <i>Genome Research</i> 34:326 (2024). <a href="https://doi.org/10.1101/gr.278232.123">doi:10.1101/gr.278232.123</a></li>
+    <li>Zhou C et al. Oatk: organelle genome assembly. <i>Genome Biology</i> (2025). <a href="https://doi.org/10.1186/s13059-025-03676-6">doi:10.1186/s13059-025-03676-6</a></li>
+    <li>Hu J et al. NextDenovo. <i>Genome Biology</i> 25:107 (2024). <a href="https://doi.org/10.1186/s13059-024-03252-4">doi:10.1186/s13059-024-03252-4</a></li>
+    <li>de Albuquerque Silva GA et al. Quantitative comparison of fungal genome assembly strategies. <i>Microbial Genomics</i> 12(8) (2026). <a href="https://doi.org/10.1099/mgen.0.001824">doi:10.1099/mgen.0.001824</a></li>
+    <li>Wick RR, Howden BP, Stinear TP. Autocycler. <i>Bioinformatics</i> (2025). <a href="https://doi.org/10.1093/bioinformatics/btaf474">doi:10.1093/bioinformatics/btaf474</a></li>
+    <li>Bouras G et al. Hybracter. <i>Microbial Genomics</i> 10(5) (2024). <a href="https://doi.org/10.1099/mgen.0.001244">doi:10.1099/mgen.0.001244</a></li>
+    <li>Wick R. Benchmark updates and Dorado v2 polishing (blog, not peer reviewed): <a href="https://rrwick.github.io/2026/07/24/benchmark-update.html">2026-07-24</a> · <a href="https://rrwick.github.io/2026/06/19/dorado-v2-polishing.html">2026-06-19</a> · <a href="https://rrwick.github.io/2025/09/23/autocycler-benchmark-update.html">2025-09-23</a></li>
+    <li>Benoit G et al. metaMDBG. <i>Nat Biotechnol</i> 42:1378 (2024). <a href="https://doi.org/10.1038/s41587-023-01983-6">doi:10.1038/s41587-023-01983-6</a>; nanoMDBG, <i>Nat Commun</i> (2026) <a href="https://doi.org/10.1038/s41467-026-69760-y">doi:10.1038/s41467-026-69760-y</a></li>
+    <li>Shaw J, Marin MG, Li H. Myloasm. bioRxiv (2025), <b>not peer reviewed</b>. <a href="https://doi.org/10.1101/2025.09.05.674543">doi:10.1101/2025.09.05.674543</a></li>
+    <li>Earth BioGenome Project, assembly recommendations v4 (2026) and standards: <a href="https://www.earthbiogenome.org/report-on-assembly-recommendations">recommendations</a> · <a href="https://www.earthbiogenome.org/report-on-assembly-standards">standards</a>; Darwin Tree of Life pipeline: <a href="https://pipelines.tol.sanger.ac.uk/genomeassembly">pipelines.tol.sanger.ac.uk</a></li>
+    <li>Release pages: <a href="https://github.com/ablab/spades/releases">SPAdes</a> · <a href="https://github.com/alekseyzimin/masurca/releases">MaSuRCA</a> · <a href="https://github.com/mikolmogorov/Flye/releases">Flye</a> (<a href="https://github.com/mikolmogorov/Flye/blob/flye/docs/NEWS.md">NEWS</a>) · <a href="https://github.com/chhylp123/hifiasm/releases">hifiasm</a> · <a href="https://github.com/malonge/RagTag/releases">RagTag</a> · <a href="https://github.com/huangnengCSU/compleasm/releases">compleasm</a> · <a href="https://gitlab.com/ezlab/busco/-/raw/master/CHANGELOG">BUSCO changelog</a> · <a href="https://github.com/ablab/quast/releases">QUAST</a> · <a href="https://github.com/bcgsc/abyss/releases">ABySS</a> · <a href="https://github.com/lbcb-sci/racon/releases">Racon</a> · <a href="https://github.com/broadinstitute/pilon/releases">Pilon</a> · <a href="https://github.com/BGI-Qingdao/TGS-GapCloser/releases">TGS-GapCloser</a></li>
+    <li>Bioconda package metadata: <code>https://api.anaconda.org/package/bioconda/&lt;name&gt;</code>; ENA read metadata: <code>https://www.ebi.ac.uk/ena/portal/api/filereport</code></li>
+    <li>EGAP repository: <code>Dockerfile</code>, <code>meta.yaml</code>, <code>bin/assemble_*.py</code>, <code>egap_test_out/*</code>, <code>tests/ab/ab-test.yaml</code></li>
+  </ol>
+</section>
+
+<section id="glossary">
+  <span class="eyebrow">Glossary</span>
+  <h2>Jargon, in plain English</h2>
+  <details class="panel"><summary>Show all definitions</summary><div class="gloss" id="gloss"></div></details>
+</section>
+</div>
+
+<div id="pop" role="dialog" aria-live="polite" hidden></div>
+
+<script>
+const G={
+ assembler:["Assembler","A program that rebuilds a whole genome from millions of short pieces of DNA sequence, the way you might rebuild a shredded book by matching overlapping sentences."],
+ read:["Read","One piece of DNA sequence as it comes off a sequencing machine. Genomes are far too long to read in one go, so they are read in many overlapping pieces."],
+ short:["Short reads (Illumina)","Reads about 150 letters long. Very accurate (about 1 error per 1,000 letters) and cheap, but too short to bridge long repeated stretches of DNA, so the assembly breaks into many pieces."],
+ ont:["Nanopore (ONT)","Oxford Nanopore sequencing: DNA is pulled through a tiny pore and read from changes in electric current. Reads can be 10,000 to over 1,000,000 letters long. Older chemistries had many errors; the newer R10 chemistry is about 99% accurate or better."],
+ r10:["R10 / R10.4.1","The current Oxford Nanopore pore version. Its reads are much more accurate than the older R9 pores, so assemblers have settings tuned for it."],
+ pacbio:["PacBio","Pacific Biosciences sequencing, which watches a DNA-copying enzyme in real time. Produces long reads in two flavours: CLR and HiFi."],
+ hifi:["HiFi reads","PacBio reads made by reading the same circular DNA molecule many times and taking the consensus. About 15,000–20,000 letters long and better than 99.9% accurate. They are the current gold standard for animal and plant genomes."],
+ clr:["CLR","PacBio Continuous Long Reads, the older PacBio mode. Long, but with roughly 10–15% errors. Tools tuned for HiFi can fail on them."],
+ ul:["Ultra-long (UL) reads","Nanopore reads over 100,000 letters long. They can span the longest repeats, which helps finish chromosomes end to end."],
+ hybrid:["Hybrid assembly","Combining long reads (for structure) with short reads (for accuracy) in one assembly."],
+ contig:["Contig","A continuous stretch of assembled sequence with no gaps. A perfect bacterial assembly has one contig per chromosome and one per plasmid."],
+ scaffold:["Scaffold","Contigs placed in order and orientation, with gaps (runs of N) between them where the sequence is unknown."],
+ n:["N","The letter used for an unknown base. A run of Ns marks a gap in a scaffold."],
+ n50:["N50","A measure of how unbroken an assembly is. Sort contigs from longest to shortest and add up their lengths; N50 is the length of the contig at which you pass half the genome. Bigger is better, but it says nothing about whether the contigs are correct."],
+ l50:["L50","How many contigs it takes to reach half the genome. Smaller is better."],
+ busco:["BUSCO / compleasm","Tools that check completeness by looking for a list of genes that nearly every organism in a group has exactly one copy of. 99% found means almost nothing is missing; many duplicated hits suggest the assembly has extra copies."],
+ quast:["QUAST","A tool that measures an assembly: size, N50, and, if you give it a reference genome, how many misassemblies and small errors it has relative to that reference."],
+ qv:["QV (quality value)","Base-level accuracy on a log scale. QV40 means 1 error per 10,000 letters; QV50 means 1 per 100,000. Each +10 is ten times more accurate."],
+ t2t:["T2T (telomere-to-telomere)","A chromosome assembled from one end (telomere) to the other with no gaps. The best possible result."],
+ coverage:["Coverage (×)","How many times, on average, each letter of the genome was read. 50× means each position appears in about 50 reads."],
+ polish:["Polishing","A clean-up pass after assembly: realign reads to the draft and fix small errors. Racon, Medaka and Dorado use long reads; Pilon, Polypolish and Pypolca use short reads."],
+ consensus:["Consensus assembly","Running several different assemblers and combining their results, keeping what most of them agree on. Errors made by one tool get outvoted."],
+ ploidy:["Ploidy / polyploid","How many copies of each chromosome a cell has. Humans are diploid (2); many plants (wheat, potato, strawberry) are polyploid (4, 6, 8…), which makes their copies very hard to tell apart."],
+ hic:["Hi-C","A lab method that captures which pieces of DNA sit near each other inside the nucleus. Used to order contigs into whole chromosomes."],
+ haplotype:["Haplotype / phasing","The two copies of a chromosome you got from each parent are haplotypes. Phasing means assembling them separately instead of blending them."],
+ plasmid:["Plasmid","A small circle of DNA separate from a bacterium's main chromosome. Often carries antibiotic resistance genes, so missing one matters."],
+ metagenome:["Metagenome","DNA from a mixed sample (soil, gut, water) containing many species at once, which are assembled together and then sorted apart."],
+ indel:["Indel","An insertion or deletion error, where letters are extra or missing compared with the true sequence."],
+ pin:["Version pin","A rule in the install recipe that fixes a tool to an exact version (or range), so every build gets the same software."],
+ env:["Conda environment","A self-contained folder of installed software. Conda's solver must find versions of every tool that all agree on shared dependencies such as Python. One tool that needs a newer Python can block the whole set."],
+ ab:["A/B test","Run the old version (A) and the new version (B) on exactly the same inputs and limits, then compare outputs. Any difference comes from the change."],
+ bioconda:["Bioconda","The community package channel that most bioinformatics tools are installed from. A tool upgrade usually has to land here before EGAP can use it."],
+ accession:["Accession","A database ID. SRR… numbers are raw read sets in the Sequence Read Archive; GCA_/GCF_ numbers are finished genome assemblies at NCBI."],
+ downsample:["Downsampling","Randomly keeping only part of the reads (say 30× instead of 300×) so a test runs fast while still being realistic."],
+ reference:["Reference genome","A finished, trusted genome of the same organism. Lining an assembly up against it shows every error the assembly has, so it is the gold standard for grading."],
+ noise:["Run-to-run noise","Some assemblers give slightly different results each time they run on the same data, because they use several CPU threads at once. Before blaming a change, you measure how much the result varies between two identical runs."],
+ misassembly:["Misassembly","A place where an assembler joined two pieces of DNA that are not neighbours in the real genome. Usually caused by repeats."],
+ replicon:["Replicon","A separate DNA molecule that copies itself: in bacteria, the chromosome and each plasmid. A complete bacterial assembly has one contig per replicon."],
+ preprint:["Preprint","A paper posted publicly before peer review. Useful and recent, but its claims haven't been checked by independent reviewers yet."]
+};
+const pop=document.getElementById('pop');let cur=null;
+function show(btn){const d=G[btn.dataset.k];if(!d)return;pop.innerHTML='<b></b><span></span>';pop.firstChild.textContent=d[0];pop.lastChild.textContent=d[1];pop.hidden=false;
+ const r=btn.getBoundingClientRect(),p=pop.getBoundingClientRect();let x=Math.min(Math.max(16,r.left),innerWidth-p.width-16);let y=r.bottom+8;if(y+p.height>innerHeight-16)y=Math.max(16,r.top-p.height-8);pop.style.left=x+'px';pop.style.top=y+'px';cur=btn;btn.setAttribute('aria-expanded','true')}
+function hide(){pop.hidden=true;if(cur)cur.setAttribute('aria-expanded','false');cur=null}
+document.addEventListener('click',e=>{const b=e.target.closest('button.j');if(b){e.stopPropagation();cur===b?hide():show(b)}else if(!pop.contains(e.target))hide()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')hide()});
+addEventListener('scroll',hide,{passive:true});
+document.querySelectorAll('button.j').forEach(b=>{b.type='button';b.setAttribute('aria-expanded','false');if(G[b.dataset.k])b.setAttribute('aria-label',b.textContent+' (definition)')});
+document.getElementById('gloss').innerHTML=Object.values(G).sort((a,b)=>a[0].localeCompare(b[0])).map(([t,d])=>'<div><b>'+t+'</b><br>'+d+'</div>').join('');
+
+const NS='http://www.w3.org/2000/svg';
+function el(t,a,txt){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;return e}
+function yr(s){const d=new Date(s+'T00:00:00Z');return d.getUTCFullYear()+(d-Date.UTC(d.getUTCFullYear(),0,1))/31557600000}
+
+// Version timeline
+(function(){
+ const rows=[["SPAdes","2025-05-06","2026-06-14","4.2.0 → 4.3.0",0],["MaSuRCA","2025-06-26","2025-06-26","4.1.4",0],["Flye","2024-08-27","2025-05-02","2.9.5 → 2.9.6",1],["hifiasm","2025-03-18","2025-03-18","0.25.0",0],["RagTag","2021-10-31","2026-10-01","2.1.0 → 2.1.1",0],["compleasm","2026-06-15","2026-10-07","0.2.8 → 0.2.10",1],["BUSCO","2024-12-05","2026-06-05","5.8.2 → 6.1.0",1],["QUAST","2024-11-10","2024-11-10","5.3.0",0],["ABySS","2024-10-18","2024-10-18","2.3.10 (unpinned)",0],["Racon","2021-12-19","2021-12-19","1.5.0",0],["Pilon","2021-01-28","2021-01-28","1.24",0],["TGS-GapCloser","2022-12-29","2022-12-29","1.2.1",0]];
+ const W=760,L=118,R=150,top=28,rh=26,H=top+rows.length*rh+10,x0=2021,x1=2027,sx=v=>L+(v-x0)/(x1-x0)*(W-L-R);
+ const s=el('svg',{viewBox:`0 0 ${W} ${H}`});
+ for(let y=x0;y<=x1;y++){s.append(el('line',{x1:sx(y),x2:sx(y),y1:top-8,y2:H-6,class:'grid'}));s.append(el('text',{x:sx(y),y:14,'text-anchor':'middle',class:'mut'},y))}
+ const today=sx(yr('2026-10-12'));s.append(el('line',{x1:today,x2:today,y1:top-8,y2:H-6,stroke:'var(--accent)','stroke-dasharray':'3 3'}));s.append(el('text',{x:today-4,y:top-12+2,'text-anchor':'end',fill:'var(--accent)',style:'fill:var(--accent)'},'today'));
+ rows.forEach(([n,p,l,v,blk],i)=>{const y=top+i*rh+rh/2;const a=sx(yr(p)),b=sx(yr(l));
+  s.append(el('text',{x:L-10,y:y+4,'text-anchor':'end'},n));
+  if(b-a>1)s.append(el('line',{x1:a,x2:b,y1:y,y2:y,stroke:'var(--muted)','stroke-width':2}));
+  s.append(el('circle',{cx:b,cy:y,r:6,fill:blk?'var(--T)':'var(--C)'}));
+  s.append(el('circle',{cx:a,cy:y,r:8,fill:'none',stroke:'var(--muted)','stroke-width':2}));
+  s.append(el('text',{x:W-R+12,y:y+4,class:'mut'},v));
+ });
+ document.getElementById('timeline').append(s);
+})();
+
+// Python table
+document.getElementById('pytable').innerHTML=[
+ ["SPAdes","4.3.0","4.3.0",0],["hifiasm","0.25.0","0.25.0",0],["MaSuRCA","4.1.4","4.1.4",0],["Flye","2.9.6","2.9.5",1],["compleasm","0.2.10","0.2.8",1],["BUSCO","6.1.0","5.x (via sepp)",1],["RagTag","2.1.1","2.1.1 (once on Bioconda)",0],["Autocycler","0.8.0","0.8.0 (binary)",0],["Myloasm","0.7.0","0.7.0 (binary)",0],["metaMDBG","1.4","1.4 (binary)",0],["Verkko","2.3.2","2.1",1],["Hybracter","0.14.0","none",1],["Trycycler","0.5.6","0.5.5",1],["Medaka","2.2.2","2.1.0 (2.2 needs 3.12)",1],["Plassembler","1.8.5","1.0.0",1]
+].map(([t,n,p,b])=>`<tr><td>${t}</td><td class="mono">${n}</td><td class="mono">${p}</td><td>${b?'<span class="pill p-bad">Blocked</span>':'<span class="pill p-ok">OK</span>'}</td></tr>`).join('');
+
+// Horizontal bar chart
+function hbar(id,rows,o={}){const W=520,L=o.L||120,R=70,bh=22,gap=10,top=8,H=top+rows.length*(bh+gap)+(o.log?22:4);const s=el('svg',{viewBox:`0 0 ${W} ${H}`});
+ const max=o.max||Math.max(...rows.map(r=>r[1]));const lo=o.log?Math.log10(o.min):0;const sc=v=>o.log?(Math.log10(v)-lo)/(Math.log10(max)-lo)*(W-L-R):v/max*(W-L-R);
+ if(o.log)o.ticks.forEach(t=>{s.append(el('line',{x1:L+sc(t),x2:L+sc(t),y1:top-4,y2:H-18,class:'grid'}));s.append(el('text',{x:L+sc(t),y:H-4,'text-anchor':'middle',class:'mut'},t))});
+ rows.forEach(([n,v,c],i)=>{const y=top+i*(bh+gap);s.append(el('text',{x:L-8,y:y+bh/2+4,'text-anchor':'end'},n));s.append(el('rect',{x:L,y,width:Math.max(2,sc(v)),height:bh,rx:3,fill:c||'var(--C)'}));s.append(el('text',{x:L+sc(v)+6,y:y+bh/2+4},(o.fmt?o.fmt(v):v)))});
+ document.getElementById(id).append(s)}
+hbar('c-human',[["HG002 hifiasm",8.4,'var(--A)'],["HG002 Verkko",103.1,'var(--T)'],["HG001 hifiasm",15.0,'var(--A)'],["HG001 Verkko",126.7,'var(--T)'],["HG005 hifiasm",10.8,'var(--A)'],["HG005 Verkko",86.7,'var(--T)']],{L:118,fmt:v=>v+' h'});
+hbar('c-fungi',[["Raven",13.2,'var(--C)'],["hifiasm",30.7,'var(--A)'],["Flye",45.1,'var(--G)'],["SPAdes (Illu)",161.2,'var(--muted)'],["Canu",1527,'var(--T)']],{log:true,min:10,max:2000,ticks:[10,100,1000],L:104,fmt:v=>v+' s'});
+hbar('c-size',[["M. jannaschii",1.74,'var(--C)'],["H. salinarum",2.57,'var(--C)'],["E. coli K-12",4.64,'var(--C)'],["K. pneumoniae",5.66,'var(--C)'],["S. cerevisiae",12.1,'var(--G)'],["C. albicans",14.6,'var(--G)'],["C. elegans",106,'var(--T)'],["C. reinhardtii",114,'var(--A)'],["A. thaliana",135,'var(--A)'],["D. melanogaster",144,'var(--T)'],["Human (scale)",3100,'var(--muted)']],{log:true,min:1,max:4000,ticks:[1,10,100,1000],L:120,fmt:v=>v+' Mb'});
+hbar('c-polish',[["Pre-polish",40,'var(--muted)'],["Racon ×2",41,'var(--muted)'],["Medaka",24,'var(--muted)'],["Medaka+Pilon",26,'var(--T)'],["Racon×2+Pilon",12,'var(--G)'],["Medaka+Polypolish+Pypolca",11,'var(--C)'],["Racon×2+Polypolish+Pypolca",6,'var(--A)']],{L:190,fmt:v=>v+' errors'});
+hbar('c-masurca',[["K. pn. CABOG",858,'var(--T)'],["K. pn. Flye mode",496,'var(--A)'],["E. coli CABOG",914,'var(--T)'],["E. coli Flye mode",678,'var(--A)']],{L:140,fmt:v=>v+' s'});
+hbar('c-masurca',[["K. pn. CABOG",7.9,'var(--T)'],["K. pn. Flye mode",2.6,'var(--A)'],["E. coli CABOG",5.9,'var(--T)'],["E. coli Flye mode",2.5,'var(--A)']],{L:140,fmt:v=>v+' GB'});
+hbar('c-hybrid',[["Hybracter",0.24,'var(--A)'],["Dragonflye",0.74,'var(--G)'],["Unicycler",1.49,'var(--T)']],{L:96});
+
+// Dorado stacked
+(function(){const W=520,L=96,R=20,bh=26,s=el('svg',{viewBox:`0 0 ${W} 112`});const data=[["Bacterial",[6,12,129]],["Read-level",[22,10,115]]],cols=['var(--T)','var(--muted)','var(--A)'],lab=['worse','same','better'];
+ data.forEach(([n,v],i)=>{const y=8+i*(bh+12);let x=L;s.append(el('text',{x:L-8,y:y+bh/2+4,'text-anchor':'end'},n));v.forEach((c,j)=>{const w=c/147*(W-L-R);s.append(el('rect',{x,y,width:w,height:bh,fill:cols[j]}));if(w>24)s.append(el('text',{x:x+w/2,y:y+bh/2+4,'text-anchor':'middle',style:'fill:var(--bg);font-weight:600'},c));x+=w})});
+ lab.forEach((t,j)=>{s.append(el('rect',{x:L+j*110,y:90,width:10,height:10,fill:cols[j]}));s.append(el('text',{x:L+j*110+16,y:99,class:'mut'},t))});
+ document.getElementById('c-dorado').append(s)})();
+</script>

@@ -12,17 +12,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.8 is EGAP's runtime pin (meta.yaml). 3.11 catches syntax drift early.
-        python: ["3.8", "3.11"]
+        # 3.12 is EGAP's runtime pin (meta.yaml). 3.13 catches drift early.
+        python: ["3.12", "3.13"]
         pandas: ["latest"]
         include:
-          # Solver-installed EGAP_env instances resolve to pandas 1.4.4 when
-          # upstream tiara=1.0.3 forces numpy<1.20. Exercise that floor so
+          # meta.yaml's floor (pandas >=2.2, numpy >=1.26). Exercise it so
           # pandas-version-specific bugs (e.g. DataFrame.replace with pd.NA)
           # are caught in CI, not in a user's env.
-          - python: "3.8"
-            pandas: "1.4.4"
-            numpy: "1.24.4"
+          - python: "3.12"
+            pandas: "2.2.0"
+            numpy: "1.26.4"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,13 +52,19 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v3
         with:
           miniforge-version: latest
-          python-version: "3.8"
+          python-version: "3.12"
           channels: conda-forge,bioconda
           channel-priority: strict
           activate-environment: EGAP_test
+      # compleasm goes in with pip --no-deps: its recipe's dendropy<4.6 pin
+      # cannot coexist with any py3.9+ sepp, and conda's --no-deps still
+      # solves that pin. Upstream tiara (numpy<1.20) is dropped; EGAP uses
+      # tiara-entheome.
       - name: Install minimal tool subset
         shell: bash -l {0}
-        run: mamba install -y pytest pandas biopython matplotlib-base psutil seqkit quast compleasm tiara
+        run: |
+          mamba install -y pytest "pandas>=2.2,<3" "numpy<3" biopython matplotlib-base psutil seqkit quast hmmer miniprot sepp
+          python -m pip install --no-deps "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.10.tar.gz"
       - name: Run tool-backed tests
         shell: bash -l {0}
         env:
