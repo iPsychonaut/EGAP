@@ -26,8 +26,8 @@ requirements:
     - python >=3.12,<3.13
     # 1.0.1: 1.0.0 imported pkg_resources, which current setuptools no longer ships.
     - tiara-entheome >=1.0.1
-    # pandas 3 changes copy and string semantics; move it in its own round.
-    - pandas >=2.2,<3
+    # pandas 3: copy-on-write and the str dtype, checked in its own A/B round.
+    - pandas >=3,<4
     - numpy >=1.26,<3
     # NanoPlot 1.46.2 calls figure_factory.create_2d_density (removed in plotly 6).
     - plotly >=5.24,<6
