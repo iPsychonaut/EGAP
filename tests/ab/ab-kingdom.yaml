@@ -44,6 +44,8 @@ spec:
               # copy this row's reads to the writable area its paths point at
               for p in $(tail -n 1 /tmp/sample.tsv | tr '\t,' '\n\n' | grep '^/data/out/_reads/'); do
                 src=/data/input/kingdom/${p#/data/out/_reads/}
+                # a subset still being fetched appears only when complete; wait up to 12 h
+                for i in $(seq 1 144); do [ -e "$src" ] || [ -e "$p" ] || [ -e "${p%.gz}" ] || sleep 300; done
                 mkdir -p "$(dirname "$p")"
                 [ -e "$p" ] || [ -e "${p%.gz}" ] || cp "$src" "$p"
               done

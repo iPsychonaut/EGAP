@@ -25,7 +25,8 @@ frac=$(awk -v g="$gsize" -v d="$depth" -v b="$bases" 'BEGIN{f=g*d/b; if (f>1) f=
 mkdir -p "$(dirname "$out")"
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/kingdom.XXXXXX")
-trap 'rm -rf "${tmp:?}"' EXIT
+# keep the converter's log next to the output if anything fails
+trap 'rc=$?; [ $rc -eq 0 ] || cat "$tmp"/*.log > "$out.failed.log" 2>/dev/null; rm -rf "${tmp:?}"' EXIT
 prefetch --max-size 500g -O "$tmp" "$acc" > "$tmp/prefetch.log" 2>&1
 sra=$(find "$tmp/$acc" -maxdepth 1 -name "$acc.sra*" | head -1)
 [ -n "$sra" ] || { echo "$acc: prefetch produced no .sra file" >&2; cat "$tmp/prefetch.log" >&2; exit 1; }
@@ -49,8 +50,9 @@ if [ "$paired" = yes ]; then
       END { close(c1); close(c2) }'
   for i in 1 2; do mv "${out}_$i.fastq.gz.part" "${out}_$i.fastq.gz"; done
 else
-  # --split-spot: the default split-3 mode refuses --stdout
-  fasterq-dump --split-spot --stdout -e 4 -t "$tmp" "$sra" 2> "$tmp/fqd.log" | seqtk sample -s$SEED - "$frac" | pigz -p 2 > "$out.fastq.gz.part"
+  # fastq-dump streams with no scratch space; fasterq-dump --stdout failed on the
+  # 57-67 Gb nanopore runs.
+  fastq-dump --stdout "$sra" 2> "$tmp/fqd.log" | seqtk sample -s$SEED - "$frac" | pigz -p 2 > "$out.fastq.gz.part"
   mv "$out.fastq.gz.part" "$out.fastq.gz"
 fi
 echo "$acc: done"
