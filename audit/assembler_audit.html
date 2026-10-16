@@ -262,6 +262,7 @@ ol.plan{margin:0;padding-left:1.3rem;display:grid;gap:10px;max-width:72ch}
     </tbody>
   </table></div>
   <p class="src">Source: <code>*_spades_stats.txt</code>, <code>*_flye_stats.txt</code>, <code>*_masurca_stats.txt</code> and <code>*_hifiasm_stats.txt</code> in each sample folder. "Picked" is inferred by matching N50 and contig count against <code>*_final_EGAP_assembly_final_stats.csv</code>. The final PacBio assembly has 3 contigs and N50 2,935,414 after curation, which matches Flye's assembly.</p>
+  <p class="upd"><b>Update:</b> the PacBio pick was a bug. hifiasm's assembly is the better one: a complete 5.37 Mb chromosome plus one plasmid. Flye split the chromosome into 2.94 Mb and 2.43 Mb pieces and left four 1.8 kb fragments. These June runs predate a fix to EGAP's assembly selection (commit <code>51ef6bf</code>, 2026-10-07). Before it, the contig count was never read, because the code looked for a QUAST label that doesn't exist. Tied BUSCO scores also cast "votes" through floating-point differences such as 99.71000000000001 vs 99.71. With current code, every A/B run picked hifiasm for this sample. One open question: hifiasm's plasmid contig is 123 kb, Flye's is 94 kb, and the known O157:H7 plasmid pO157 is about 92 kb. hifiasm's may carry extra sequence, and with no reference for this isolate it can't be settled.</p>
   <div class="grid2">
     <div class="panel">
       <h3>The three read sets are three different bacteria</h3>
