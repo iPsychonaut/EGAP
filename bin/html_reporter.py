@@ -217,10 +217,12 @@ def parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
     optional = ["Identity","Fraction","Frameshift Events","Best Gene","Codons"]
     ordered_cols = required + [c for c in optional if c in df.columns]
 
-    # Coerce numeric-ish fields that should remain strings but trimmed
+    # Coerce numeric-ish fields that should remain strings but trimmed. Missing
+    # cells become "-" like missing columns (pandas 3's astype(str) keeps them
+    # missing; pandas 2 wrote "nan").
     for c in ordered_cols:
         if c in df.columns:
-            df[c] = df[c].astype(str).str.strip()
+            df[c] = df[c].fillna("-").astype(str).str.strip()
 
     return df[ordered_cols]
 
