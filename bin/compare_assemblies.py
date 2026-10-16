@@ -127,8 +127,11 @@ def get_quast_stats(assembly, cpu_threads, sample_dir, assembler):
 # --------------------------------------------------------------
 # Replicons one assembly lacks that the others agree on
 # --------------------------------------------------------------
-MIN_REPLICON_BP = 5000     # contigs shorter than this are not checked
-MIN_ALIGNED_FRACTION = 0.5  # a contig is "present" if at least this much aligns
+MIN_REPLICON_BP = 5000      # contigs shorter than this are not checked
+MIN_ALIGNED_FRACTION = 0.5   # a contig is "present" in an assembly if this much aligns
+# With no reference to grade against, lean towards keeping plasmids: a candidate
+# must hold this much of another assembler's contig to count as having it.
+MIN_KEPT_FRACTION_NO_REF = 0.95
 
 
 def aligned_fraction(intervals, length):
@@ -146,47 +149,57 @@ def aligned_fraction(intervals, length):
     return covered / length if length else 0.0
 
 
-def contigs_absent_from(target, query, cpu_threads, work_dir):
-    """Contigs of *query* (>= MIN_REPLICON_BP) with < MIN_ALIGNED_FRACTION aligned to *target*."""
+def contig_coverage(target, query, cpu_threads, work_dir):
+    """{contig: fraction aligned to *target*} for contigs of *query* >= MIN_REPLICON_BP.
+
+    Returns None if minimap2 fails, so the caller can skip the check.
+    """
     lengths = {r.id: len(r.seq) for r in SeqIO.parse(query, "fasta") if len(r.seq) >= MIN_REPLICON_BP}
     if not lengths:
-        return set()
+        return {}
     paf = os.path.join(work_dir, f"{Path(query).stem}__vs__{Path(target).stem}.paf")
     with open(paf, "w") as out:
         rc = subprocess.run(["minimap2", "-x", "asm10", "-t", str(cpu_threads), target, query],
                             stdout=out, stderr=subprocess.DEVNULL).returncode
     if rc != 0:
         print(f"WARN:\tminimap2 failed comparing {query} to {target}; skipping the replicon check.")
-        return set()
+        return None
     hits = {}
     with open(paf) as fh:
         for line in fh:
             f = line.split("\t")
             if f[0] in lengths:
                 hits.setdefault(f[0], []).append((int(f[2]), int(f[3])))
-    return {c for c, n in lengths.items() if aligned_fraction(hits.get(c, []), n) < MIN_ALIGNED_FRACTION}
+    return {c: aligned_fraction(hits.get(c, []), n) for c, n in lengths.items()}
 
 
-def missing_shared_replicons(assemblies, cpu_threads, work_dir):
+def missing_shared_replicons(assemblies, cpu_threads, work_dir, min_kept=MIN_ALIGNED_FRACTION):
     """Per assembly: contigs it lacks that two other assemblies both have.
 
-    A contig of assembly A counts against candidate C when it is absent from C
-    but present in some third assembly B, so two assemblers agree it is real.
-    Returns {method: [(source method, contig, length), ...]}.
+    A contig of assembly A counts against candidate C when less than *min_kept*
+    of it aligns to C, and at least MIN_ALIGNED_FRACTION of it aligns to some
+    third assembly B, so two assemblers agree it is real. Low-coverage junk that
+    only one assembler made therefore never counts.
+    Returns {method: [(source method, contig, length, fraction in candidate), ...]}.
     """
     os.makedirs(work_dir, exist_ok=True)
     lengths = {m: {r.id: len(r.seq) for r in SeqIO.parse(a, "fasta")} for m, a in assemblies.items()}
-    absent = {(c, q): contigs_absent_from(assemblies[c], assemblies[q], cpu_threads, work_dir)
-              for c in assemblies for q in assemblies if c != q}
+    cov = {}
+    for c in assemblies:
+        for q in assemblies:
+            if c != q:
+                cov[(c, q)] = contig_coverage(assemblies[c], assemblies[q], cpu_threads, work_dir)
+                if cov[(c, q)] is None:
+                    return {}
     missing = {}
     for cand in assemblies:
         for src in assemblies:
             if src == cand:
                 continue
-            for contig in absent[(cand, src)]:
-                if any(contig not in absent[(third, src)]
-                       for third in assemblies if third not in (cand, src)):
-                    missing.setdefault(cand, []).append((src, contig, lengths[src][contig]))
+            for contig, frac in cov[(cand, src)].items():
+                if frac < min_kept and any(cov[(third, src)].get(contig, 0) >= MIN_ALIGNED_FRACTION
+                                           for third in assemblies if third not in (cand, src)):
+                    missing.setdefault(cand, []).append((src, contig, lengths[src][contig], frac))
     return missing
 
 
@@ -405,15 +418,17 @@ def compare_assemblies(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
     # Prokaryotes: fewer contigs must not win by dropping a replicon. Rule out
     # an assembly that lacks a contig two other assemblers both have (a
-    # Flye-mode MaSuRCA assembly once won without a 13.8 kb plasmid). If that
-    # would rule out every assembly, keep them all.
+    # Flye-mode MaSuRCA assembly once won without a 13.8 kb plasmid). With no
+    # reference, lean towards keeping plasmids: the candidate must hold 95% of
+    # such a contig, not half. If every assembly would be ruled out, keep all.
     if str(current_series.get("ORGANISM_KARYOTE", "")).strip().lower() == "prokaryote" and len(methods) >= 3:
+        min_kept = MIN_ALIGNED_FRACTION if pd.notna(ref_seq) else MIN_KEPT_FRACTION_NO_REF
         missing = missing_shared_replicons(assemblies, cpu_threads,
-                                           os.path.join(sample_dir, "replicon_check"))
+                                           os.path.join(sample_dir, "replicon_check"), min_kept)
         for m, items in missing.items():
-            for src, contig, length in items:
-                print(f"WARN:\t{m} assembly lacks {src} contig {contig} ({length} bp), "
-                      f"which another assembler also has.")
+            for src, contig, length, frac in items:
+                print(f"WARN:\t{m} assembly holds only {frac:.0%} of {src} contig {contig} "
+                      f"({length} bp), which another assembler also has.")
         kept = [m for m in methods if m not in missing]
         if kept and len(kept) < len(methods):
             print(f"NOTE:\tRuled out for missing replicons: {', '.join(m for m in methods if m in missing)}")
