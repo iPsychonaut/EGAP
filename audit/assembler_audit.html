@@ -88,18 +88,20 @@ ol.plan{margin:0;padding-left:1.3rem;display:grid;gap:10px;max-width:72ch}
 .toc{display:flex;flex-wrap:wrap;gap:8px}
 .toc a{font:.8rem var(--mono);text-decoration:none;border:1px solid var(--line);padding:5px 10px;border-radius:999px;color:var(--ink);background:var(--paper)}
 .toc a:hover{border-color:var(--accent)}
+.upd{margin-top:6px;padding:6px 10px;border-radius:6px;background:var(--soft);font-size:.92rem}
+.verdict{font:600 .7rem/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
 @media (prefers-reduced-motion:no-preference){.toc a{transition:border-color .15s}}
 </style>
 
 <div class="wrap">
 <header>
   <div class="seq" aria-hidden="true"><b class="sA">A</b><b class="sT">T</b><b class="sG">G</b><b class="sC">C</b><b class="sG">G</b><b class="sA">A</b><b class="sT">T</b><b class="sC">C</b><b class="sC">C</b><b class="sG">G</b><b class="sA">A</b><b class="sT">T</b><b class="sT">T</b><b class="sA">A</b><b class="sG">G</b><b class="sC">C</b><b class="sA">A</b><b class="sT">T</b><b class="sG">G</b><b class="sC">C</b><b class="sA">A</b><b class="sA">A</b><b class="sT">T</b><b class="sG">G</b><b class="sC">C</b><b class="sT">T</b><b class="sA">A</b><b class="sG">G</b></div>
-  <span class="eyebrow">EGAP v3.4.2 · audit only, nothing changed</span>
+  <span class="eyebrow">EGAP v3.4.2 · audit 2026-10-12 · A/B results added 2026-10-16</span>
   <h1>Assembler audit: versions, upgrade room, and the right tool per kingdom</h1>
   <p class="lede">EGAP builds a genome by running several <button class="j" data-k="assembler">assemblers</button> on the same reads and keeping the best result. This audit checks how old those assemblers are, what stops us upgrading them, whether newer tools win for specific kinds of organism, and which organisms we would need to test them fairly.</p>
-  <div class="meta"><span>Checked 2026-10-12</span><span>Branch release/v3.4.2-sha256</span><span>Sources: GitHub releases, Bioconda API, peer-reviewed papers, EGAP's own test runs</span></div>
+  <div class="meta"><span>Audit 2026-10-12</span><span>A/B tests 2026-10-13 to 16</span><span>Changes: branch chore/py312, <a href="https://github.com/iPsychonaut/EGAP/pull/37">EGAP PR #37</a></span><span>Sources: GitHub releases, Bioconda API, peer-reviewed papers, EGAP's own test and A/B runs</span></div>
   <p class="src">Words with a dotted underline are jargon. Click or tap one for a plain-English definition. All of them are also listed in the glossary at the end.</p>
-  <nav class="toc" aria-label="Sections"><a href="#summary">Summary</a><a href="#today">EGAP today</a><a href="#versions">Versions</a><a href="#python">Python 3.8 wall</a><a href="#ecoli">E. coli results</a><a href="#kingdoms">Per kingdom</a><a href="#benchmarks">Test organisms</a><a href="#plan">A/B plan</a><a href="#sources">Sources</a><a href="#glossary">Glossary</a></nav>
+  <nav class="toc" aria-label="Sections"><a href="#summary">Summary</a><a href="#results">A/B results</a><a href="#today">EGAP today</a><a href="#versions">Versions</a><a href="#python">Python 3.8 wall</a><a href="#ecoli">E. coli results</a><a href="#kingdoms">Per kingdom</a><a href="#benchmarks">Test organisms</a><a href="#plan">Original plan</a><a href="#sources">Sources</a><a href="#glossary">Glossary</a></nav>
 </header>
 
 <section id="summary">
@@ -107,13 +109,81 @@ ol.plan{margin:0;padding-left:1.3rem;display:grid;gap:10px;max-width:72ch}
   <h2>Your plan makes sense, and the audit found six things</h2>
   <p>Making a separate branch, raising the version <button class="j" data-k="pin">pins</button>, and comparing old and new images with an <button class="j" data-k="ab">A/B test</button> is the right way to do this. Three findings change how that branch should be set up.</p>
   <ul class="find">
-    <li><span class="pill p-bad">Blocker</span><div><b>Python 3.8 is what holds EGAP back, not the assemblers.</b> The <button class="j" data-k="env">conda environment</button> is pinned to Python 3.8. Flye 2.9.6, compleasm 0.2.9+, BUSCO 6 and most of the newer bacterial tools publish no Python 3.8 build. The upgrade branch has to move to Python 3.10 first, and the pandas/numpy pins will have to move with it.</div></li>
-    <li><span class="pill p-bad">Test data</span><div><b>The three E. coli read sets are three different strains, and none of them is K-12.</b> The reference is K-12 MG1655 (GCA_000005845.2). The PacBio reads are O157:H7, which has a genome about 0.8 Mb bigger. Comparing against the wrong reference makes <button class="j" data-k="quast">QUAST</button> error counts meaningless. An A/B test needs reads and a reference from the same strain.</div></li>
-    <li><span class="pill p-warn">Wrong comment</span><div><b>The Dockerfile's reason for pinning Flye is not true.</b> Line 41 says "&gt;=3.0 changes assembly graph format". Flye 3.0 does not exist; the newest release is 2.9.6. The real reason to stay on 2.9.5 is that 2.9.6 has no Python 3.8 build.</div></li>
-    <li><span class="pill p-info">Versions</span><div><b>Only two assemblers have newer releases.</b> SPAdes 4.3.0 is a straightforward bump. Flye 2.9.6 is a small fix release, but it changes the default for nanopore R10 reads. MaSuRCA 4.1.4 and hifiasm 0.25.0 are already the newest releases. RagTag 2.1.1 fixes a wrong-orientation bug but is not on Bioconda yet.</div></li>
-    <li><span class="pill p-info">Per kingdom</span><div><b>The read type matters more than the kingdom, but there are clear winners.</b> For animals and plants, use hifiasm, including its newer nanopore mode. For fungi, use Flye plus short-read <button class="j" data-k="polish">polishing</button>. For bacteria and archaea, build an Autocycler <button class="j" data-k="consensus">consensus</button>. Long-read-first assembly has overtaken hybrid assemblers like MaSuRCA in every recent benchmark we found.</div></li>
-    <li><span class="pill p-warn">Our own runs</span><div><b>On the nanopore + Illumina E. coli test, Flye and MaSuRCA did badly.</b> They recovered 75% and 49% of the <button class="j" data-k="busco">BUSCO</button> genes, while SPAdes recovered 99.7%. The raw nanopore data covers the genome hundreds of times over, so low <button class="j" data-k="coverage">coverage</button> doesn't explain it. Diagnose this before blaming the versions.</div></li>
+    <li><span class="pill p-bad">Blocker</span><div><b>Python 3.8 is what holds EGAP back, not the assemblers.</b> The <button class="j" data-k="env">conda environment</button> is pinned to Python 3.8. Flye 2.9.6, compleasm 0.2.9+, BUSCO 6 and most of the newer bacterial tools publish no Python 3.8 build. The upgrade branch has to move to Python 3.10 first, and the pandas/numpy pins will have to move with it.<p class="upd"><b>Update:</b> done, on Python 3.12, since 3.10 reaches end of life in October 2026. The only real blocker was a stale pin in compleasm's recipe, worked around in EGAP and reported upstream.</p></div></li>
+    <li><span class="pill p-bad">Test data</span><div><b>The three E. coli read sets are three different strains, and none of them is K-12.</b> The reference is K-12 MG1655 (GCA_000005845.2). The PacBio reads are O157:H7, which has a genome about 0.8 Mb bigger. Comparing against the wrong reference makes <button class="j" data-k="quast">QUAST</button> error counts meaningless. An A/B test needs reads and a reference from the same strain.<p class="upd"><b>Update:</b> the A/B tests added <i>K. pneumoniae</i> KPC2_202310: nanopore reads, Illumina reads and a complete reference, all from one isolate. Every accuracy number in the results comes from it.</p></div></li>
+    <li><span class="pill p-warn">Wrong comment</span><div><b>The Dockerfile's reason for pinning Flye is not true.</b> Line 41 says "&gt;=3.0 changes assembly graph format". Flye 3.0 does not exist; the newest release is 2.9.6. The real reason to stay on 2.9.5 is that 2.9.6 has no Python 3.8 build.<p class="upd"><b>Update:</b> comment corrected, and EGAP now uses Flye 2.9.6.</p></div></li>
+    <li><span class="pill p-info">Versions</span><div><b>Only two assemblers have newer releases.</b> SPAdes 4.3.0 is a straightforward bump. Flye 2.9.6 is a small fix release, but it changes the default for nanopore R10 reads. MaSuRCA 4.1.4 and hifiasm 0.25.0 are already the newest releases. RagTag 2.1.1 fixes a wrong-orientation bug but is not on Bioconda yet.<p class="upd"><b>Update:</b> SPAdes 4.3.0, Flye 2.9.6, BUSCO 6.1.0 and compleasm 0.2.10 are in. None of them changed an assembly's quality.</p></div></li>
+    <li><span class="pill p-info">Per kingdom</span><div><b>The read type matters more than the kingdom, but there are clear winners.</b> For animals and plants, use hifiasm, including its newer nanopore mode. For fungi, use Flye plus short-read <button class="j" data-k="polish">polishing</button>. For bacteria and archaea, build an Autocycler <button class="j" data-k="consensus">consensus</button>. Long-read-first assembly has overtaken hybrid assemblers like MaSuRCA in every recent benchmark we found.<p class="upd"><b>Update:</b> the bacterial A/B agreed. Polypolish + Pypolca beat Pilon, and Racon stayed ahead of Medaka.</p></div></li>
+    <li><span class="pill p-warn">Our own runs</span><div><b>On the nanopore + Illumina E. coli test, Flye and MaSuRCA did badly.</b> They recovered 75% and 49% of the <button class="j" data-k="busco">BUSCO</button> genes, while SPAdes recovered 99.7%. The raw nanopore data covers the genome hundreds of times over, so low <button class="j" data-k="coverage">coverage</button> doesn't explain it. Diagnose this before blaming the versions.<p class="upd"><b>Update:</b> those June numbers predate two fixes already on main: the hybrid sample re-paired with Illumina reads from the same isolate, and Flye's nanopore mode chosen from the reads. In every A/B run on current main, Flye scored 99.7% and MaSuRCA 99.1–99.4%.</p></div></li>
   </ul>
+</section>
+
+<section id="results">
+  <span class="eyebrow">A/B results · 2026-10-13 to 16</span>
+  <h2>What the A/B tests found</h2>
+  <p>Every change was tested by running EGAP's old and new versions on the same reads, with the same 7 CPUs and 24 GB, on the local k3d cluster. Accuracy is graded against the <i>K. pneumoniae</i> KPC2_202310 <button class="j" data-k="reference">reference</button>, which was assembled from the same isolate as the reads. The changes are on branch <code>chore/py312</code> (<a href="https://github.com/iPsychonaut/EGAP/pull/37">EGAP PR #37</a>), and the full log is in <code>audit/PY312_UPGRADE_PLAN.md</code>.</p>
+
+  <div class="tbl"><table>
+    <thead><tr><th>Round</th><th>What changed</th><th>Result</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Python 3.8 → 3.12 and its libraries; every tool version held the same</td><td>All 12 sample runs passed. SPAdes, hifiasm and Flye on PacBio were byte-identical. MaSuRCA and Flye on nanopore varied, but by the same amount as between two Python 3.8 runs (<button class="j" data-k="noise">run-to-run noise</button>). Two library breaks were found and pinned: tiara needed setuptools &lt;81, later fixed by tiara-entheome 1.0.1, and NanoPlot needs plotly &lt;6.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>2</td><td>SPAdes 4.3.0, Flye 2.9.6; compleasm 0.2.10, BUSCO 6.1.0</td><td>No quality change. SPAdes was byte-identical on E. coli and 3 bp different on <i>K. pneumoniae</i>. compleasm scores were identical. BUSCO 6.1 broke EGAP's fallback path (new <code>odb12.2</code> folder names) and uploads usage data by default; both are fixed.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>Speed</td><td>MaSuRCA builds its final contigs with Flye instead of its older CABOG assembler</td><td>0 vs 5 <button class="j" data-k="misassembly">misassemblies</button>, about 5× fewer errors, 42% faster, a third of the memory. But it dropped a small plasmid; see the replicon check below.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>Speed</td><td>Pilon → Polypolish + Pypolca for Illumina polishing</td><td>About 6 errors left vs 12; the polishing step was 20% faster and used 30% less memory.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>Speed</td><td>Racon → Medaka 2.2 for nanopore polishing</td><td>Better on its own (24 vs 41 errors) but worse once short-read polishing ran after it (11 vs 6), and it used 7.7 GB vs 1.3 GB.</td><td><span class="verdict p-bad">Rejected</span></td></tr>
+      <tr><td>Speed</td><td>SPAdes <code>--frugal</code> (a low-memory mode)</td><td>No memory saved on bacteria (1.67 GB either way). Illumina-only N50 fell from 1.11 Mb to 139 kb.</td><td><span class="verdict p-bad">Rejected</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="stack">
+    <div class="panel">
+      <h3>Polishing: errors left in the <i>K. pneumoniae</i> assembly</h3>
+      <p class="src">Mismatches plus indels across the 5.68 Mb genome, counted by QUAST against the reference. Fewer is better. The pre-polish assembly had about 40.</p>
+      <div class="chart" id="c-polish"></div>
+      <p>Two rounds of Racon then Polypolish + Pypolca is the most accurate path. Racon alone slightly <i>raised</i> the indel count, because these R10 nanopore reads were already very accurate; the short-read step is what cleans up.</p>
+    </div>
+    <div class="panel">
+      <h3>MaSuRCA stage: old CABOG vs Flye mode</h3>
+      <p class="src">Wall-clock seconds and peak memory (GB) for the MaSuRCA stage alone, measured from the container's own counters.</p>
+      <div class="chart" id="c-masurca"></div>
+      <p>Flye mode also produced a cleaner chromosome: 0 vs 5 misassemblies and 0.73 + 0.58 vs 3.20 + 6.33 mismatches + indels per 100 kb.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>The plasmid problem, and the replicon check</h3>
+    <p>The first full run with the new defaults picked Flye-mode MaSuRCA for <i>K. pneumoniae</i>, because it had the fewest <button class="j" data-k="contig">contigs</button>. But it was missing the reference's 13.8 kb <button class="j" data-k="plasmid">plasmid</button>. EGAP's scoring (BUSCO, contig count, N50) can't see a lost <button class="j" data-k="replicon">replicon</button>, so it rewarded the loss.</p>
+    <p>EGAP now aligns every assembly against every other. For bacteria and archaea, it rules out an assembly that lacks a contig of at least 5 kb that two other assemblers both made. With no reference, it leans towards keeping plasmids: the assembly must hold 95% of such a contig, not just half. On both hybrid test samples this rules out Flye-mode MaSuRCA, so the final choice goes back to the assembly that keeps every plasmid.</p>
+    <div class="tbl" style="border:0"><table>
+      <thead><tr><th><i>K. pneumoniae</i> final assembly vs reference</th><th class="num">Before (v3.4.2 defaults)</th><th class="num">New defaults, no check</th><th class="num">New defaults + check</th></tr></thead>
+      <tbody>
+        <tr><td>Contigs / share of the reference genome recovered</td><td class="num">4 / 99.999%</td><td class="num" style="color:var(--bad)">3 / 99.745%</td><td class="num">4 / 99.999%</td></tr>
+        <tr><td>Mismatches + indels per 100 kb</td><td class="num">0.02 + 0.19</td><td class="num">0.07 + 0.00</td><td class="num"><b>0.00 + 0.11</b></td></tr>
+        <tr><td>Whole-run wall time</td><td class="num">4352 s</td><td class="num">4321 s</td><td class="num">4407 s</td></tr>
+      </tbody>
+    </table></div>
+    <p class="src">Whole runs stayed within about 7% of the old timings and peaked around 12 GB either way. The stages that got cheaper are a small share of a run, and the 12 GB peak comes from another stage.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h3>Bugs the tests uncovered</h3>
+      <ul class="refs" style="padding-left:1.1rem">
+        <li><b>FastQC never ran</b> in the shipped image. Conda installed FastQC 0.13, which rejects the <code>-o</code> flag EGAP used, so read-QC reports were silently missing.</li>
+        <li><b>The full Docker image ran tools with the wrong Python.</b> Funannotate failed outright, and EGAP picked up the annotation environment's Trimmomatic.</li>
+        <li><b>The annotation environment's install hung for 7+ hours.</b> It now solves in under a minute.</li>
+        <li><b>MaSuRCA's Flye mode</b> passed an option only Flye 2.5 understood. EGAP now filters it out, and the Bioconda recipe fix is in <a href="https://github.com/bioconda/bioconda-recipes/pull/70313">bioconda-recipes #70313</a>.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Still open</h3>
+      <ul class="refs" style="padding-left:1.1rem">
+        <li>The Bioconda release on Python 3.12 waits on compleasm's recipe fix (<a href="https://github.com/bioconda/bioconda-recipes/pull/60482">#60482</a>).</li>
+        <li>pandas 3 gets its own round later.</li>
+        <li>All accuracy evidence comes from one bacterium. A plasmid-rich hybrid with a same-strain reference, and one test organism per kingdom (see <a href="#benchmarks">Test organisms</a>), would strengthen it.</li>
+      </ul>
+    </div>
+  </div>
 </section>
 
 <section id="today">
@@ -315,8 +385,9 @@ ol.plan{margin:0;padding-left:1.3rem;display:grid;gap:10px;max-width:72ch}
 </section>
 
 <section id="plan">
-  <span class="eyebrow">Proposal (not started)</span>
+  <span class="eyebrow">Original proposal · carried out, see <a href="#results">A/B results</a></span>
   <h2>How an upgrade branch would be A/B tested</h2>
+  <p class="upd">This is the plan as written before the tests. It was followed, with two changes: Python went to 3.12 instead of 3.10, and new tools came in as tested replacements (Polypolish, Pypolca, MaSuRCA's Flye mode), not in a side environment.</p>
   <p>This reuses the existing k3d A/B harness in <code>tests/ab/ab-test.yaml</code>. It runs the same samples under the same CPU and RAM limits, with <code>egap:old</code> against <code>egap:new</code>.</p>
   <ol class="plan">
     <li><b>Fix the test data first.</b> Use read sets and references from the same strain, for example <i>K. pneumoniae</i> KPC2_202310 for bacteria and one primary organism per kingdom from the table above. Otherwise QUAST's misassembly and error counts can't tell old and new apart.</li>
@@ -396,6 +467,10 @@ const G={
  bioconda:["Bioconda","The community package channel that most bioinformatics tools are installed from. A tool upgrade usually has to land here before EGAP can use it."],
  accession:["Accession","A database ID. SRR… numbers are raw read sets in the Sequence Read Archive; GCA_/GCF_ numbers are finished genome assemblies at NCBI."],
  downsample:["Downsampling","Randomly keeping only part of the reads (say 30× instead of 300×) so a test runs fast while still being realistic."],
+ reference:["Reference genome","A finished, trusted genome of the same organism. Lining an assembly up against it shows every error the assembly has, so it is the gold standard for grading."],
+ noise:["Run-to-run noise","Some assemblers give slightly different results each time they run on the same data, because they use several CPU threads at once. Before blaming a change, you measure how much the result varies between two identical runs."],
+ misassembly:["Misassembly","A place where an assembler joined two pieces of DNA that are not neighbours in the real genome. Usually caused by repeats."],
+ replicon:["Replicon","A separate DNA molecule that copies itself: in bacteria, the chromosome and each plasmid. A complete bacterial assembly has one contig per replicon."],
  preprint:["Preprint","A paper posted publicly before peer review. Useful and recent, but its claims haven't been checked by independent reviewers yet."]
 };
 const pop=document.getElementById('pop');let cur=null;
@@ -443,6 +518,9 @@ function hbar(id,rows,o={}){const W=520,L=o.L||120,R=70,bh=22,gap=10,top=8,H=top
 hbar('c-human',[["HG002 hifiasm",8.4,'var(--A)'],["HG002 Verkko",103.1,'var(--T)'],["HG001 hifiasm",15.0,'var(--A)'],["HG001 Verkko",126.7,'var(--T)'],["HG005 hifiasm",10.8,'var(--A)'],["HG005 Verkko",86.7,'var(--T)']],{L:118,fmt:v=>v+' h'});
 hbar('c-fungi',[["Raven",13.2,'var(--C)'],["hifiasm",30.7,'var(--A)'],["Flye",45.1,'var(--G)'],["SPAdes (Illu)",161.2,'var(--muted)'],["Canu",1527,'var(--T)']],{log:true,min:10,max:2000,ticks:[10,100,1000],L:104,fmt:v=>v+' s'});
 hbar('c-size',[["M. jannaschii",1.74,'var(--C)'],["H. salinarum",2.57,'var(--C)'],["E. coli K-12",4.64,'var(--C)'],["K. pneumoniae",5.66,'var(--C)'],["S. cerevisiae",12.1,'var(--G)'],["C. albicans",14.6,'var(--G)'],["C. elegans",106,'var(--T)'],["C. reinhardtii",114,'var(--A)'],["A. thaliana",135,'var(--A)'],["D. melanogaster",144,'var(--T)'],["Human (scale)",3100,'var(--muted)']],{log:true,min:1,max:4000,ticks:[1,10,100,1000],L:120,fmt:v=>v+' Mb'});
+hbar('c-polish',[["Pre-polish",40,'var(--muted)'],["Racon ×2",41,'var(--muted)'],["Medaka",24,'var(--muted)'],["Medaka+Pilon",26,'var(--T)'],["Racon×2+Pilon",12,'var(--G)'],["Medaka+Polypolish+Pypolca",11,'var(--C)'],["Racon×2+Polypolish+Pypolca",6,'var(--A)']],{L:190,fmt:v=>v+' errors'});
+hbar('c-masurca',[["K. pn. CABOG",858,'var(--T)'],["K. pn. Flye mode",496,'var(--A)'],["E. coli CABOG",914,'var(--T)'],["E. coli Flye mode",678,'var(--A)']],{L:140,fmt:v=>v+' s'});
+hbar('c-masurca',[["K. pn. CABOG",7.9,'var(--T)'],["K. pn. Flye mode",2.6,'var(--A)'],["E. coli CABOG",5.9,'var(--T)'],["E. coli Flye mode",2.5,'var(--A)']],{L:140,fmt:v=>v+' GB'});
 hbar('c-hybrid',[["Hybracter",0.24,'var(--A)'],["Dragonflye",0.74,'var(--G)'],["Unicycler",1.49,'var(--T)']],{L:96});
 
 // Dorado stacked
