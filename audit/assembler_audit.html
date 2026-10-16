@@ -119,7 +119,7 @@ ol.plan{margin:0;padding-left:1.3rem;display:grid;gap:10px;max-width:72ch}
 </section>
 
 <section id="results">
-  <span class="eyebrow">A/B results · 2026-10-13 to 16</span>
+  <span class="eyebrow">A/B results · 2026-10-13 to 16, pandas 3 round 2026-10-16</span>
   <h2>What the A/B tests found</h2>
   <p>Every change was tested by running EGAP's old and new versions on the same reads, with the same 7 CPUs and 24 GB, on the local k3d cluster. Accuracy is graded against the <i>K. pneumoniae</i> KPC2_202310 <button class="j" data-k="reference">reference</button>, which was assembled from the same isolate as the reads. The changes are on branch <code>chore/py312</code> (<a href="https://github.com/iPsychonaut/EGAP/pull/37">EGAP PR #37</a>), and the full log is in <code>audit/PY312_UPGRADE_PLAN.md</code>.</p>
 
@@ -128,6 +128,7 @@ ol.plan{margin:0;padding-left:1.3rem;display:grid;gap:10px;max-width:72ch}
     <tbody>
       <tr><td>1</td><td>Python 3.8 → 3.12 and its libraries; every tool version held the same</td><td>All 12 sample runs passed. SPAdes, hifiasm and Flye on PacBio were byte-identical. MaSuRCA and Flye on nanopore varied, but by the same amount as between two Python 3.8 runs (<button class="j" data-k="noise">run-to-run noise</button>). Two library breaks were found and pinned: tiara needed setuptools &lt;81, later fixed by tiara-entheome 1.0.1, and NanoPlot needs plotly &lt;6.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
       <tr><td>2</td><td>SPAdes 4.3.0, Flye 2.9.6; compleasm 0.2.10, BUSCO 6.1.0</td><td>No quality change. SPAdes was byte-identical on E. coli and 3 bp different on <i>K. pneumoniae</i>. compleasm scores were identical. BUSCO 6.1 broke EGAP's fallback path (new <code>odb12.2</code> folder names) and uploads usage data by default; both are fixed.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
+      <tr><td>3</td><td><button class="j" data-k="pandas">pandas</button> 2.3 → 3.0, everything else held the same (<a href="https://github.com/iPsychonaut/EGAP/pull/38">PR #38</a>)</td><td>All 8 sample runs passed, and final QC stats were identical on every sample. The only assembly differences came from MaSuRCA and Flye, which vary between runs anyway. No pandas warnings or errors, and the same HTML, FastQC and NanoPlot reports on both sides. One small code fix: missing cells in the report's BUSCO gene table now show "-".</td><td><span class="verdict p-ok">Adopted</span></td></tr>
       <tr><td>Speed</td><td>MaSuRCA builds its final contigs with Flye instead of its older CABOG assembler</td><td>0 vs 5 <button class="j" data-k="misassembly">misassemblies</button>, about 5× fewer errors, 42% faster, a third of the memory. But it dropped a small plasmid; see the replicon check below.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
       <tr><td>Speed</td><td>Pilon → Polypolish + Pypolca for Illumina polishing</td><td>About 6 errors left vs 12; the polishing step was 20% faster and used 30% less memory.</td><td><span class="verdict p-ok">Adopted</span></td></tr>
       <tr><td>Speed</td><td>Racon → Medaka 2.2 for nanopore polishing</td><td>Better on its own (24 vs 41 errors) but worse once short-read polishing ran after it (11 vs 6), and it used 7.7 GB vs 1.3 GB.</td><td><span class="verdict p-bad">Rejected</span></td></tr>
@@ -179,7 +180,6 @@ ol.plan{margin:0;padding-left:1.3rem;display:grid;gap:10px;max-width:72ch}
       <h3>Still open</h3>
       <ul class="refs" style="padding-left:1.1rem">
         <li>The Bioconda release on Python 3.12 waits on compleasm's recipe fix (<a href="https://github.com/bioconda/bioconda-recipes/pull/60482">#60482</a>).</li>
-        <li>pandas 3 gets its own round later.</li>
         <li>All accuracy evidence comes from one bacterium. A plasmid-rich hybrid with a same-strain reference, and one test organism per kingdom (see <a href="#benchmarks">Test organisms</a>), would strengthen it.</li>
       </ul>
     </div>
@@ -468,6 +468,7 @@ const G={
  bioconda:["Bioconda","The community package channel that most bioinformatics tools are installed from. A tool upgrade usually has to land here before EGAP can use it."],
  accession:["Accession","A database ID. SRR… numbers are raw read sets in the Sequence Read Archive; GCA_/GCF_ numbers are finished genome assemblies at NCBI."],
  downsample:["Downsampling","Randomly keeping only part of the reads (say 30× instead of 300×) so a test runs fast while still being realistic."],
+ pandas:["pandas","The Python library EGAP uses to read and write its sample tables and statistics. Version 3 changed how it copies data and how it stores text, so EGAP was re-tested against it before switching."],
  reference:["Reference genome","A finished, trusted genome of the same organism. Lining an assembly up against it shows every error the assembly has, so it is the gold standard for grading."],
  noise:["Run-to-run noise","Some assemblers give slightly different results each time they run on the same data, because they use several CPU threads at once. Before blaming a change, you measure how much the result varies between two identical runs."],
  misassembly:["Misassembly","A place where an assembler joined two pieces of DNA that are not neighbours in the real genome. Usually caused by repeats."],
