@@ -176,8 +176,11 @@ RUN cp /opt/conda/envs/EGAP_env/bin/flye-minimap2 /EGAP_env/bin/flye-minimap2 &&
     PATH="/EGAP_env/bin:$PATH" flye --version && \
     /EGAP_env/bin/flye-minimap2 --secondary-seq=yes --version
 
-# Download EGAP v3.4.2 scripts from GitHub into the EGAP_env.
-# Install wget (if not already available) to retrieve the files.
+# ponytail: dead layer kept byte-identical so the EGEP/funannotate conda
+# solves below stay cached (BuildKit keys each layer on its parent; the
+# unpinned funannotate solve has hung for 7+ hours). The runtime stage
+# overwrites every file this fetches with the checkout's own copies. Delete
+# this RUN the next time a conda line below changes anyway.
 RUN apt-get update && apt-get install -y wget && \
     EGAP_BRANCH="v3.4.2" && \
     EGAP_RAW="https://raw.githubusercontent.com/iPsychonaut/EGAP/${EGAP_BRANCH}" && \
@@ -356,6 +359,14 @@ ENV KRAKEN2_DB="" \
 
 # One-time Funannotate database setup. Skipped silently if already initialised.
 RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"
+
+# EGAP scripts come from the build context, so the image always matches the
+# checkout it was built from (the old wget-from-tag fetch drifted whenever
+# bin/ changed after the tag). Last layer on purpose: a script edit rebuilds
+# only this; the conda solves and the funannotate database download above
+# stay cached. .dockerignore limits the context to these paths.
+COPY --chmod=755 EGAP.py /EGAP_env/EGAP.py
+COPY --chmod=755 bin/*.py /EGAP_env/bin/
 
 # -----------------------------------------------------------------------------
 # Default entrypoint — runs EGAP directly.
