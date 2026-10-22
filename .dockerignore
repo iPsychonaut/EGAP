@@ -1,6 +1,7 @@
-# Allowlist: the image only needs EGAP.py and bin/. Everything else
+# Allowlist: the image needs EGAP.py, bin/ and resources/templates/. Everything else
 # (golden_baseline, A/B outputs, .git, docs) would bloat the build context.
 *
 !EGAP.py
 !bin/
+!resources/templates/
 bin/__pycache__/
