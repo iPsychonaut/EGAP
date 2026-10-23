@@ -1,2 +1,5 @@
-# Run inside Linux containers; CRLF would break them.
-tests/ab/*.sh text eol=lf
+# Linux consumes these; CRLF breaks heredocs and shebangs and busts the Docker layer cache.
+Dockerfile eol=lf
+.dockerignore eol=lf
+*.sh eol=lf
+*.def eol=lf

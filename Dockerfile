@@ -30,8 +30,8 @@ RUN mamba install -n base --yes conda-pack
 # Pinning rationale (Python 3.12 solve checked 2026-10-12):
 #   python 3.12       3.8 is end of life and blocks Flye 2.9.6, compleasm
 #                     0.2.9+ and BUSCO 6. tiara-entheome needs <3.13.
-#   pandas>=2.2,<3    pandas 3 changes copy and string semantics; move it in
-#                     its own round. 2.2 is the first pandas with py3.12.
+#   pandas>=3,<4      copy-on-write and the str dtype; checked in its own A/B
+#                     round (pandas 2.3 vs 3.0).
 #   numpy>=1.26,<3    1.26 is the first numpy with py3.12.
 #   plotly>=5.24,<6   NanoPlot 1.46.2 calls figure_factory.create_2d_density,
 #                     which plotly 6 removed; py3.12 envs otherwise get 7.
@@ -60,7 +60,7 @@ RUN mamba install -n base --yes conda-pack
 #                     not finish in 20 min; this order solves in minutes.
 RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioconda \
     'python>=3.12,<3.13' \
-    'pandas>=2.2,<3' \
+    'pandas>=3,<4' \
     'numpy>=1.26,<3' \
     'plotly>=5.24,<6' \
     'masurca=4.1.4' \
@@ -176,8 +176,11 @@ RUN cp /opt/conda/envs/EGAP_env/bin/flye-minimap2 /EGAP_env/bin/flye-minimap2 &&
     PATH="/EGAP_env/bin:$PATH" flye --version && \
     /EGAP_env/bin/flye-minimap2 --secondary-seq=yes --version
 
-# Download EGAP v3.4.2 scripts from GitHub into the EGAP_env.
-# Install wget (if not already available) to retrieve the files.
+# ponytail: dead layer kept byte-identical so the EGEP/funannotate conda
+# solves below stay cached (BuildKit keys each layer on its parent; the
+# unpinned funannotate solve has hung for 7+ hours). The runtime stage
+# overwrites every file this fetches with the checkout's own copies. Delete
+# this RUN the next time a conda line below changes anyway.
 RUN apt-get update && apt-get install -y wget && \
     EGAP_BRANCH="v3.4.2" && \
     EGAP_RAW="https://raw.githubusercontent.com/iPsychonaut/EGAP/${EGAP_BRANCH}" && \
@@ -356,6 +359,17 @@ ENV KRAKEN2_DB="" \
 
 # One-time Funannotate database setup. Skipped silently if already initialised.
 RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"
+
+# EGAP scripts come from the build context, so the image always matches the
+# checkout it was built from (the old wget-from-tag fetch drifted whenever
+# bin/ changed after the tag). Last layer on purpose: a script edit rebuilds
+# only this; the conda solves and the funannotate database download above
+# stay cached. .dockerignore limits the context to these paths.
+COPY --chmod=755 EGAP.py /EGAP_env/EGAP.py
+COPY --chmod=755 bin/*.py /EGAP_env/bin/
+# html_reporter looks in <script>/../resources/templates; without this it
+# downloads the templates from GitHub main at run time.
+COPY resources/templates/ /EGAP_env/resources/templates/
 
 # -----------------------------------------------------------------------------
 # Default entrypoint — runs EGAP directly.
