@@ -182,6 +182,14 @@
   <h3>After a reboot</h3>
   <p>Start Docker Desktop and wait for it. Then check with <code>kubectl get nodes</code>.
      If the node is missing or <code>NotReady</code>, run <code>k3d cluster start egap</code>.</p>
+  <div class="warn"><b>The E: drive is not there until you mount it.</b> Docker Desktop only auto-mounts fixed
+    NTFS drives into its VM. The external exFAT drive that holds <code>E:\egap-ab</code> gets an empty placeholder,
+    so every pod sees an empty <code>/data</code> and the A/B jobs fail on a missing TSV. After every Docker Desktop
+    start (and after plugging the drive in) run:
+    <div class="cmd"><pre>powershell -File tests\ab\k3d-mount-e.ps1</pre></div>
+    It mounts E: inside the <code>docker-desktop</code> distro, restarts the node, and prints what the node sees
+    in <code>/data/input</code>. A Windows junction from the old <code>C:\Users\theda\egap-ab</code> path does not work
+    through Docker (<code>Invalid argument</code>).</div>
   <h3>Rebuild from nothing</h3>
   <p>Needed when you change what folders are mounted. Takes about 15 seconds.</p>
   <div class="cmd"><pre>k3d cluster delete egap</pre></div>
