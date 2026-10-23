@@ -138,7 +138,7 @@
     <tr><td>Cluster name</td><td><code>egap</code></td></tr>
     <tr><td>Push images to</td><td><code>localhost:5050/&lt;name&gt;:&lt;tag&gt;</code></td></tr>
     <tr><td>Name images in YAML as</td><td><code>egap-registry:5050/&lt;name&gt;:&lt;tag&gt;</code></td></tr>
-    <tr><td>Data folder on Windows</td><td><code>C:\Users\theda\egap-ab</code></td></tr>
+    <tr><td>Data folder on Windows</td><td><code>E:\egap-ab</code> (external drive; the cluster's <code>/data</code> mount dangles while it is unplugged)</td></tr>
     <tr><td>Same folder inside the cluster</td><td><code>/data</code></td></tr>
     <tr><td>Inputs</td><td><code>egap-ab\input\</code> (mounted read-only)</td></tr>
     <tr><td>Outputs</td><td><code>egap-ab\out\old\</code> and <code>egap-ab\out\new\</code></td></tr>
@@ -185,7 +185,7 @@
   <h3>Rebuild from nothing</h3>
   <p>Needed when you change what folders are mounted. Takes about 15 seconds.</p>
   <div class="cmd"><pre>k3d cluster delete egap</pre></div>
-  <div class="cmd"><pre>k3d cluster create egap --no-lb --registry-create egap-registry:0.0.0.0:5050 --volume "C:\Users\theda\egap-ab:/data@server:0" --k3s-arg "--disable=traefik@server:0" --k3s-arg "--disable=servicelb@server:0"</pre></div>
+  <div class="cmd"><pre>k3d cluster create egap --no-lb --registry-create egap-registry:0.0.0.0:5050 --volume "E:\egap-ab:/data@server:0" --k3s-arg "--disable=traefik@server:0" --k3s-arg "--disable=servicelb@server:0"</pre></div>
   <p>Then push your images again.</p>
   <details><summary>What each flag does</summary>
     <div class="scroll"><table>
