@@ -33,10 +33,9 @@ requirements:
     - plotly >=5.24,<6
     - masurca >=4.1.2
     - quast >=5.2.0
-    # Release blocker: the compleasm recipe pins dendropy <4.6, but every
-    # py3.9+ sepp needs dendropy >=5, so this env does not solve on 3.12 until
-    # bioconda-recipes drops that pin.
-    - compleasm >=0.2.8
+    # 0.2.10 build 1 (bioconda-recipes#70268) dropped the dendropy <4.6 pin
+    # that blocked the py3.12 solve; sepp's dendropy >=5 excludes build 0.
+    - compleasm >=0.2.10
     - busco >=5.8.2
     - biopython >=1.81
     - ragtag >=2.1.0

@@ -37,10 +37,10 @@ RUN mamba install -n base --yes conda-pack
 #                     which plotly 6 removed; py3.12 envs otherwise get 7.
 #   busco=6.1.0       odb12.2 lineages and new scoring; checked against 5.8.3
 #                     in the round-2 A/B.
-#   compleasm         installed below with --no-deps: its recipe pins
-#                     dendropy<4.6, but every py3.9+ sepp needs dendropy>=5.
-#                     compleasm never imports dendropy (it runs sepp), so the
-#                     pin is stale. hmmer and miniprot are its other deps.
+#   compleasm>=0.2.10 0.2.10 build 1 (bioconda-recipes#70268, 2026-10-27)
+#                     dropped the stale dendropy<4.6 pin that kept compleasm
+#                     out of any py3.9+ env with sepp. Build 0 still has it;
+#                     sepp's dendropy>=5 requirement excludes that build.
 #   tiara-entheome    1.0.1 from bioconda; 1.0.0 imported pkg_resources, which
 #                     current setuptools no longer ships. Brings pytorch,
 #                     skorch, numba, tqdm and joblib.
@@ -66,6 +66,7 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
     'masurca=4.1.4' \
     'quast=5.3.0' \
     'busco=6.1.0' \
+    'compleasm>=0.2.10' \
     hmmer \
     miniprot \
     biopython \
@@ -118,13 +119,7 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
 RUN conda run -n EGAP_env quast-download-gridss && \
     conda run -n EGAP_env quast-download-silva
 
-# compleasm without its stale dendropy<4.6 pin (see the rationale above).
-# pip from the release tag, as the bioconda recipe itself builds it: conda's
-# --no-deps still has to satisfy the pin, so it fails too. Move compleasm back
-# into the conda create once bioconda-recipes#60482 lands.
-RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
-        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.10.tar.gz" && \
-    conda run -n EGAP_env compleasm --help >/dev/null
+RUN conda run -n EGAP_env compleasm --help >/dev/null
 
 # Clone and install runner in EGAP_env. pip, not `setup.py install`:
 # Python 3.12 envs carry no setuptools for setup.py to import.
@@ -144,7 +139,7 @@ RUN conda install -n EGAP_env -y --force-reinstall --no-deps \
     conda run -n EGAP_env flye-minimap2 --secondary-seq=yes --version
 
 # conda-pack rewrites the shebang of every launcher it does not manage
-# (pip-installed: compleasm, runner, funannotate, ...) to `#!/usr/bin/env python`.
+# (pip-installed: runner, funannotate, ...) to `#!/usr/bin/env python`.
 # In the runtime image PATH starts with /EGEP_env/bin, so those launchers would
 # run under EGEP_env's python and fail to import their own package. Point each
 # one at its own env's python. Symlinks are skipped so links stay links.
