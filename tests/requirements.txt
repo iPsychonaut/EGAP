@@ -1,5 +1,5 @@
 pytest>=7
-pandas>=2.2,<3
+pandas>=3,<4
 numpy>=1.26,<3
 biopython>=1.79
 matplotlib>=3.3

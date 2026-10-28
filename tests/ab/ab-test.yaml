@@ -24,7 +24,7 @@
 # Rebuild egap:old after the merge so both variants run the same EGAP code.
 #
 # Before applying:
-#   copy resources\EGAP_test.tsv  ->  %USERPROFILE%\egap-ab\input\
+#   copy resources\EGAP_test.tsv  ->  E:\egap-ab\input\   (A/B data is on the external E: drive)
 #   push images  localhost:5050/egap:old  and  localhost:5050/egap:fastb
 # Re-run: kubectl delete -f tests/ab/ab-test.yaml   (Jobs are immutable)
 #

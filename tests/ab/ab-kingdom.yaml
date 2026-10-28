@@ -1,0 +1,67 @@
+# Kingdom benchmark run on the local k3d cluster "egap": one EGAP run per test
+# organism, graded afterwards against its reference (tests/ab/grade_kingdom.sh).
+#
+# Samples: rows of input/EGAP_kingdom.tsv, one pod per sample, one at a time.
+#   0 M. jannaschii ONT        1 S. cerevisiae HiFi      2 S. cerevisiae ONT+Illumina
+#   3 A. thaliana HiFi         4 C. elegans HiFi         5 A. thaliana ONT+Illumina
+#   6 C. elegans ONT+Illumina
+# Read subsets: tests/ab/kingdom_fetch.sh into input/kingdom/ (nanopore 35x,
+# HiFi 30x, Illumina 40x). The genomes reach 142 Mb, so each pod gets 14 CPU and
+# 48 GiB (the host has 16 threads / 55 GB).
+#
+# EGAP decompresses .gz reads in place, so each pod first copies the reads its
+# row names from /data/input/kingdom (read-only) to /data/out/_reads.
+#
+# Before applying: docker push localhost:5050/egap:<tag>, and set the image below.
+# Re-run: kubectl delete -f tests/ab/ab-kingdom.yaml   (Jobs are immutable)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: egap-kingdom
+  labels: {app: egap-kingdom}
+spec:
+  completionMode: Indexed
+  completions: 7
+  parallelism: 1
+  backoffLimitPerIndex: 0
+  template:
+    metadata:
+      labels: {app: egap-kingdom}
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: egap
+          image: egap-registry:5050/egap:pd3
+          imagePullPolicy: Always
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              tsv=/data/input/EGAP_kingdom.tsv
+              sample=$(awk -F'\t' -v i=$((JOB_COMPLETION_INDEX + 2)) 'NR==i {print $2}' "$tsv")
+              awk -F'\t' -v s="$sample" 'NR==1 || $2==s' "$tsv" > /tmp/sample.tsv
+              [ "$(wc -l < /tmp/sample.tsv)" -eq 2 ] || { echo "sample row $JOB_COMPLETION_INDEX not found" >&2; exit 1; }
+              # copy this row's reads to the writable area its paths point at
+              for p in $(tail -n 1 /tmp/sample.tsv | tr '\t,' '\n\n' | grep '^/data/out/_reads/'); do
+                src=/data/input/kingdom/${p#/data/out/_reads/}
+                # a subset still being fetched appears only when complete; wait up to 12 h
+                for i in $(seq 1 144); do [ -e "$src" ] || [ -e "$p" ] || [ -e "${p%.gz}" ] || sleep 300; done
+                mkdir -p "$(dirname "$p")"
+                [ -e "$p" ] || [ -e "${p%.gz}" ] || cp "$src" "$p"
+              done
+              SECONDS=0
+              /EGAP_env/bin/EGAP --input_tsv /tmp/sample.tsv --output_dir /data/out --cpu_threads 14 --ram_gb 48
+              wall=$SECONDS
+              peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null || echo NA)
+              # EGAP exits 0 even when a sample fails; its log is the only truth
+              grep -q "PASS:.Sample $sample completed successfully" "/data/out/${sample}_log.txt" || { echo "EGAP did not pass $sample" >&2; exit 1; }
+              echo "AB_SUMMARY sample=$sample wall_s=$wall peak_mem_bytes=$peak" | tee "/data/out/${sample}_ab_summary.txt"
+          resources:
+            requests: {cpu: "14", memory: 48Gi}
+            limits: {cpu: "14", memory: 48Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data/input, subPath: input, readOnly: true}
+            - {name: data, mountPath: /data/out, subPath: out/kingdom}
+      volumes:
+        - name: data
+          hostPath: {path: /data}

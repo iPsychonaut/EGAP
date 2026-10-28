@@ -30,17 +30,17 @@ RUN mamba install -n base --yes conda-pack
 # Pinning rationale (Python 3.12 solve checked 2026-10-12):
 #   python 3.12       3.8 is end of life and blocks Flye 2.9.6, compleasm
 #                     0.2.9+ and BUSCO 6. tiara-entheome needs <3.13.
-#   pandas>=2.2,<3    pandas 3 changes copy and string semantics; move it in
-#                     its own round. 2.2 is the first pandas with py3.12.
+#   pandas>=3,<4      copy-on-write and the str dtype; checked in its own A/B
+#                     round (pandas 2.3 vs 3.0).
 #   numpy>=1.26,<3    1.26 is the first numpy with py3.12.
 #   plotly>=5.24,<6   NanoPlot 1.46.2 calls figure_factory.create_2d_density,
 #                     which plotly 6 removed; py3.12 envs otherwise get 7.
 #   busco=6.1.0       odb12.2 lineages and new scoring; checked against 5.8.3
 #                     in the round-2 A/B.
-#   compleasm         installed below with --no-deps: its recipe pins
-#                     dendropy<4.6, but every py3.9+ sepp needs dendropy>=5.
-#                     compleasm never imports dendropy (it runs sepp), so the
-#                     pin is stale. hmmer and miniprot are its other deps.
+#   compleasm>=0.2.10 0.2.10 build 1 (bioconda-recipes#70268, 2026-10-27)
+#                     dropped the stale dendropy<4.6 pin that kept compleasm
+#                     out of any py3.9+ env with sepp. Build 0 still has it;
+#                     sepp's dendropy>=5 requirement excludes that build.
 #   tiara-entheome    1.0.1 from bioconda; 1.0.0 imported pkg_resources, which
 #                     current setuptools no longer ships. Brings pytorch,
 #                     skorch, numba, tqdm and joblib.
@@ -60,12 +60,13 @@ RUN mamba install -n base --yes conda-pack
 #                     not finish in 20 min; this order solves in minutes.
 RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioconda \
     'python>=3.12,<3.13' \
-    'pandas>=2.2,<3' \
+    'pandas>=3,<4' \
     'numpy>=1.26,<3' \
     'plotly>=5.24,<6' \
     'masurca=4.1.4' \
     'quast=5.3.0' \
     'busco=6.1.0' \
+    'compleasm>=0.2.10' \
     hmmer \
     miniprot \
     biopython \
@@ -118,13 +119,7 @@ RUN conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioc
 RUN conda run -n EGAP_env quast-download-gridss && \
     conda run -n EGAP_env quast-download-silva
 
-# compleasm without its stale dendropy<4.6 pin (see the rationale above).
-# pip from the release tag, as the bioconda recipe itself builds it: conda's
-# --no-deps still has to satisfy the pin, so it fails too. Move compleasm back
-# into the conda create once bioconda-recipes#60482 lands.
-RUN conda run -n EGAP_env python -m pip install --no-cache-dir --no-deps \
-        "https://github.com/huangnengCSU/compleasm/archive/refs/tags/v0.2.10.tar.gz" && \
-    conda run -n EGAP_env compleasm --help >/dev/null
+RUN conda run -n EGAP_env compleasm --help >/dev/null
 
 # Clone and install runner in EGAP_env. pip, not `setup.py install`:
 # Python 3.12 envs carry no setuptools for setup.py to import.
@@ -144,7 +139,7 @@ RUN conda install -n EGAP_env -y --force-reinstall --no-deps \
     conda run -n EGAP_env flye-minimap2 --secondary-seq=yes --version
 
 # conda-pack rewrites the shebang of every launcher it does not manage
-# (pip-installed: compleasm, runner, funannotate, ...) to `#!/usr/bin/env python`.
+# (pip-installed: runner, funannotate, ...) to `#!/usr/bin/env python`.
 # In the runtime image PATH starts with /EGEP_env/bin, so those launchers would
 # run under EGEP_env's python and fail to import their own package. Point each
 # one at its own env's python. Symlinks are skipped so links stay links.
@@ -176,8 +171,11 @@ RUN cp /opt/conda/envs/EGAP_env/bin/flye-minimap2 /EGAP_env/bin/flye-minimap2 &&
     PATH="/EGAP_env/bin:$PATH" flye --version && \
     /EGAP_env/bin/flye-minimap2 --secondary-seq=yes --version
 
-# Download EGAP v3.4.2 scripts from GitHub into the EGAP_env.
-# Install wget (if not already available) to retrieve the files.
+# ponytail: dead layer kept byte-identical so the EGEP/funannotate conda
+# solves below stay cached (BuildKit keys each layer on its parent; the
+# unpinned funannotate solve has hung for 7+ hours). The runtime stage
+# overwrites every file this fetches with the checkout's own copies. Delete
+# this RUN the next time a conda line below changes anyway.
 RUN apt-get update && apt-get install -y wget && \
     EGAP_BRANCH="v3.4.2" && \
     EGAP_RAW="https://raw.githubusercontent.com/iPsychonaut/EGAP/${EGAP_BRANCH}" && \
@@ -255,7 +253,7 @@ RUN conda create -n EGEP_env -y --strict-channel-priority -c conda-forge -c bioc
     hisat2 tantan bedtools tbl2asn blat hmmer exonerate minimap2 stringtie goatools \
     matplotlib-base natsort numpy pigz pandas psutil requests scipy seaborn proteinortho \
     clinker-py gffutils disjoint-set cblaster defusedxml orthofinder \
-    biopython xlrd trinity evidencemodeler pasa codingquarry scikit-learn blast \
+    biopython xlrd 'trinity>=2.15' evidencemodeler pasa codingquarry scikit-learn blast \
     diamond trnascan-se mafft kallisto salmon samtools \
     && conda clean -a -y
     
@@ -356,6 +354,17 @@ ENV KRAKEN2_DB="" \
 
 # One-time Funannotate database setup. Skipped silently if already initialised.
 RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"
+
+# EGAP scripts come from the build context, so the image always matches the
+# checkout it was built from (the old wget-from-tag fetch drifted whenever
+# bin/ changed after the tag). Last layer on purpose: a script edit rebuilds
+# only this; the conda solves and the funannotate database download above
+# stay cached. .dockerignore limits the context to these paths.
+COPY --chmod=755 EGAP.py /EGAP_env/EGAP.py
+COPY --chmod=755 bin/*.py /EGAP_env/bin/
+# html_reporter looks in <script>/../resources/templates; without this it
+# downloads the templates from GitHub main at run time.
+COPY resources/templates/ /EGAP_env/resources/templates/
 
 # -----------------------------------------------------------------------------
 # Default entrypoint — runs EGAP directly.
