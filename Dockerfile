@@ -253,7 +253,7 @@ RUN conda create -n EGEP_env -y --strict-channel-priority -c conda-forge -c bioc
     hisat2 tantan bedtools tbl2asn blat hmmer exonerate minimap2 stringtie goatools \
     matplotlib-base natsort numpy pigz pandas psutil requests scipy seaborn proteinortho \
     clinker-py gffutils disjoint-set cblaster defusedxml orthofinder \
-    biopython xlrd trinity evidencemodeler pasa codingquarry scikit-learn blast \
+    biopython xlrd 'trinity>=2.15' evidencemodeler pasa codingquarry scikit-learn blast \
     diamond trnascan-se mafft kallisto salmon samtools \
     && conda clean -a -y
     
