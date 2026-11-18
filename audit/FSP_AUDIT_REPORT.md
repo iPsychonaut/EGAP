@@ -1,6 +1,8 @@
 # EGAP audit: local vs. GitHub state, and the fspassemblypipeline port proposal
 
 Date: 2026-09-05
+
+Note (2026-11-17): `audit/prototypes/` and `tests/prototypes/` were removed from the working branches because nothing in `bin/` imported them. The five prototypes and their 80 tests remain on the `audit/fsp-port-tests` branch and in history at `3cde6db`.
 Branch: `audit/fsp-port-tests` (local, not pushed; based on `origin/main` @ `3cea58f`)
 Reference repo audited: `RBGKew/fspassemblypipeline` @ `4bd5e23` (master, PR #96)
 

@@ -1,8 +1,7 @@
 """pytest configuration for EGAP.
 
 Puts ``bin/`` and the repo root on sys.path so the pipeline modules import
-exactly as they do when EGAP.py inserts bin/ at runtime, and so the audit
-prototypes import as ``audit.prototypes.<name>``.
+exactly as they do when EGAP.py inserts bin/ at runtime.
 
 No external bioinformatics binaries are required. Tests that would need one
 are marked ``requires_tools`` and skipped unless EGAP_RUN_TOOL_TESTS=1.
