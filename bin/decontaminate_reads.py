@@ -48,9 +48,8 @@ import os
 import sys
 import shutil
 import pandas as pd
-from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, initialize_logging_environment, log_print, pigz_compress, load_sample_context
+from utilities import run_subprocess_cmd, run_stage, log_print, pigz_compress, load_sample_context
 
 
 # --------------------------------------------------------------
@@ -597,23 +596,6 @@ def decontaminate_reads(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 # Entry point
 # --------------------------------------------------------------
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python3 decontaminate_reads.py <sample_id> <input_tsv> "
-              "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    success = decontaminate_reads(
-        sys.argv[1],   # sample_id
-        sys.argv[2],   # input_tsv
-        sys.argv[3],   # output_dir
-        sys.argv[4],   # cpu_threads
-        sys.argv[5],   # ram_gb
-    )
-
-    if not success:
+    if not run_stage(decontaminate_reads):
         log_print("FAIL:\tKraken2 read decontamination did not complete successfully.")
         sys.exit(1)
-
-    sys.exit(0)

@@ -68,102 +68,43 @@ def get_size(path: str) -> int:
 
 
 # --------------------------------------------------------------
-# Remove a single file
+# Remove a file, a directory tree, or everything matching a glob
 # --------------------------------------------------------------
+def _remove(path: str, log_file, kind: str) -> bool:
+    """Remove one *kind* (``"file"`` or ``"directory"``), logging the space freed.
+
+    Returns ``True`` if *path* was removed (or would be, in dry-run mode) and
+    ``False`` if it is not a *kind* or the removal failed.
+    """
+    is_dir = kind == "directory"
+    if not (os.path.isdir(path) if is_dir else os.path.isfile(path)):
+        return False
+    size_str = format_size(get_size(path))
+    if _is_dry_run():
+        log_print(f"DRY_RUN:\tWould remove {kind} ({size_str}): {path}", log_file)
+        return True
+    try:
+        (shutil.rmtree if is_dir else os.remove)(path)
+        log_print(f"NOTE:\tRemoved intermediate {kind} ({size_str} freed): {path}", log_file)
+        return True
+    except OSError as exc:
+        log_print(f"WARN:\tCould not remove {kind}: {path} — {exc}", log_file)
+        return False
+
+
 def remove_file(path: str, log_file=None) -> bool:
-    """Remove a single file, logging the space freed.
-
-    Parameters
-    ----------
-    path : str
-        Absolute path to the file to remove.
-    log_file : str, optional
-        Path to the sample log file.  Falls back to the module-level
-        ``DEFAULT_LOG_FILE`` set by ``initialize_logging_environment``.
-
-    Returns
-    -------
-    bool
-        ``True`` if the file was removed (or would be removed in dry-run
-        mode), ``False`` if the file did not exist or removal failed.
-    """
-    if not os.path.isfile(path):
-        return False
-    size_str = format_size(get_size(path))
-    if _is_dry_run():
-        log_print(f"DRY_RUN:\tWould remove file ({size_str}): {path}", log_file)
-        return True
-    try:
-        os.remove(path)
-        log_print(f"NOTE:\tRemoved intermediate file ({size_str} freed): {path}", log_file)
-        return True
-    except OSError as exc:
-        log_print(f"WARN:\tCould not remove file: {path} — {exc}", log_file)
-        return False
+    """Remove a single file, logging the space freed. See :func:`_remove`."""
+    return _remove(path, log_file, "file")
 
 
-# --------------------------------------------------------------
-# Remove a directory tree
-# --------------------------------------------------------------
 def remove_dir(path: str, log_file=None) -> bool:
-    """Recursively remove a directory, logging the total space freed.
-
-    Parameters
-    ----------
-    path : str
-        Absolute path to the directory to remove.
-    log_file : str, optional
-        Path to the sample log file.
-
-    Returns
-    -------
-    bool
-        ``True`` if the directory was removed (or would be in dry-run),
-        ``False`` if it did not exist or removal failed.
-    """
-    if not os.path.isdir(path):
-        return False
-    size_str = format_size(get_size(path))
-    if _is_dry_run():
-        log_print(f"DRY_RUN:\tWould remove directory ({size_str}): {path}", log_file)
-        return True
-    try:
-        shutil.rmtree(path)
-        log_print(f"NOTE:\tRemoved intermediate directory ({size_str} freed): {path}", log_file)
-        return True
-    except OSError as exc:
-        log_print(f"WARN:\tCould not remove directory: {path} — {exc}", log_file)
-        return False
+    """Recursively remove a directory, logging the space freed. See :func:`_remove`."""
+    return _remove(path, log_file, "directory")
 
 
-# --------------------------------------------------------------
-# Remove all paths matching a glob pattern
-# --------------------------------------------------------------
 def remove_glob(pattern: str, log_file=None) -> int:
-    """Remove every file or directory matching *pattern*.
-
-    Parameters
-    ----------
-    pattern : str
-        Shell-style glob pattern (forwarded to ``glob.glob``).
-    log_file : str, optional
-        Path to the sample log file.
-
-    Returns
-    -------
-    int
-        Number of paths successfully removed.
-    """
-    matches = glob_module.glob(pattern)
-    removed = 0
-    for path in matches:
-        if os.path.isfile(path):
-            if remove_file(path, log_file):
-                removed += 1
-        elif os.path.isdir(path):
-            if remove_dir(path, log_file):
-                removed += 1
-    return removed
+    """Remove every file or directory matching *pattern*; return how many were removed."""
+    return sum(remove_file(p, log_file) or remove_dir(p, log_file) for p in glob_module.glob(pattern))
 
 
 # --------------------------------------------------------------
@@ -195,23 +136,3 @@ def clean_lineage_downloads(mb_downloads_dir: str, log_file=None) -> None:
         extracted_dir = os.path.join(mb_downloads_dir, lineage)
         if os.path.exists(done_marker) and os.path.isdir(extracted_dir):
             remove_file(tar_path, log_file)
-
-
-# --------------------------------------------------------------
-# Clean up BWA-mem2 index files alongside a FASTA
-# --------------------------------------------------------------
-def remove_bwa_indices(fasta_path: str, log_file=None) -> None:
-    """Remove all BWA-mem2 index files generated for *fasta_path*.
-
-    ``bwa-mem2 index`` creates five sidecar files next to the FASTA:
-    ``.0123``, ``.bwt.2bit.64``, ``.pac``, ``.amb``, ``.ann``.
-
-    Parameters
-    ----------
-    fasta_path : str
-        Absolute path to the FASTA that was indexed.
-    log_file : str, optional
-        Path to the sample log file.
-    """
-    for suffix in (".0123", ".bwt.2bit.64", ".pac", ".amb", ".ann"):
-        remove_file(fasta_path + suffix, log_file)

@@ -86,6 +86,16 @@ def run_filtered(cmd: list) -> int:
 # --------------------------------------------------------------
 VERSION = "3.4.2"
 
+# Stage order. bin/EGAP_TUI.py runs the same lists through the same helpers.
+PROCESSES = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont",
+             "preprocess_pacbio", "decontaminate_reads",
+             "assemble_masurca", "assemble_flye",
+             "assemble_spades", "assemble_hifiasm", "compare_assemblies",
+             "polish_assembly", "curate_assembly", "decontaminate_assembly"]
+ASSEMBLERS = {"masurca": "MaSuRCA", "flye": "Flye", "spades": "SPAdes", "hifiasm": "hifiasm"}
+# Run for every sample after its PROCESSES, even when one of those failed.
+FINAL_STEPS = ["qc_assessment", "html_reporter"]
+
 TRIMMOMATIC_SETTINGS = {
     "mode": "-PE",
     "phred version": "-phred33",
@@ -226,8 +236,15 @@ TIARA_SETTINGS = {
 }
 
 
-def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output_dir):
-    """Return all pipeline settings as a structured dict for reuse (TUI, logs, etc.)."""
+def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output_dir, args=None):
+    """Return every setting of this run as one structured dict: the run's audit trail.
+
+    EGAP.py prints it once at start-up, which puts it in the session log, and
+    the TUI renders the same dict. Anything a user can change belongs in here
+    (command-line flags today; per-sample sub-process overrides when the
+    sample table grows them) so the printed record always matches what ran.
+    """
+    skipped = [a for a in ASSEMBLERS if getattr(args, f"no_{a}", False)]
     return {
         "input-setup settings": {
             "started at": str(current_moment),
@@ -235,6 +252,8 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output
             "container": "N/A (running python version)",
             "RAM GB": str(ram_gb),
             "CPU threads": str(cpu_threads),
+            "dry run": str(os.environ.get("EGAP_DRY_RUN", "0").strip() == "1"),
+            "assemblers skipped": ", ".join(skipped) or "none",
             "input tsv": str(input_tsv),
             "output to": str(output_dir),
         },
@@ -297,32 +316,11 @@ def print_nested_dict(data, indent=0,
         print(f"{pad}{data}")
 
 
-def print_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output_dir,
-                            header=True, divider=True, sleep_s=0.0):
-    """
-    Calls get_pipeline_settings(...) and prints the entire nested structure.
-    Returns the settings dict for reuse in logs, TUI, etc.
-    """
-    settings = get_pipeline_settings(
-        current_moment=current_moment,
-        ram_gb=ram_gb,
-        cpu_threads=cpu_threads,
-        input_tsv=input_tsv,
-        output_dir=output_dir,
-    )
-
-    if header:
-        print(f"\n\033[91m{'=' * 80}\033[0m\n")
-
+def print_pipeline_settings(settings):
+    """Print the settings dict from get_pipeline_settings() between two dividers."""
+    print(f"\n\033[91m{'=' * 80}\033[0m\n")
     print_nested_dict(settings, indent=4)
-
-    if divider:
-        print(f"\n\033[91m{'=' * 80}\033[0m\n")
-
-    if sleep_s and sleep_s > 0:
-        time.sleep(sleep_s)
-
-    return settings
+    print(f"\n\033[91m{'=' * 80}\033[0m\n")
 
 
 # --------------------------------------------------------------
@@ -383,30 +381,6 @@ def preprocess_tsv(tsv_file_path):
 
     # (e) Hand back a normalized view with the legacy per-stage column names.
     return read_sample_table(tsv_file_path)
-
-# --------------------------------------------------------------
-# Finds a file in a given folder
-# --------------------------------------------------------------
-def find_files(search_string, folder=None):
-    """
-    Find all files in the given directory and its subdirectories containing '_dedup' in their names.
-    
-    Args:
-        directory (str): Path to the directory to search
-        
-    Returns:
-        list: List of full file paths containing '_dedup' in their names
-    """
-    files = []
-    
-    # Walk through directory and subdirectories
-    for root, _, files in os.walk(folder):
-        # Check each file in current directory
-        for file in files:
-            if search_string in file:
-                # Add full path to the list
-                files.append(os.path.join(root, file))
-    return files
 
 # --------------------------------------------------------------
 # Locates the one directory under `search_root` that contains ALL of `required_scripts`
@@ -479,8 +453,11 @@ def sample_is_qc_only(row):
     return has_ref and not has_reads and not has_est_size
 
 
-if __name__ == "__main__":
-    # Parse command-line arguments for pipeline configuration
+# --------------------------------------------------------------
+# Command line, stage list, and stage commands (shared with bin/EGAP_TUI.py)
+# --------------------------------------------------------------
+def build_parser():
+    """Return the EGAP command-line parser."""
     parser = argparse.ArgumentParser(description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{VERSION}")
     parser.add_argument("--input_tsv", "-tsv",
                         type=str,
@@ -510,26 +487,63 @@ if __name__ == "__main__":
     parser.add_argument("--tui", action="store_true", default=False,
                         help="Run the pipeline through the interactive TUI instead of "
                              "plain terminal output.")
-    # Opt-out flags to skip individual assemblers. EGAP otherwise runs every
-    # assembler compatible with the supplied read types and picks the best.
-    parser.add_argument("--no-masurca", "-no_m", dest="no_masurca", action="store_true",
-                        default=False, help="Skip the MaSuRCA assembler.")
-    parser.add_argument("--no-flye", "-no_f", dest="no_flye", action="store_true",
-                        default=False, help="Skip the Flye assembler.")
-    parser.add_argument("--no-spades", "-no_s", dest="no_spades", action="store_true",
-                        default=False, help="Skip the SPAdes assembler.")
-    parser.add_argument("--no-hifiasm", "-no_h", dest="no_hifiasm", action="store_true",
-                        default=False, help="Skip the hifiasm assembler.")
+    parser.add_argument("--prepare_only", action="store_true", default=False,
+                        help="Print the settings, run the pre-flight checks and normalise "
+                             "the sample table, then exit before any stage runs. The "
+                             "Nextflow runner uses this and schedules the stages itself.")
+    # Opt-out flags to skip individual assemblers (--no-masurca/-no_m, ...). EGAP
+    # otherwise runs every assembler compatible with the supplied read types and
+    # picks the best.
+    for name, label in ASSEMBLERS.items():
+        parser.add_argument(f"--no-{name}", f"-no_{name[0]}", dest=f"no_{name}", action="store_true",
+                            default=False, help=f"Skip the {label} assembler.")
+    return parser
 
-    args = parser.parse_args()
+
+def apply_run_flags(args):
+    """Export the flags that stage subprocesses read from the environment."""
+    if args.dry_run:
+        os.environ["EGAP_DRY_RUN"] = "1"
+    os.environ["EGAP_INTERMEDIATE_FORMAT"] = args.intermediate_format
+
+
+def resolve_processes(args, say=print):
+    """Return PROCESSES without the assemblers switched off by ``--no-<assembler>``."""
+    disabled = [a for a in ASSEMBLERS if getattr(args, f"no_{a}", False)]
+    if disabled:
+        say(f"NOTE:\tSkipping assembler(s) by request: {', '.join(disabled)}")
+    if len(disabled) == len(ASSEMBLERS):
+        say("WARN:\tAll assemblers were disabled; no assembly will be produced.")
+    return [p for p in PROCESSES if p.removeprefix("assemble_") not in disabled]
+
+
+def resolve_bin_dir(processes, project_dir):
+    """Return the directory holding every stage script, or raise FileNotFoundError."""
+    scripts = processes + FINAL_STEPS + ["final_compress"]
+    bin_dir = locate_bin_dir(scripts, project_dir)
+    if bin_dir is None:
+        raise FileNotFoundError("Could not locate a single folder containing all of: "
+                                + ", ".join(f"{p}.py" for p in scripts))
+    return bin_dir
+
+
+def stage_cmd(bin_dir, proc, sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
+    """Return the command line for one stage script."""
+    lead = [sys.executable, str(Path(bin_dir) / f"{proc}.py")]
+    if proc == "qc_assessment":  # its own argument order: <assembly_type> <input_tsv> <sample_id> ...
+        return lead + ["final", input_tsv, sample_id, output_dir, str(cpu_threads), str(ram_gb)]
+    return lead + [sample_id, input_tsv, output_dir, str(cpu_threads), str(ram_gb)]
+
+
+if __name__ == "__main__":
+    # Parse command-line arguments for pipeline configuration
+    args = build_parser().parse_args()
     input_tsv   = args.input_tsv
     output_dir  = args.output_dir
     cpu_threads = args.cpu_threads
     ram_gb      = args.ram_gb
 
-    if args.dry_run:
-        os.environ["EGAP_DRY_RUN"] = "1"
-    os.environ["EGAP_INTERMEDIATE_FORMAT"] = args.intermediate_format  # inherited by stage subprocesses
+    apply_run_flags(args)  # EGAP_DRY_RUN / EGAP_INTERMEDIATE_FORMAT for the stage subprocesses
     dry_run = args.dry_run
     current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -586,254 +600,18 @@ if __name__ == "__main__":
    Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess \033[94m-\033[92m>\033[0m Report
     """)
     time.sleep(1.5)
-    print(f"""
-\033[91m================================================================================\033[0m
-
-    \033[92minput-setup settings
-        \033[94mstarted at                       \033[0m: {current_moment}
-        \033[94mconfig files                     \033[0m: N/A (running python version)
-        \033[94mcontainer                        \033[0m: N/A (running python version)
-        \033[94mRAM GB                           \033[0m: {ram_gb}
-        \033[94mCPU threads                      \033[0m: {cpu_threads}
-        \033[94mdry run                          \033[0m: {dry_run}
-        \033[94minput tsv                        \033[0m: {input_tsv}
-        \033[94moutput to                        \033[0m: {output_dir}
-
-    \033[96m-----------------------------------------------------------------------\033[0m
-    """)
-    time.sleep(0.25)
-    print("""
-    \033[92mtrimmomatic settings
-        \033[94mmode                             \033[0m: -PE
-        \033[94mphred version                    \033[0m: -phred33
-        \033[94milluminaclip adapter             \033[0m: /opt/conda/envs/EGAP_env/share/trimmomatic-0.39-2/adapters/TruSeq3-PE.fa
-        \033[94mfastaWithAdaptersEtc             \033[0m: 2
-        \033[94mseed mismatches                  \033[0m: 30
-        \033[94mpalindrome clip threshold        \033[0m: 10
-        \033[94msimple clip threshold            \033[0m: 11
-        \033[94mHEADCROP                         \033[0m: 10
-        \033[94mCROP                             \033[0m: 145
-        \033[94mSLIDINGWINDOW                    \033[0m: 50:25
-        \033[94mMINLEN                           \033[0m: 125
-        
-    \033[92mbbduk settings
-        \033[94mktrim                            \033[0m: -r
-        \033[94mk                                \033[0m: 23
-        \033[94mmink                             \033[0m: 11
-        \033[94mhdist                            \033[0m: 1
-        \033[94mtrimpairsevenly                  \033[0m: -tpe
-        \033[94mtrimbyoverlap                    \033[0m: -tbo
-        \033[94mqtrim                            \033[0m: -rl
-        \033[94mtrimq                            \033[0m: 20
-
-    \033[92mclumpify settings
-        \033[94mremove duplicate reads           \033[0m: -dedupe
-
-    \033[96m-----------------------------------------------------------------------\033[0m
-    """)
-    time.sleep(0.25)
-    print("""
-    \033[92mfiltlong settings
-        \033[94mmin_length                       \033[0m: 1000
-        \033[94mmin_mean_q                       \033[0m: 8
-        \033[94mkeep_percent                     \033[0m: 90 
-        \033[94mcoverage                         \033[0m: 75
-        \033[94mtarget_bases                     \033[0m: estimated size (bp) * 75 (coverage)
-        
-    \033[92mratatosk settings
-        \033[94mverbose output                   \033[0m: -v
-
-    \033[96m-----------------------------------------------------------------------\033[0m
-    """)
-    time.sleep(0.25)
-    print("""
-    \033[92mmasurca settings
-        \033[94mconfiguration file sections      \033[0m: DATA, PARAMETERS
-        \033[94mgraph kmer size                  \033[0m: auto
-        \033[94muse linking mates                \033[0m: (0 if Hybrid assembly, else 1)
-        \033[94mclose gaps                       \033[0m: (0 if Hybrid assembly, else 1)
-        \033[94mmega reads one pass              \033[0m: (1 if long reads present, else 0)
-        \033[94mlimit jump coverage              \033[0m: 300
-        \033[94mca parameters                    \033[0m: cgwErrorRate=0.15
-        \033[94mjellyfish hash size              \033[0m: based on the estimated size of the genome provided
-        \033[94msoap assembly                    \033[0m: 0 (disabled to force CABOG assembly)
-        \033[94mflye assembly                    \033[0m: (1 if Hybrid assembly, else 0; EGAP_MASURCA_FLYE_ASSEMBLY=0 forces CABOG)
-                                    
-    \033[92mspades settings
-        \033[94mhigh-cov. isolate & multi-cell   \033[0m: --isolate
-        \033[94mcoverage cutoff                  \033[0m: auto
-
-    \033[92mflye settings
-        \033[94mestimated genome size            \033[0m: est_size
-        \033[94mnumber of polishing iterations   \033[0m: 3
-        \033[94mcollapse alternative haplotypes  \033[0m: --keep-haplotypes
-        
-    \033[92mhifasm settings
-        \033[0mdefault settings
-
-    \033[96m-----------------------------------------------------------------------\033[0m
-    """)
-    time.sleep(0.25)
-    print("""
-    \033[92mracon settings 
-        \033[0mdefault settings
-
-    \033[92mshort-read polish settings (Polypolish, then Pypolca)
-        \033[94malignment                        \033[0m: bwa mem -a (each read file separately)
-        \033[94mpolypolish                       \033[0m: filter, then polish
-        \033[94mpypolca                          \033[0m: --careful
-
-    \033[96m-----------------------------------------------------------------------\033[0m
-    """)
-    time.sleep(0.25)
-    print("""
-    \033[92mragtag settings 
-        \033[0mscaffold
-           \033[94mconcatenate unplaced          \033[0m: -C
-           \033[94madd suffix to unplaced        \033[0m: -u
-        \033[0mcorrect
-           \033[94madd suffix to unaltered       \033[0m: -u
-        \033[0mpatch
-           \033[94madd suffix to unplaced        \033[0m: -u
-        
-    \033[92mtgs-gapcloser settings
-        \033[94mdo not error correct             \033[0m: -ne
-            
-    \033[92mabyss-sealer settings
-        \033[94mpseudoreads length used          \033[0m: 400
-        \033[94mbloom filter size                \033[0m: 500M
-
-    \033[96m-----------------------------------------------------------------------\033[0m
-    """)
-    time.sleep(0.25)
-    print("""
-    \033[92mfastqc settings
-       \033[0mdefault settings
-    
-    \033[92mnanoplot settings
-       \033[94mbivariate plots                   \033[0m: kde, dot
-       \033[94mshow logarithmic lengths scaling  \033[0m: --loglength
-       \033[94mN50 mark in read length histogram \033[0m: --N50
-       \033[94mlog messages to terminal          \033[0m: --verbose
-
-    \033[96m-----------------------------------------------------------------------\033[0m
-    """)
-    time.sleep(0.25)
-    print("""
-    \033[92mbusco settings
-       \033[94mmode                              \033[0m: genome
-       \033[94mforce overwrite                   \033[0m: -f
-
-    \033[92mcompleasm settings
-       \033[0mdefault settings
-
-    \033[92mquast settings
-       \033[0mdefault settings
-
-    \033[96m-----------------------------------------------------------------------\033[0m
-    """)
-    time.sleep(0.25)
-    print("""
-    \033[92mkraken2 settings\033[0m  (decontaminate_reads — pre-assembly)
-       \033[94mstage                             \033[0m: pre-assembly (reads)
-       \033[94mtargets                           \033[0m: ONT and PacBio highest-quality long reads
-       \033[94mdatabase                          \033[0m: resolved from KRAKEN2_DB env var or TSV column
-       \033[94mkeep (bacteria)                   \033[0m: bacteria, unclassified
-       \033[94mkeep (archaea)                    \033[0m: archaea, unclassified
-       \033[94mkeep (flora/funga/fauna)          \033[0m: eukarya, unclassified
-       \033[94malways kept                       \033[0m: unclassified
-       \033[94mmissing db behaviour              \033[0m: WARN and skip (non-fatal)
-
-    \033[92mtiara settings\033[0m  (decontaminate_assembly — post-assembly)
-       \033[94mstage                             \033[0m: post-assembly (contigs)
-       \033[94mtargets                           \033[0m: final curated assembly
-       \033[94mkeep (bacteria)                   \033[0m: bacteria, prokarya, unknown
-       \033[94mkeep (archaea)                    \033[0m: archaea, prokarya, unknown
-       \033[94mkeep (flora/funga/fauna)          \033[0m: eukarya, organelle, unknown
-       \033[94morganelle note                    \033[0m: kept for eukaryotes; removed for prokaryotes
-       \033[94malways kept                       \033[0m: unknown
-       \033[94mmissing tiara behaviour           \033[0m: WARN and skip (non-fatal)
-
-\033[91m================================================================================\033[0m
-    """)
-    print(f"""
-\033[91m.---.\033[92m________\\\033[38;5;208m=\033[96m/\033[92m________\033[91m.---.\033[0m 
-\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|\033[94m--------\033[96m/\033[91m=\033[92m\\\033[94m--------\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|   \033[94m.\033[96m---------.  \033[94m.\033[96m------.    \033[94m.\033[96m------.    \033[94m.\033[96m-------.\033[0m
-\033[91m`---'\033[96m~~~~~~~(\033[38;5;208m===\033[92m)\033[96m~~~~~~~\033[91m`---'  \033[94m/\033[96m|         |\033[94m/\033[96m/        \\ \033[94m/\033[96m/        \\ \033[94m/\033[96m/         \\\033[0m
- \033[92m|\033[94m|\033[96m| \033[92m.--     \033[96m\\\033[91m=\033[92m/    \033[92m,--. \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  .------\033[94m'\033[96m|   .------\033[94m'\033[96m|   .--\033[94m.   \033[96m. |   .--\033[94m.\033[96m   .\033[0m
- \033[92m|\033[94m|\033[96m| \033[94m|-      \033[92m/\033[38;5;208m=\033[96m\\    \033[94m|  _ \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  |\033[94m----"| \033[96m|   |\033[94m----"| \033[96m|   |\033[94m-'\033[96m|   | |   |\033[94m-'\033[96m|   |\033[0m
- \033[92m|\033[94m|\033[96m| \033[96m`--    \033[92m(\033[91m===\033[96m)   \033[96m`--' \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  `----.\033[94m|\033[96m |   |     \033[94m| \033[96m|   +--+   | |   +--+   |\033[0m
- \033[92m|\033[94m|\033[96m|         \033[92m\\\033[38;5;208m=\033[96m/         \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|       |\033[94m| \033[96m|   | \033[94m.\033[96m----.|          | |          |\033[0m
- \033[92m|\033[94m|\033[96m|         \033[96m/\033[91m=\033[92m\\         \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  .----'\033[94m| \033[96m|   |\033[94m"\033[96m|    ||   +--+   | |   +------'\033[0m
- \033[92m|\033[94m|\033[96m|        \033[96m(\033[38;5;208m===\033[92m)        \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  |\033[94m---" | \033[96m|   |\033[94m"\033[96m`-.  ||   |\033[94m| \033[96m|   | |   |\033[94m-----"\033[0m
- \033[92m|\033[94m|\033[96m|  \033[96m__     \033[96m\\\033[91m=\033[92m/    \033[96m,__. \033[96m|\033[94m|\033[92m|  \033[94m| \033[96m|  `------.|   `---'  ||   |\033[94m| \033[96m|   | |   |\033[0m
- \033[92m|\033[94m|\033[96m| \033[94m/__\\    \033[92m/\033[38;5;208m=\033[96m\\    \033[94m|__| \033[96m|\033[94m|\033[92m|  \033[94m`.\033[96m|         |`.        \033[96m/\033[94m.\033[96m|   |\033[94m| \033[96m|   |\033[94m.\033[96m|   |\033[0m
- \033[92m|\033[94m|\033[96m| \033[92m|  |   \033[92m(\033[91m===\033[96m)   \033[92m|    \033[96m|\033[94m|\033[92m|    \033[96m`---------'  `------'  `---' \033[94m`\033[96m'---' `---'\033[0m
-\033[91m.---.\033[96m_____\033[92m[:\033[94m:\033[96m::::\033[94m:\033[92m]\033[96m_____\033[91m.---.\033[92m    \033[92m╔═══════════════════════════════════════════╗\033[0m
-\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|\033[94m------\033[92m|:\033[94m:\033[96m::\033[94m:\033[92m|\033[94m------\033[91m|\033[38;5;208m[\033[93m_\033[38;5;208m]\033[91m|    \033[92m║     \033[94mEnthe\033[96mome Ge\033[97mnome Assemb\033[96mly Pip\033[94meline     \033[92m║\033[0m
-\033[91m`---'\033[92m~~~~~~\033[92m|::\033[94m:\033[96m:\033[94m:\033[92m|~~~~~~\033[91m`---'    \033[92m╚═══════════════════════════════════════════╝\033[0m
-
-                    Curated & Maintained by Ian M Bollinger
-                         (\033[94mian.bollinger@entheome.org\033[0m)
-
-                                   \033[92mEGAP.py\033[0m
-                                Version {VERSION}
-                                  
-   Preprocess \033[94m-\033[92m>\033[0m Assemble \033[94m-\033[92m>\033[0m Compare \033[94m-\033[92m>\033[0m Polish \033[94m-\033[92m>\033[0m Curate \033[94m-\033[92m>\033[0m Assess \033[94m-\033[92m>\033[0m Report
-    """)
-    time.sleep(1.5)
 
 
-    # Print settings from the structured dict (single source of truth)
-    pipeline_settings = print_pipeline_settings(
-        current_moment=current_moment,
-        ram_gb=ram_gb,
-        cpu_threads=cpu_threads,
-        input_tsv=input_tsv,
-        output_dir=output_dir,
-        header=True,
-        divider=True,
-        sleep_s=0.0,
-    )
-   
-    processes = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont",
-                 "preprocess_pacbio", "decontaminate_reads",
-                 "assemble_masurca", "assemble_flye",
-                 "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-                 "polish_assembly", "curate_assembly", "decontaminate_assembly"]
+
+    # Print the run's settings once, from the structured dict (single source of
+    # truth; the session log keeps it as the audit trail of this run).
+    print_pipeline_settings(get_pipeline_settings(current_moment, ram_gb, cpu_threads,
+                                                  input_tsv, output_dir, args))
 
     # Honour per-assembler skip flags (--no-masurca/-no_m, etc.). EGAP runs every
     # assembler compatible with the read types unless explicitly disabled here.
-    _skip_assemblers = {
-        "assemble_masurca": args.no_masurca,
-        "assemble_flye":    args.no_flye,
-        "assemble_spades":  args.no_spades,
-        "assemble_hifiasm": args.no_hifiasm,
-    }
-    _disabled = [proc for proc, skip in _skip_assemblers.items() if skip]
-    if _disabled:
-        processes = [p for p in processes if p not in _disabled]
-        print(f"NOTE:\tSkipping assembler(s) by request: "
-              f"{', '.join(p.replace('assemble_', '') for p in _disabled)}")
-    if all(_skip_assemblers.values()):
-        print("WARN:\tAll assemblers were disabled; no assembly will be produced.")
-
-    # Determine project root and locate the bin/ directory there
-    this_file   = Path(__file__).resolve()
-    project_dir = this_file.parent
-
-    # Attempt to find a directory under project_dir that contains all "<proc>.py"
-    bin_dir_candidate = locate_bin_dir(processes, project_dir)
-
-    if bin_dir_candidate is not None:
-        bin_dir = bin_dir_candidate
-    else:
-        # Fallback: maybe everything was installed flatly in project_dir/bin
-        if (project_dir / "bin").is_dir():
-            bin_dir = project_dir / "bin"
-        else:
-            raise FileNotFoundError("Could not locate a single folder containing all of: "
-                                    + ", ".join(f"{p}.py" for p in processes))
+    processes = resolve_processes(args)
+    bin_dir = resolve_bin_dir(processes, Path(__file__).resolve().parent)
 
     # ---- Fail-fast environment preflight (tools on PATH, RAM sanity) ----
     if str(bin_dir) not in sys.path:
@@ -848,17 +626,8 @@ if __name__ == "__main__":
 
     # Load the Sample Table and correct any ".fq" -> ".fastq"
     input_tsv_df = preprocess_tsv(input_tsv)
-
-    # Resolve QC and reporter scripts once (outside the sample loop)
-    qc_script = bin_dir / "qc_assessment.py"
-    if not qc_script.exists():
-        raise FileNotFoundError(f"Missing QC script: {qc_script}")
-    reporter_script = bin_dir / "html_reporter.py"
-    if not reporter_script.exists():
-        raise FileNotFoundError(f"Missing Reporter script: {reporter_script}")
-    compress_script = bin_dir / "final_compress.py"
-    if not compress_script.exists():
-        raise FileNotFoundError(f"Missing compress script: {compress_script}")
+    if args.prepare_only:
+        sys.exit(0)
 
     # Process each sample fully — pipeline steps, then QC, then HTML — before
     # moving on to the next sample.
@@ -884,65 +653,29 @@ if __name__ == "__main__":
         # steps do not apply -- mode dispatch, not skip-on-failure. Read-based
         # samples run every step in `processes` and fail loudly on error.
         if sample_is_qc_only(row):
-            sample_processes = [p for p in processes if p == "preprocess_refseq"]
+            sample_processes = ["preprocess_refseq"]
             print("NOTE:\tQC-only sample (reference, no reads, no EST_SIZE): "
                   "running reference fetch + QC + report only.")
         else:
             sample_processes = processes
 
-        # ---- Pipeline steps ----
-        for proc in sample_processes:
-            script = bin_dir / f"{proc}.py"
-            if not script.exists():
-                print(f"\nERROR:\tMissing script: {script}")
-                sample_step_failed = True
-                break
-            current_cmd = [sys.executable,
-                           str(script),
-                           sample_id,
-                           input_tsv,
-                           output_dir,
-                           str(cpu_threads),
-                           str(ram_gb)]
-            print(f"\n→ Running {proc}: {' '.join(current_cmd)}\n")
-            current_return_code = run_filtered(current_cmd)
-            if current_return_code != 0:
-                print(f"\nERROR:\t{proc} failed for {sample_id} (rc={current_return_code})")
-                sample_step_failed = True
-                break
-
-        if sample_step_failed:
-            print(f"\nWARN:\tOne or more steps failed for {sample_id}; "
-                  f"still running final QC and HTML report.")
-
-        # ---- Final QC assessment (always runs per sample) ----
-        qc_cmd = [sys.executable,
-                  str(qc_script),
-                  "final",
-                  input_tsv,
-                  sample_id,
-                  output_dir,
-                  str(cpu_threads),
-                  str(ram_gb)]
-        print(f"\n→ Running qc_assessment: {' '.join(qc_cmd)}\n")
-        qc_return_code = run_filtered(qc_cmd)
-        if qc_return_code != 0:
-            print(f"\nWARN:\tqc_assessment returned non-zero for {sample_id} (rc={qc_return_code})")
+        # ---- Pipeline steps, then final QC and HTML report (those two always run) ----
+        for proc in sample_processes + FINAL_STEPS:
+            final = proc in FINAL_STEPS
+            if sample_step_failed and not final:
+                continue
+            cmd = stage_cmd(bin_dir, proc, sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+            print(f"\n→ Running {proc}: {' '.join(cmd)}\n")
+            rc = run_filtered(cmd)
+            if rc == 0:
+                continue
             sample_step_failed = True
-
-        # ---- HTML report (always runs per sample) ----
-        reporter_cmd = [sys.executable,
-                        str(reporter_script),
-                        sample_id,
-                        input_tsv,
-                        output_dir,
-                        str(cpu_threads),
-                        str(ram_gb)]
-        print(f"\n→ Running html_reporter: {' '.join(reporter_cmd)}\n")
-        reporter_return_code = run_filtered(reporter_cmd)
-        if reporter_return_code != 0:
-            print(f"\nWARN:\thtml_reporter returned non-zero for {sample_id} (rc={reporter_return_code})")
-            sample_step_failed = True
+            if final:
+                print(f"\nWARN:\t{proc} returned non-zero for {sample_id} (rc={rc})")
+            else:
+                print(f"\nERROR:\t{proc} failed for {sample_id} (rc={rc})")
+                print(f"\nWARN:\tOne or more steps failed for {sample_id}; "
+                      f"still running final QC and HTML report.")
 
         # ---- Final compression (after QC and report have read the FASTA files) ----
         # Compresses every .fasta/.fastq left under the sample directory using
@@ -953,15 +686,9 @@ if __name__ == "__main__":
         elif dry_run:
             print(f"\nDRY-RUN:\tWould run final_compress for {sample_id}.")
         else:
-            compress_cmd = [sys.executable,
-                            str(compress_script),
-                            sample_id,
-                            input_tsv,
-                            output_dir,
-                            str(cpu_threads),
-                            str(ram_gb)]
-            print(f"\n→ Running final_compress: {' '.join(compress_cmd)}\n")
-            if run_filtered(compress_cmd) != 0:
+            cmd = stage_cmd(bin_dir, "final_compress", sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+            print(f"\n→ Running final_compress: {' '.join(cmd)}\n")
+            if run_filtered(cmd) != 0:
                 print(f"\nWARN:\tfinal_compress returned non-zero for {sample_id}; files left uncompressed.")
 
         if sample_step_failed:

@@ -24,12 +24,12 @@ Updated on 2026-09-29
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
+import gzip
 import hashlib
 import os
 import shutil
 import tempfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from pathlib import Path
 from typing import List
 
 from Bio import SeqIO
@@ -381,54 +381,20 @@ def restore_if_compressed(path, cpu_threads):
 
 
 # --------------------------------------------------------------
-# Catches and unzips compressed files for FASTQ
+# Sum the bases in a FASTA / FASTQ, compressed or not
 # --------------------------------------------------------------
-def sum_fastq_bases_with_pigz_safe(fq_path: Path, cpu_threads: int) -> int:
-    """
-    Safely sum read lengths from a FASTQ that may be .gz by:
-    - copying the .gz to a temp dir,
-    - pigz_decompress() on the *copy*,
-    - parsing the decompressed temp file,
-    - removing the temp dir.
-    """
-    total = 0
-    if str(fq_path).endswith(".gz"):
-        with tempfile.TemporaryDirectory(prefix="egap_pigz_") as tdir:
-            tmp_gz = Path(tdir) / fq_path.name
-            shutil.copy2(str(fq_path), str(tmp_gz))                 # safe copy
-            tmp_fastq = pigz_decompress(str(tmp_gz), cpu_threads)   # your function returns str path
-            with open(tmp_fastq, "rt") as handle:
-                for rec in SeqIO.parse(handle, "fastq"):
-                    total += len(rec.seq)
-            # temp dir cleanup happens automatically
-    else:
-        with open(fq_path, "rt") as handle:
-            for rec in SeqIO.parse(handle, "fastq"):
-                total += len(rec.seq)
-    return total
+def _sum_bases(path, fmt, cpu_threads):
+    """Total sequence length of a FASTA/FASTQ without touching the input.
 
-
-# --------------------------------------------------------------
-# Catches and unzips compressed files for FASTA
-# --------------------------------------------------------------
-def sum_fasta_bases_with_pigz_safe(fa_path: Path, cpu_threads: int) -> int:
+    ``.gz`` is read in place with :mod:`gzip`; ``.fastb`` is decoded from a
+    temporary copy (``fastb decode`` removes the file it reads).
     """
-    Same safety pattern for FASTA/FA files that may be .gz or .fastb.
-    """
-    total = 0
-    if str(fa_path).endswith((".gz", ".fastb")):
-        with tempfile.TemporaryDirectory(prefix="egap_pigz_") as tdir:
-            tmp_gz = Path(tdir) / fa_path.name
-            shutil.copy2(str(fa_path), str(tmp_gz))
-            tmp_fa = pigz_decompress(str(tmp_gz), cpu_threads)      # returns str
-            with open(tmp_fa, "rt") as handle:
-                for rec in SeqIO.parse(handle, "fasta"):
-                    total += len(rec.seq)
-    else:
-        with open(fa_path, "rt") as handle:
-            for rec in SeqIO.parse(handle, "fasta"):
-                total += len(rec.seq)
-    return total
+    path = str(path)
+    if path.endswith(".fastb"):
+        with tempfile.TemporaryDirectory(prefix="egap_fastb_") as tdir:
+            return _sum_bases(fastb_decompress(shutil.copy2(path, tdir), cpu_threads), fmt, cpu_threads)
+    with (gzip.open if path.endswith(".gz") else open)(path, "rt") as handle:
+        return sum(len(rec.seq) for rec in SeqIO.parse(handle, fmt))
 
 
 # --------------------------------------------------------------
@@ -437,15 +403,10 @@ def sum_fasta_bases_with_pigz_safe(fa_path: Path, cpu_threads: int) -> int:
 def calculate_genome_coverage(read_fastqs: List[str], assembly_fasta: str, cpu_threads: int) -> float:
     """
     Compute genome coverage = (total bases in all reads) / (total bases in the assembly).
-    Uses your pigz_{compress,decompress} functions safely (no mutation of inputs).
-    Supports .fastq/.fq(.gz) for reads and .fa/.fasta(.gz) for assembly.
+    Supports .fastq/.fq(.gz) for reads and .fa/.fasta(.gz/.fastb) for assembly.
     """
-    total_bases = 0
-    for fq in read_fastqs:
-        fq_path = Path(fq)
-        total_bases += sum_fastq_bases_with_pigz_safe(fq_path, cpu_threads)
-
-    assembly_bases = sum_fasta_bases_with_pigz_safe(Path(assembly_fasta), cpu_threads)
+    total_bases = sum(_sum_bases(fq, "fastq", cpu_threads) for fq in read_fastqs)
+    assembly_bases = _sum_bases(assembly_fasta, "fasta", cpu_threads)
     if assembly_bases == 0:
         raise ValueError(f"No contigs found in {assembly_fasta}")
 
@@ -455,7 +416,7 @@ def calculate_genome_coverage(read_fastqs: List[str], assembly_fasta: str, cpu_t
 # --------------------------------------------------------------
 # Verify MD5 checksums for Illumina files
 # --------------------------------------------------------------
-def md5_check(folder_name, illumina_df):
+def md5_check(folder_name):
     """Verify MD5 checksums for Illumina files in the specified folder.
 
     Compares computed MD5 checksums against those listed in ``MD5.txt``.
@@ -465,56 +426,33 @@ def md5_check(folder_name, illumina_df):
     ----------
     folder_name : str
         Directory containing Illumina FASTQ files and ``MD5.txt``.
-    illumina_df : pandas.DataFrame
-        DataFrame used to accumulate MD5 and filename entries.
+
+    Returns
+    -------
+    bool
+        ``True`` when every listed file exists and matches (or there is no
+        ``MD5.txt`` to check against), ``False`` otherwise.
     """
     md5_file = os.path.join(folder_name, "MD5.txt")
     if not os.path.exists(md5_file):
         print(f"WARNING: MD5.txt not found in {folder_name}. Skipping MD5 check.")
-        return
+        return True
     with open(md5_file, "r") as f:
-        for line in f:
-            md5, filename = line.strip().split()
-            illumina_df = illumina_df.append({"MD5": md5, "Filename": filename}, ignore_index=True)
+        entries = [line.split() for line in f if line.strip()]
 
-    for index, row in illumina_df.iterrows():
-        file_path = os.path.join(folder_name, row["Filename"])
-        if os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                file_hash = hashlib.md5(f.read()).hexdigest()
-            if file_hash == row["MD5"]:
-                print(f"PASS: MD5 check passed for {row['Filename']}")
-            else:
-                print(f"ERROR: MD5 check failed for {row['Filename']}. Expected {row['MD5']}, got {file_hash}")
-        else:
+    all_ok = True
+    for md5, filename in entries:
+        filename = filename.lstrip("*")  # md5sum marks binary-mode entries with '*'
+        file_path = os.path.join(folder_name, filename)
+        if not os.path.exists(file_path):
             print(f"ERROR: File not found for MD5 check: {file_path}")
-
-
-# --------------------------------------------------------------
-# Move a file up the directory tree
-# --------------------------------------------------------------
-def move_file_up(input_file, up_count):
-    """Move a file up the directory hierarchy by a specified number of levels.
-
-    Parameters
-    ----------
-    input_file : str
-        Path to the file to move.
-    up_count : int
-        Number of directory levels to ascend.
-
-    Returns
-    -------
-    str
-        New path to the moved file, or the original *input_file* path if
-        the file does not exist.
-    """
-    if os.path.exists(input_file):
-        move_dir = "/".join(os.path.dirname(input_file).split("/")[:-int(up_count)])
-        os.makedirs(move_dir, exist_ok=True)
-        new_path = os.path.join(move_dir, os.path.basename(input_file))
-        shutil.move(input_file, new_path)
-        return new_path
-    else:
-        print(f"ERROR:\tCannot move a non-existing file: {input_file}")
-        return input_file
+            all_ok = False
+            continue
+        with open(file_path, "rb") as f:
+            file_hash = hashlib.file_digest(f, "md5").hexdigest()  # chunked: FASTQs do not fit in RAM
+        if file_hash == md5.lower():
+            print(f"PASS: MD5 check passed for {filename}")
+        else:
+            print(f"ERROR: MD5 check failed for {filename}. Expected {md5}, got {file_hash}")
+            all_ok = False
+    return all_ok

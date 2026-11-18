@@ -18,14 +18,13 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 import os
 import shutil
-import sys
 import subprocess
 import glob
 import re
 from typing import Optional
 
 import pandas as pd
-from utilities import run_subprocess_cmd, select_long_reads, initialize_logging_environment, load_sample_context
+from utilities import run_subprocess_cmd, select_long_reads, run_stage, load_sample_context
 from qc_assessment import nanoplot_qc_reads
 from record_provenance import record_file
 
@@ -267,34 +266,4 @@ def preprocess_ont(
 
 
 if __name__ == "__main__":
-    # Log raw sys.argv immediately
-    print(f"DEBUG: Raw sys.argv = {sys.argv}")
-    print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
-    
-    # Check argument count
-    if len(sys.argv) != 6:
-        print(f"ERROR: Expected 5 arguments (plus script name), got {len(sys.argv)-1}: {sys.argv[1:]}", 
-              file=sys.stderr)
-        print("Usage: python3 preprocess_ont.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", 
-              file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    # Log each argument
-    for i, arg in enumerate(sys.argv):
-        print(f"DEBUG: sys.argv[{i}] = '{arg}'")
-    
-    sample_id = sys.argv[1]
-    input_tsv = sys.argv[2]
-    output_dir = sys.argv[3]
-    cpu_threads = sys.argv[4]
-    ram_gb = int(sys.argv[5]) if sys.argv[5] != " " else 8
-    
-    print(f"DEBUG: Parsed sample_id = '{sample_id}'")
-    print(f"DEBUG: Parsed input_tsv = '{input_tsv}'")
-    print(f"DEBUG: Parsed output_dir = '{output_dir}'")
-    print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' (converted to {cpu_threads})")
-    print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' (converted to {ram_gb})")
-    
-    highest_mean_qual_long_reads = preprocess_ont(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    run_stage(preprocess_ont, cast=int)

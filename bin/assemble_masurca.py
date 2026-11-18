@@ -15,7 +15,6 @@ Updated on 2026-04-16
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
-import sys
 import shutil
 import re
 import stat
@@ -23,7 +22,7 @@ from typing import Optional
 
 import pandas as pd
 from pathlib import Path
-from utilities import run_subprocess_cmd, log_print, initialize_logging_environment, load_sample_context
+from utilities import run_subprocess_cmd, log_print, run_stage, load_sample_context
 from qc_assessment import qc_assessment
 from file_manager import remove_file, remove_dir
 from monitor_assembly import AssemblyMonitor
@@ -729,16 +728,4 @@ def masurca_config_gen(
 
 
 if __name__ == "__main__":
-    # Provide a usage message if the correct number of arguments is not supplied.
-    if len(sys.argv) != 6:
-        print("Usage: python3 assemble_masurca.py <sample_id> <input_tsv> "
-            "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    egap_masurca_assembly_path = masurca_config_gen(sys.argv[1],       # sample_id
-                                                    sys.argv[2],       # input_tsv
-                                                    sys.argv[3],       # output_dir
-                                                    str(sys.argv[4]),  # cpu_threads
-                                                    str(sys.argv[5]))  # ram_gb
+    run_stage(masurca_config_gen)

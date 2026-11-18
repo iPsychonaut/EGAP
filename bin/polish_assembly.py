@@ -18,13 +18,11 @@ Updated on Wed Sept 3 2025
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
-import sys
 import shutil
 from typing import Optional
 
 import pandas as pd
-from pathlib import Path  # <<< NEW
-from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context
+from utilities import run_subprocess_cmd, run_stage, load_sample_context
 from file_manager import remove_file, remove_dir, remove_glob
 
 
@@ -339,17 +337,4 @@ def polish_assembly(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python3 polish_assembly.py <sample_id> <input_tsv> "
-              "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    final_polished_assembly = polish_assembly(
-        sys.argv[1],       # sample_id
-        sys.argv[2],       # input_tsv
-        sys.argv[3],       # output_dir
-        str(sys.argv[4]),  # cpu_threads
-        str(sys.argv[5])   # ram_gb
-    )
+    run_stage(polish_assembly)

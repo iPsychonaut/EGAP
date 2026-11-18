@@ -19,9 +19,7 @@ Updated on 2026-04-16
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
-import sys
-import pandas as pd
-from utilities import (compress_intermediate, fastb_compress_many, intermediate_format,
+from utilities import (run_stage, compress_intermediate, fastb_compress_many, intermediate_format,
                        load_sample_context)
 
 
@@ -88,14 +86,4 @@ def final_compress(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             
             
 if __name__ == "__main__":
-    # Handle command-line arguments
-    if len(sys.argv) != 6:
-        print("Usage: python3 final_compress.py <sample_id> "
-              "<input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    final_compress(sys.argv[1],       # sample_id
-                   sys.argv[2],       # input_tsv
-                   sys.argv[3],       # output_dir
-                   str(sys.argv[4]),  # cpu_threads
-                   str(sys.argv[5]))  # ram_gb
+    run_stage(final_compress, log=False)
