@@ -210,26 +210,35 @@ docker run --rm -it --entrypoint bash \
 ```
 
 ##### Install Via Nextflow/Singularity:
-Open a terminal in the directory where the `entheome.sif.def` is located and run:
+The Singularity image is built from the Docker image, so build that first (see above), then open a terminal in the directory where the `entheome.sif.def` is located and run:
 
 ```bash
 sudo singularity build entheome.sif entheome.sif.def
 ```
 
+If the Singularity build machine has no Docker daemon, the header of `entheome.sif.def` shows how to build from a `docker save` archive instead.
+
 Edit the parameters in the nextflow.config and run (ensure the entheome.sif is in the same directory that draft_assembly.nf and nextflow.config are in):
 
 ```bash
-nextflow draft_assembly.nf -with-singularity entheome.sif
+nextflow run draft_assembly.nf
+```
+
+Any parameter can also be given on the command line. The Nextflow runner takes the same options as `EGAP.py` and runs the same stages in the same order:
+
+```bash
+nextflow run draft_assembly.nf --input_tsv /path/to/samples.tsv --output_dir /path/to/output \
+    --cpu_threads 16 --ram_gb 64 --no_flye
 ```
 
 OR
 
-Load into the Singularity image, load the pre-generated EGAP environment:
+Run EGAP directly from the Singularity image (the `EGAP` launcher puts the EGAP environment first on PATH):
 
 ```bash
-singularity shell entheome.sif -B /path/to/data/mnt:/path/to/data/mnt && \
-source /opt/conda/etc/profile.d/conda.sh && \
-conda activate EGAP_env
+singularity run -B /path/to/data/mnt:/path/to/data/mnt entheome.sif \
+    EGAP --input_tsv /path/to/data/mnt/samples.tsv --output_dir /path/to/data/mnt/output
+```
 ```
 
 ##### Install Via Anaconda:
@@ -324,6 +333,8 @@ Which assemblers EGAP invokes depends entirely on which read types you supply in
 | `--ram_gb` | `-r` | int | `8` | RAM in GB to allocate |
 | `--dry_run` | | flag | `False` | Log all file-management actions (removals, compressions) without executing them. Equivalent to setting `EGAP_DRY_RUN=1` in the environment. |
 | `--tui` | | flag | `False` | Launch the interactive TUI instead of plain terminal output. All other flags pass through to the TUI. |
+| `--intermediate_format` | | `pigz` or `fastb` | `pigz` | Format for nucleotide FASTA intermediates. FASTQ always uses pigz. Equivalent to setting `EGAP_INTERMEDIATE_FORMAT` in the environment. |
+| `--prepare_only` | | flag | `False` | Print the settings, run the pre-flight checks and normalise the sample table, then exit before any stage runs. Used by the Nextflow runner. |
 | `--no-masurca` | `-no_m` | flag | `False` | Skip the MaSuRCA assembler. |
 | `--no-flye` | `-no_f` | flag | `False` | Skip the Flye assembler. |
 | `--no-spades` | `-no_s` | flag | `False` | Skip the SPAdes assembler. |
@@ -378,7 +389,7 @@ EGAP -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64 --tui
 python EGAP_TUI.py -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64
 ```
 
-Both launch modes support `--dry_run`.
+Both launch modes take the same flags as `EGAP.py`.
 
 ### Layout
 

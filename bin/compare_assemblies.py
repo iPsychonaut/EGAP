@@ -17,14 +17,13 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 
 import os
-import sys
 import shutil
 import glob
 import subprocess
 import pandas as pd
 from pathlib import Path
 from collections import Counter
-from utilities import run_subprocess_cmd, load_sample_context, initialize_logging_environment, validate_fasta
+from utilities import run_subprocess_cmd, load_sample_context, run_stage, validate_fasta
 from Bio import SeqIO
 from qc_assessment import run_lineage_eval
 
@@ -493,15 +492,4 @@ def compare_assemblies(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python3 compare_assemblies.py <sample_id> <input_tsv> "
-              "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    best_assembly = compare_assemblies(sys.argv[1],       # sample_id
-                                      sys.argv[2],       # input_tsv
-                                      sys.argv[3],       # output_dir
-                                      str(sys.argv[4]),  # cpu_threads
-                                      str(sys.argv[5]))  # ram_gb
+    run_stage(compare_assemblies)

@@ -16,12 +16,11 @@ Updated on 2026-04-16
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
-import sys
 import shutil
 from typing import Optional
 
 import pandas as pd
-from utilities import run_subprocess_cmd, initialize_logging_environment, load_sample_context, to_abs
+from utilities import run_subprocess_cmd, run_stage, load_sample_context, to_abs
 from sample_tsv import flye_ont_mode
 from qc_assessment import qc_assessment
 from estimate_runtime import log_estimate_for
@@ -167,16 +166,4 @@ def assemble_flye(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python3 assemble_flye.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    egap_flye_assembly_path = assemble_flye(
-        sys.argv[1],  # sample_id
-        sys.argv[2],  # input_tsv
-        sys.argv[3],  # output_dir
-        str(sys.argv[4]),  # cpu_threads
-        str(sys.argv[5])   # ram_gb
-    )
+    run_stage(assemble_flye)

@@ -25,14 +25,13 @@ Updated on 2026-04-16
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
-import sys
 import glob
 import shutil
 import re
 from typing import Optional
 
 import pandas as pd
-from utilities import run_subprocess_cmd, select_long_reads, initialize_logging_environment, load_sample_context, to_abs
+from utilities import run_subprocess_cmd, select_long_reads, run_stage, load_sample_context, to_abs
 from qc_assessment import nanoplot_qc_reads
 from record_provenance import record_file
 
@@ -241,36 +240,4 @@ def preprocess_pacbio(
 
 
 if __name__ == "__main__":
-    print(f"DEBUG: Raw sys.argv = {sys.argv}")
-    print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
-
-    if len(sys.argv) != 6:
-        print("Usage: python3 preprocess_pacbio.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    for i, arg in enumerate(sys.argv):
-        print(f"DEBUG: sys.argv[{i}] = '{arg}'")
-
-    sample_id  = sys.argv[1]
-    input_tsv  = sys.argv[2]
-    output_dir = sys.argv[3]
-
-    # Robust parsing
-    try:
-        cpu_threads = int(str(sys.argv[4]).strip()) if str(sys.argv[4]).strip() else (os.cpu_count() or 1)
-    except Exception:
-        cpu_threads = os.cpu_count() or 1
-    try:
-        ram_gb = int(str(sys.argv[5]).strip()) if str(sys.argv[5]).strip() else 8
-    except Exception:
-        ram_gb = 8
-
-    print(f"DEBUG: Parsed sample_id = '{sample_id}'")
-    print(f"DEBUG: Parsed input_tsv = '{input_tsv}'")
-    print(f"DEBUG: Parsed output_dir = '{output_dir}'")
-    print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' (converted to {cpu_threads})")
-    print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' (converted to {ram_gb})")
-
-    best = preprocess_pacbio(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    run_stage(preprocess_pacbio, cast=int)

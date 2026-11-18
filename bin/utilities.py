@@ -15,7 +15,7 @@ independently and so the dependency direction is explicit:
     log.py               -- ANSI-coloured logging + file logging (leaf)
     file_operations.py   -- to_abs, validate_fasta, pigz wrappers, md5, etc.
                             depends on subprocess_runner
-    sample_tsv.py        -- SampleContext, AssemblerStage, get_current_row_data,
+    sample_tsv.py        -- SampleContext, get_current_row_data,
                             gen_sample_stats_dict, analyze_nanostats,
                             select_long_reads, load_sample_context,
                             read_sample_table
@@ -35,18 +35,15 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 # flake8: noqa: F401  (the whole point of this module is to re-export)
 
 from subprocess_runner import (
-    get_resource_values,
     run_subprocess_cmd,
 )
 from log import (
-    generate_log_file,
     initialize_logging_environment,
     log_print,
 )
 from file_operations import (
     calculate_genome_coverage,
     md5_check,
-    move_file_up,
     compress_intermediate,
     decompress_intermediate,
     fastb_compress,
@@ -56,34 +53,29 @@ from file_operations import (
     pigz_compress,
     pigz_decompress,
     restore_if_compressed,
-    sum_fasta_bases_with_pigz_safe,
-    sum_fastq_bases_with_pigz_safe,
     to_abs,
     validate_fasta,
 )
 from sample_tsv import (
-    AssemblerStage,
     SampleContext,
     analyze_nanostats,
     gen_sample_stats_dict,
     get_current_row_data,
     load_sample_context,
     read_sample_table,
+    run_stage,
     select_long_reads,
 )
 
 __all__ = [
     # subprocess_runner
-    "get_resource_values",
     "run_subprocess_cmd",
     # log
-    "generate_log_file",
     "initialize_logging_environment",
     "log_print",
     # file_operations
     "calculate_genome_coverage",
     "md5_check",
-    "move_file_up",
     "compress_intermediate",
     "decompress_intermediate",
     "fastb_compress",
@@ -93,17 +85,15 @@ __all__ = [
     "pigz_compress",
     "pigz_decompress",
     "restore_if_compressed",
-    "sum_fasta_bases_with_pigz_safe",
-    "sum_fastq_bases_with_pigz_safe",
     "to_abs",
     "validate_fasta",
     # sample_tsv
-    "AssemblerStage",
     "SampleContext",
     "analyze_nanostats",
     "gen_sample_stats_dict",
     "get_current_row_data",
     "load_sample_context",
     "read_sample_table",
+    "run_stage",
     "select_long_reads",
 ]

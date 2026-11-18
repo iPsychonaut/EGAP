@@ -19,33 +19,7 @@ Updated on 2026-05-24
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
-import math
 import subprocess
-
-
-# --------------------------------------------------------------
-# Calculate resource allocation
-# --------------------------------------------------------------
-def get_resource_values(percent_resources, total_cpu, total_ram):
-    """Calculate CPU threads and RAM based on a percentage of total resources.
-
-    Parameters
-    ----------
-    percent_resources : float
-        Fraction of total resources to allocate (0.0-1.0).
-    total_cpu : int
-        Total available CPU threads.
-    total_ram : int
-        Total available RAM in GB.
-
-    Returns
-    -------
-    tuple of (int, int)
-        ``(cpu_threads, ram_gb)`` - number of threads and RAM in GB.
-    """
-    cpu_threads = int(math.floor(total_cpu * percent_resources))
-    ram_gb = int(total_ram * percent_resources)
-    return cpu_threads, ram_gb
 
 
 # --------------------------------------------------------------

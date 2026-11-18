@@ -3,3 +3,5 @@ Dockerfile eol=lf
 .dockerignore eol=lf
 *.sh eol=lf
 *.def eol=lf
+*.nf eol=lf
+nextflow.config eol=lf

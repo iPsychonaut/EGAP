@@ -42,9 +42,8 @@ import shutil
 from typing import Optional
 
 import pandas as pd
-from pathlib import Path
 from Bio import SeqIO
-from utilities import run_subprocess_cmd, initialize_logging_environment, log_print, compress_intermediate, load_sample_context
+from utilities import run_subprocess_cmd, run_stage, log_print, compress_intermediate, load_sample_context
 
 
 # --------------------------------------------------------------
@@ -442,24 +441,8 @@ def decontaminate_assembly(
 # Entry point
 # --------------------------------------------------------------
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python3 decontaminate_assembly.py <sample_id> <input_tsv> "
-              "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    result = decontaminate_assembly(
-        sys.argv[1],   # sample_id
-        sys.argv[2],   # input_tsv
-        sys.argv[3],   # output_dir
-        sys.argv[4],   # cpu_threads
-        sys.argv[5],   # ram_gb
-    )
-
+    result = run_stage(decontaminate_assembly)
     if result is None:
         log_print("FAIL:\tDecontamination did not produce an output assembly.")
         sys.exit(1)
-
     log_print(f"PASS:\tDecontamination finished: {result}")
-    sys.exit(0)

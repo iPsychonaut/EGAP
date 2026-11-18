@@ -30,51 +30,11 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
-# Optional iNat import — process_metadata depends on geopy/requests and is
-# allowed to be absent in a minimal install.  The real implementations live in
-# bin/process_metadata.py; the stubs below preserve the (None, None, None,
-# None, None) / (None, None, None) shape that callers expect.
-_HAS_INAT = True
-try:
-    from process_metadata import get_inat_obs, reverse_geocode
-except ImportError as e:  # optional dep missing (geopy/requests) or module absent
-    print(f"WARN:\tprocess_metadata import failed ({e}); iNaturalist fields will be skipped.")
-    _HAS_INAT = False
-
-    def get_inat_obs(_):
-        """Stub returned when ``process_metadata`` deps are unavailable.
-
-        Returns a 5-tuple of ``None`` matching
-        :func:`process_metadata.get_inat_obs` so report rendering can
-        continue without iNaturalist enrichment.
-        """
-        return (None, None, None, None, None)
-
-    def reverse_geocode(_, __):
-        """Stub returned when ``process_metadata`` deps are unavailable.
-
-        Returns a 3-tuple of ``None`` matching
-        :func:`process_metadata.reverse_geocode`.
-        """
-        return (None, None, None)
-
-# Use the shared helper from utilities so row extraction stays consistent
-try:
-    from utilities import load_sample_context, initialize_logging_environment, to_abs
-except Exception as e:
-    print(f"ERROR:\tutilities.load_sample_context not importable: {e}")
-    raise
-
-# Provenance (steps / commands / versions). Optional: a minimal install or a
-# run predating provenance capture should still render the rest of the report.
-try:
-    from record_provenance import (load_provenance, pipeline_steps,
-                                    meaningful_tools, resolve_versions,
-                                    versions_from_entries)
-    _HAS_PROVENANCE = True
-except Exception as e:
-    print(f"WARN:\trecord_provenance import failed ({e}); provenance section will be skipped.")
-    _HAS_PROVENANCE = False
+from process_metadata import get_inat_obs, reverse_geocode
+from record_provenance import (load_provenance, pipeline_steps,
+                               meaningful_tools, resolve_versions,
+                               versions_from_entries)
+from utilities import load_sample_context, run_stage, to_abs
 
 
 # Human-readable labels for the pipeline stages recorded in provenance.
@@ -706,7 +666,7 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     busco_metrics = ["Complete", "Single", "Duplicated", "Fragmented", "Missing", "Total"]
 
     # ------------------------------ iNaturalist (optional) ------------------------------
-    if _HAS_INAT and pd.notna(inat_id):
+    if pd.notna(inat_id):
         try:
             inat_html = f"https://www.inaturalist.org/observations/{int(inat_id)}"
         except Exception:
@@ -1160,25 +1120,24 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     prov_steps = []
     prov_programs = []
     prov_commands = []
-    if _HAS_PROVENANCE:
-        try:
-            prov_entries, prov_source = load_provenance(output_dirto_abs, sample_id)
-            prov_steps = [{"stage": s, "label": STAGE_LABELS.get(s, s)}
-                          for s in pipeline_steps(prov_entries)]
-            _tools = meaningful_tools(prov_entries)
-            # Prefer versions captured at run time (durable, match the run env);
-            # probe/conda-resolve only the tools missing a captured version.
-            _captured = versions_from_entries(prov_entries)
-            _missing = [t for t in _tools if t not in _captured]
-            _resolved = resolve_versions(_missing) if _missing else {}
-            prov_programs = [{"tool": t, "version": _captured.get(t) or _resolved.get(t, "unknown")}
-                             for t in _tools]
-            prov_commands = [{"stage": e.get("stage", "unknown"),
-                              "tool": e.get("tool", ""),
-                              "command": e.get("command", "")}
-                             for e in prov_entries if e.get("type") != "file"]
-        except Exception as e:
-            print(f"WARN:\tProvenance assembly failed: {e}")
+    try:
+        prov_entries, prov_source = load_provenance(output_dirto_abs, sample_id)
+        prov_steps = [{"stage": s, "label": STAGE_LABELS.get(s, s)}
+                      for s in pipeline_steps(prov_entries)]
+        _tools = meaningful_tools(prov_entries)
+        # Prefer versions captured at run time (durable, match the run env);
+        # probe/conda-resolve only the tools missing a captured version.
+        _captured = versions_from_entries(prov_entries)
+        _missing = [t for t in _tools if t not in _captured]
+        _resolved = resolve_versions(_missing) if _missing else {}
+        prov_programs = [{"tool": t, "version": _captured.get(t) or _resolved.get(t, "unknown")}
+                         for t in _tools]
+        prov_commands = [{"stage": e.get("stage", "unknown"),
+                          "tool": e.get("tool", ""),
+                          "command": e.get("command", "")}
+                         for e in prov_entries if e.get("type") != "file"]
+    except Exception as e:
+        print(f"WARN:\tProvenance assembly failed: {e}")
     busco_dbs = [str(db) for db in (first_busco_db, second_busco_db) if pd.notna(db)]
 
     render_ctx = {
@@ -1250,16 +1209,4 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python3 html_reporter.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    _ = html_reporter(
-        sys.argv[1],              # sample_id
-        sys.argv[2],              # input_tsv
-        sys.argv[3],              # output_dir
-        str(sys.argv[4]),         # cpu_threads
-        str(sys.argv[5])          # ram_gb
-    )
+    run_stage(html_reporter)

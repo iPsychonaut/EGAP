@@ -20,14 +20,12 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 
 import os
-import sys
 from typing import Optional
 
 import pandas as pd
 import shutil
 from pathlib import Path
-from Bio import SeqIO
-from utilities import run_subprocess_cmd, initialize_logging_environment, validate_fasta, load_sample_context
+from utilities import run_subprocess_cmd, run_stage, validate_fasta, load_sample_context
 
 
 # --------------------------------------------------------------
@@ -539,10 +537,4 @@ def curate_assembly(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python3 curate_assembly.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    final_curated_assembly = curate_assembly(sys.argv[1], sys.argv[2], sys.argv[3], str(sys.argv[4]), str(sys.argv[5]))
+    run_stage(curate_assembly)

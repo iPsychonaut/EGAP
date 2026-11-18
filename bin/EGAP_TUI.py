@@ -13,11 +13,8 @@ Layout goals:
 - Pipeline Progress in the bottom middle
 - Streaming pipeline logs on the left
 
-This script mirrors EGAP.py orchestration:
-- preprocess_tsv()
-- locate_bin_dir()
-- processes list
-- per-sample/per-process execution, then qc_assessment, then html_reporter
+Orchestration comes from EGAP.py (parser, stage list, stage commands,
+preprocess_tsv); this file only adds the display and the async runner.
 
 
 python EGAP_TUI.py -tsv /mnt/c/Users/theda/OneDrive/Desktop/EGAP/EGAP_TUI_test.tsv -o /mnt/c/Users/theda/OneDrive/Desktop/EGAP/EGAP_TUI_test -t 10 -r 24
@@ -32,17 +29,15 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 from __future__ import annotations
 
 import traceback
-import argparse
 import asyncio
 import os
 import sys
-import time
 import psutil
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 from rich.text import Text
 from rich.table import Table
 from rich.console import Group
@@ -68,7 +63,7 @@ def pct_to_block(p: float) -> Tuple[str, str]:
 
 @dataclass
 class CoreHistory:
-    blocks: Deque[Tuple[str, str]]  # (char, style)
+    blocks: deque[Tuple[str, str]]  # (char, style)
 
 
 class CpuThreadsHistoryWidget(Widget):
@@ -233,10 +228,6 @@ class Panel(Static):
         self._title = title
         self._body = ""
 
-    def set_body(self, body: str) -> None:
-        self._body = body
-        self.update(self.render())
-
     def render(self) -> str:
         return f"{self._title}\n\n{self._body}" if self._body else f"{self._title}\n"
 
@@ -310,8 +301,6 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         # Persistent append log file (opened once output_dir is known in run_pipeline)
         self.log_file = None
 
-        self.params_auto_scroll = True
-        self.params_scroll_dir = 1  # 1 = down, -1 = up
 
         self.pipeline_task: Optional[asyncio.Task] = None
 
@@ -328,29 +317,6 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
 
         self.COL_SAMPLE = 0
         self.COL_STEP = 1
-
-    def auto_scroll_params(self) -> None:
-        if not getattr(self, "params_auto_scroll", False):
-            return
-    
-        try:
-            params_container = self.query_one("#params", VerticalScroll)
-        except Exception:
-            return
-    
-        # Step size: 1 line per tick (adjust interval below for speed)
-        next_y = params_container.scroll_y + self.params_scroll_dir
-    
-        # Bounce at ends (so it doesn’t just stop at bottom)
-        max_y = params_container.max_scroll_y
-        if next_y >= max_y:
-            next_y = max_y
-            self.params_scroll_dir = -1
-        elif next_y <= 0:
-            next_y = 0
-            self.params_scroll_dir = 1
-    
-        params_container.scroll_to(y=next_y, animate=False)
 
     async def shutdown_pipeline(self):
         self.shutdown_requested = True
@@ -497,29 +463,14 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             return Text("RUNNING", style="yellow")
         return Text("PENDING", style="dim")
 
-    def init_step_plan(self, samples: List[Tuple[str, str]], processes: Optional[List[str]] = None,
-                       sample_processes_map: Optional[Dict[str, List[str]]] = None) -> None:
-        # Caller passes the (possibly skip-filtered) process list so the display
-        # table matches what actually runs; fall back to the full list.
-        # *sample_processes_map* overrides per-sample (e.g. QC-only samples) so
-        # the plan only lists the steps each sample will actually run.
-        if processes is None:
-            processes = [
-                "preprocess_refseq", "preprocess_illumina", "preprocess_ont",
-                "preprocess_pacbio", "decontaminate_reads",
-                "assemble_masurca", "assemble_flye",
-                "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-                "polish_assembly", "curate_assembly", "decontaminate_assembly",
-            ]
-        sample_processes_map = sample_processes_map or {}
+    def init_step_plan(self, sample_proc_map: Dict[str, List[str]]) -> None:
+        """Lay out one table row per step each sample will actually run."""
+        self.steps = [
+            StepStatus(sample_id=sample_id, step=p, status="PENDING")
+            for sample_id, procs in sample_proc_map.items()
+            for p in procs + egap.FINAL_STEPS + ["final_compress"]
+        ]
 
-        self.steps = []
-        for sample_id in samples:
-            for p in sample_processes_map.get(sample_id, processes):
-                self.steps.append(StepStatus(sample_id=sample_id, step=p, status="PENDING"))
-            self.steps.append(StepStatus(sample_id=sample_id, step="qc_assessment(final)", status="PENDING"))
-            self.steps.append(StepStatus(sample_id=sample_id, step="html_reporter", status="PENDING"))
-    
         self.step_index = {(s.sample_id, s.step): i for i, s in enumerate(self.steps)}
     
         self.progress_table.clear(columns=True)
@@ -590,22 +541,13 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             cpu_threads=a.cpu_threads,
             input_tsv=a.input_tsv,
             output_dir=a.output_dir,
+            args=a,
         )
     
         params_renderable = self.format_all_pipeline_settings(settings)
     
         # This assumes you replaced the params panel with a VerticalScroll + Static
         self.params_text.update(params_renderable)
-
-    # Lines containing any of these substrings are suppressed from the TUI log.
-    # They are non-fatal noise from numpy C-extension API version mismatches
-    # that occur when packages in the same env were compiled against different
-    # numpy minor versions (e.g. tiara requires numpy 1.23 while other packages
-    # were compiled against 1.24).  The mismatch is harmless in practice.
-    _NOISE_SUBSTRINGS = (
-        "module compiled against API version",
-        "RuntimeError: module compiled against",
-    )
 
     async def run_subprocess_stream(self, cmd: List[str], cwd: Optional[Path] = None) -> int:
         self.log_line(f"\n→ Running: {' '.join(cmd)}\n")
@@ -638,7 +580,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 break
             decoded = line.decode(errors="replace").rstrip("\n")
             # Suppress known non-fatal numpy API mismatch noise
-            if not any(ns in decoded for ns in self._NOISE_SUBSTRINGS):
+            if not any(ns in decoded for ns in egap._NOISE_SUBSTRINGS):
                 self.log_line(decoded)
 
         rc = await proc.wait()
@@ -647,104 +589,29 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
 
     async def run_pipeline(self) -> None:
         try:
-            # ----------------------------------------------------------------
-            # Argument resolution: two paths
-            #   1. Launched via `EGAP.py --tui` → EGAP.py attaches its already-
-            #      parsed argparse.Namespace as self._preloaded_args so we never
-            #      re-parse sys.argv (which still contains --tui, --dry_run, etc.
-            #      that this inner parser doesn't know about).
-            #   2. Standalone launch (`python EGAP_TUI.py -tsv ...`) → parse
-            #      sys.argv the normal way.
-            # ----------------------------------------------------------------
-            preloaded = getattr(self, "_preloaded_args", None)
-            if preloaded is not None:
-                self.args = preloaded
-            else:
-                parser = argparse.ArgumentParser(
-                    description=f"Run EGAP with TUI (v{getattr(egap, 'VERSION', 'unknown')})"
-                )
-                parser.add_argument("--input_tsv", "-tsv", type=str, required=True)
-                parser.add_argument("--output_dir", "-o", type=str, required=True)
-                parser.add_argument("--cpu_threads", "-t", type=int, default=1)
-                parser.add_argument("--ram_gb", "-r", type=int, default=8)
-                parser.add_argument("--dry_run", action="store_true", default=False,
-                                    help="Log file-management actions without executing them. "
-                                         "Equivalent to EGAP_DRY_RUN=1.")
-                # Per-assembler skip flags (mirror EGAP.py so standalone TUI
-                # launches accept them too).
-                parser.add_argument("--no-masurca", "-no_m", dest="no_masurca",
-                                    action="store_true", default=False, help="Skip MaSuRCA.")
-                parser.add_argument("--no-flye", "-no_f", dest="no_flye",
-                                    action="store_true", default=False, help="Skip Flye.")
-                parser.add_argument("--no-spades", "-no_s", dest="no_spades",
-                                    action="store_true", default=False, help="Skip SPAdes.")
-                parser.add_argument("--no-hifiasm", "-no_h", dest="no_hifiasm",
-                                    action="store_true", default=False, help="Skip hifiasm.")
-                self.args = parser.parse_args()
-
-            # Propagate dry_run env var regardless of how args were obtained.
-            if getattr(self.args, "dry_run", False):
-                os.environ["EGAP_DRY_RUN"] = "1"
+            # Launched via `EGAP.py --tui`: EGAP.py attaches its already-parsed
+            # argparse.Namespace as self._preloaded_args. Standalone launch
+            # (`python EGAP_TUI.py -tsv ...`): parse sys.argv with the same parser.
+            self.args = getattr(self, "_preloaded_args", None) or egap.build_parser().parse_args()
+            egap.apply_run_flags(self.args)
+            input_tsv = self.args.input_tsv
+            output_dir = self.args.output_dir
+            cpu_threads = self.args.cpu_threads
+            ram_gb = self.args.ram_gb
 
             # Per-sample log files are opened inside the sample loop below.
-
             self.set_params_body()
-            settings = egap.get_pipeline_settings(
-                current_moment=self.pipeline_start_time,
-                ram_gb=self.args.ram_gb,
-                cpu_threads=self.args.cpu_threads,
-                input_tsv=self.args.input_tsv,
-                output_dir=self.args.output_dir,
-            )
+
+            settings = egap.get_pipeline_settings(self.pipeline_start_time, ram_gb, cpu_threads,
+                                                  input_tsv, output_dir, self.args)
             self.log_line("\nFULL PIPELINE SETTINGS:")
             for section, kv in settings.items():
                 self.log_line(f"\n[{section}]")
                 for k, v in kv.items():
                     self.log_line(f"  {k}: {v}")
 
-            input_tsv = self.args.input_tsv
-            output_dir = self.args.output_dir
-            cpu_threads = self.args.cpu_threads
-            ram_gb = self.args.ram_gb
-
-            # _PROJECT_DIR and _TUI_DIR are resolved at module load time above.
-            # egap.__file__ points to EGAP.py in the project root.
-            project_dir = Path(egap.__file__).resolve().parent
-
-            processes = [
-                "preprocess_refseq", "preprocess_illumina", "preprocess_ont",
-                "preprocess_pacbio", "decontaminate_reads",
-                "assemble_masurca", "assemble_flye",
-                "assemble_spades", "assemble_hifiasm", "compare_assemblies",
-                "polish_assembly", "curate_assembly", "decontaminate_assembly",
-            ]
-
-            # Honour per-assembler skip flags (--no-masurca/-no_m, etc.), whether
-            # they arrived via EGAP.py --tui (preloaded args) or a standalone launch.
-            _skip_assemblers = {
-                "assemble_masurca": getattr(self.args, "no_masurca", False),
-                "assemble_flye":    getattr(self.args, "no_flye", False),
-                "assemble_spades":  getattr(self.args, "no_spades", False),
-                "assemble_hifiasm": getattr(self.args, "no_hifiasm", False),
-            }
-            _disabled = [proc for proc, skip in _skip_assemblers.items() if skip]
-            if _disabled:
-                processes = [p for p in processes if p not in _disabled]
-                self.log_line("NOTE:\tSkipping assembler(s) by request: "
-                              + ", ".join(p.replace("assemble_", "") for p in _disabled))
-            if all(_skip_assemblers.values()):
-                self.log_line("WARN:\tAll assemblers were disabled; no assembly will be produced.")
-
-            bin_dir_candidate = egap.locate_bin_dir(processes, project_dir)
-            if bin_dir_candidate is not None:
-                bin_dir = bin_dir_candidate
-            elif (project_dir / "bin").is_dir():
-                bin_dir = project_dir / "bin"
-            elif _TUI_DIR.name == "bin" and all(((_TUI_DIR / f"{p}.py").exists()) for p in processes):
-                # EGAP_TUI.py is itself inside bin/ -- use that directory directly
-                bin_dir = _TUI_DIR
-            else:
-                raise FileNotFoundError("Could not locate bin directory containing EGAP step scripts.")
+            processes = egap.resolve_processes(self.args, say=self.log_line)
+            bin_dir = egap.resolve_bin_dir(processes, Path(egap.__file__).resolve().parent)
 
             # ---- Fail-fast environment preflight (tools on PATH, RAM sanity) ----
             try:
@@ -761,30 +628,20 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
 
             input_df = egap.preprocess_tsv(input_tsv)
 
-            samples: List[Tuple[str, str]] = []
-            for _, r in input_df.iterrows():
-                sample_id = str(r["SAMPLE_ID"]).strip()
-                samples.append((sample_id))
-
             # QC-only samples (reference, no reads, no EST_SIZE) run only the
-            # reference fetch; QC + report run afterward. Build a per-sample
-            # process map so both the execution loop and the step-plan display
-            # reflect what actually runs.
-            sample_proc_map = {}
-            for _sid in samples:
-                try:
-                    _row = input_df[input_df["SAMPLE_ID"].astype(str).str.strip() == _sid].iloc[0]
-                    _qc_only = egap.sample_is_qc_only(_row)
-                except Exception:
-                    _qc_only = False
-                sample_proc_map[_sid] = (
-                    [p for p in processes if p == "preprocess_refseq"] if _qc_only else processes
-                )
+            # reference fetch; QC + report run afterward. The per-sample map
+            # drives both the execution loop and the step-plan display.
+            sample_proc_map = {
+                str(r["SAMPLE_ID"]).strip(): ["preprocess_refseq"] if egap.sample_is_qc_only(r) else processes
+                for _, r in input_df.iterrows()
+            }
+            self.log_line(f"Loaded {len(sample_proc_map)} sample(s) from TSV.")
+            self.init_step_plan(sample_proc_map)
 
-            self.log_line(f"Loaded {len(samples)} sample(s) from TSV.")
-            self.init_step_plan(samples, processes, sample_proc_map)
+            def now() -> str:
+                return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            for sample_id in samples:
+            for sample_id, sample_processes in sample_proc_map.items():
                 if self.shutdown_requested:
                     return
 
@@ -801,122 +658,46 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 self.log_line(f"NOTE:\tBeginning pipeline for sample: {sample_id}")
                 self.log_line(f"NOTE:\tSample log: {_sample_log_path}")
                 self.log_line(f"NOTE:\t{'='*60}")
-
-                sample_step_failed = False
-
-                sample_processes = sample_proc_map.get(sample_id, processes)
                 if sample_processes is not processes:
                     self.log_line("NOTE:\tQC-only sample (reference, no reads, no EST_SIZE): "
                                   "running reference fetch + QC + report only.")
 
-                for proc_name in sample_processes:
+                # Pipeline steps, then final QC and HTML report (those two always
+                # run), then final_compress (only when nothing failed).
+                sample_step_failed = False
+                for proc in sample_processes + egap.FINAL_STEPS + ["final_compress"]:
                     if self.shutdown_requested:
                         return
+                    final = proc in egap.FINAL_STEPS
+                    if sample_step_failed and not final:
+                        if proc == "final_compress":
+                            self.log_line(f"\nSKIP:\tfinal_compress for {sample_id}: an earlier step failed.")
+                        continue
+                    if proc == "final_compress" and self.args.dry_run:
+                        self.log_line(f"\nDRY-RUN:\tWould run final_compress for {sample_id}.")
+                        continue
 
-                    step_label = proc_name
-                    script = bin_dir / f"{proc_name}.py"
-
-                    started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.set_step_status(sample_id, step_label, "RUNNING", started_at=started)
-
-                    if not script.exists():
-                        ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        self.set_step_status(sample_id, step_label, "FAIL", return_code=127, ended_at=ended)
-                        self.log_line(f"\nERROR:\tMissing script: {script}")
-                        sample_step_failed = True
-                        break
-
-                    cmd = [
-                        sys.executable,
-                        str(script),
-                        sample_id,
-                        input_tsv,
-                        output_dir,
-                        str(cpu_threads),
-                        str(ram_gb),
-                    ]
-
-                    rc = await self.run_subprocess_stream(cmd)
-                    ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
+                    self.set_step_status(sample_id, proc, "RUNNING", started_at=now())
+                    rc = await self.run_subprocess_stream(egap.stage_cmd(
+                        bin_dir, proc, sample_id, input_tsv, output_dir, cpu_threads, ram_gb))
                     if self.shutdown_requested:
-                        self.set_step_status(sample_id, step_label, "FAIL", return_code=130, ended_at=ended)
+                        self.set_step_status(sample_id, proc, "FAIL", return_code=130, ended_at=now())
                         return
-
-                    if rc != 0:
-                        self.set_step_status(sample_id, step_label, "FAIL", return_code=rc, ended_at=ended)
-                        self.log_line(f"\nERROR:\t{proc_name} failed for {sample_id} (rc={rc})")
+                    self.set_step_status(sample_id, proc, "PASS" if rc == 0 else "FAIL",
+                                         return_code=rc, ended_at=now())
+                    if rc == 0:
+                        continue
+                    if proc == "final_compress":
+                        self.log_line(f"\nWARN:\tfinal_compress returned non-zero for {sample_id}; "
+                                      f"files left uncompressed.")
+                    elif final:
                         sample_step_failed = True
-                        break
-
-                    self.set_step_status(sample_id, step_label, "PASS", return_code=rc, ended_at=ended)
-
-                if sample_step_failed:
-                    self.log_line(f"\nWARN:\tOne or more steps failed for {sample_id}; "
-                                  f"still running final QC and HTML report.")
-
-                # ---- Final QC assessment (always runs per sample) ----
-                qc_step_label = "qc_assessment(final)"
-                qc_script = bin_dir / "qc_assessment.py"
-                if not qc_script.exists():
-                    qc_script = project_dir / "qc_assessment.py"
-
-                started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.set_step_status(sample_id, qc_step_label, "RUNNING", started_at=started)
-
-                if not qc_script.exists():
-                    ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.set_step_status(sample_id, qc_step_label, "FAIL", return_code=127, ended_at=ended)
-                    self.log_line(f"ERROR:\tMissing script: {qc_script}")
-                else:
-                    qc_cmd = [
-                        sys.executable,
-                        str(qc_script),
-                        "final",
-                        input_tsv,
-                        sample_id,
-                        output_dir,
-                        str(cpu_threads),
-                        str(ram_gb),
-                    ]
-                    rc = await self.run_subprocess_stream(qc_cmd)
-                    ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    if rc != 0:
-                        self.set_step_status(sample_id, qc_step_label, "FAIL", return_code=rc, ended_at=ended)
-                        self.log_line(f"WARN:\tqc_assessment returned non-zero for {sample_id} (rc={rc})")
+                        self.log_line(f"WARN:\t{proc} returned non-zero for {sample_id} (rc={rc})")
                     else:
-                        self.set_step_status(sample_id, qc_step_label, "PASS", return_code=rc, ended_at=ended)
-
-                # ---- HTML report (always runs per sample) ----
-                html_step_label = "html_reporter"
-                html_script = bin_dir / "html_reporter.py"
-                if not html_script.exists():
-                    html_script = project_dir / "html_reporter.py"
-
-                started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                self.set_step_status(sample_id, html_step_label, "RUNNING", started_at=started)
-
-                if not html_script.exists():
-                    ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    self.set_step_status(sample_id, html_step_label, "FAIL", return_code=127, ended_at=ended)
-                    self.log_line(f"ERROR:\tMissing script: {html_script}")
-                else:
-                    html_cmd = [
-                        sys.executable,
-                        str(html_script),
-                        sample_id,
-                        input_tsv,
-                        output_dir,
-                        str(cpu_threads),
-                        str(ram_gb),
-                    ]
-                    rc = await self.run_subprocess_stream(html_cmd)
-                    ended = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    if rc != 0:
-                        self.set_step_status(sample_id, html_step_label, "FAIL", return_code=rc, ended_at=ended)
-                        self.log_line(f"WARN:\thtml_reporter returned non-zero for {sample_id} (rc={rc})")
-                    else:
-                        self.set_step_status(sample_id, html_step_label, "PASS", return_code=rc, ended_at=ended)
+                        sample_step_failed = True
+                        self.log_line(f"\nERROR:\t{proc} failed for {sample_id} (rc={rc})")
+                        self.log_line(f"\nWARN:\tOne or more steps failed for {sample_id}; "
+                                      f"still running final QC and HTML report.")
 
                 if sample_step_failed:
                     self.log_line(f"\nFAIL:\tSample {sample_id} completed with errors. "
@@ -933,6 +714,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                     self.log_file = None
 
             self.log_line("\nPASS:\tAll samples processed.")
+
         except Exception:
             self.log_line("\nFATAL:\tpipeline task crashed with exception:")
             self.log_line(traceback.format_exc())

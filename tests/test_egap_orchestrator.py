@@ -53,23 +53,6 @@ def test_version_string_matches_recipe(egap):
     assert f'version = "{egap.VERSION}"' in meta
 
 
-def test_find_files_is_an_infinite_loop_on_any_match(tmp_path):
-    """EGAP.find_files rebinds its accumulator to the os.walk file list and then
-    appends to that same list while iterating it, so the first match never
-    terminates. Run in a subprocess with a hard timeout to prove it without
-    hanging the suite. No caller exists in the repo: delete the function."""
-    import subprocess
-    (tmp_path / "a_dedup.fastq").write_text("x")
-    code = (
-        "import importlib.util, sys;"
-        f"spec=importlib.util.spec_from_file_location('EGAP', r'{REPO_ROOT / 'EGAP.py'}');"
-        "m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m);"
-        f"print(len(m.find_files('_dedup', folder=r'{tmp_path}')))"
-    )
-    with pytest.raises(subprocess.TimeoutExpired):
-        subprocess.run([sys.executable, "-c", code], timeout=5, capture_output=True)
-
-
 def test_locate_bin_dir_prefers_repo_bin_over_hidden_worktree(egap, tmp_path):
     scripts = ["a", "b"]
     for d in (tmp_path / ".claude" / "worktrees" / "x" / "bin", tmp_path / "bin"):
@@ -87,3 +70,31 @@ def test_locate_bin_dir_walk_skips_hidden_dirs(egap, tmp_path):
             (d / f"{s}.py").touch()
     assert egap.locate_bin_dir(scripts, tmp_path) == tmp_path / "src" / "scripts"
     assert egap.locate_bin_dir(scripts, tmp_path / ".claude" / "nope") is None
+
+
+def test_flags_stage_list_and_stage_commands(egap, tmp_path):
+    args = egap.build_parser().parse_args(["-tsv", "s.tsv", "-o", "out", "-no_f", "--no-hifiasm"])
+    said = []
+    procs = egap.resolve_processes(args, say=said.append)
+    assert [p for p in egap.PROCESSES if p not in procs] == ["assemble_flye", "assemble_hifiasm"]
+    assert "flye, hifiasm" in said[0] and len(said) == 1
+    settings = egap.get_pipeline_settings("now", 8, 1, "s.tsv", "out", args)["input-setup settings"]
+    assert settings["assemblers skipped"] == "flye, hifiasm" and settings["dry run"] in ("True", "False")
+
+    tail = ["out", "4", "16"]
+    assert egap.stage_cmd(tmp_path, "polish_assembly", "S1", "s.tsv", "out", 4, 16)[2:] == ["S1", "s.tsv"] + tail
+    assert egap.stage_cmd(tmp_path, "qc_assessment", "S1", "s.tsv", "out", 4, 16)[2:] == ["final", "s.tsv", "S1"] + tail
+
+
+def test_nextflow_runs_every_egap_stage_in_order(egap):
+    """draft_assembly.nf must not lag EGAP.py: same stage scripts, same order, same opt-outs."""
+    import re
+    nf = (REPO_ROOT / "draft_assembly.nf").read_text(encoding="utf-8")
+    stages = egap.PROCESSES + egap.FINAL_STEPS + ["final_compress"]
+    assert re.findall(r"^process (\w+) \{", nf, flags=re.M) == ["prepare"] + stages
+    assert re.findall(r"stage\('(\w+)', sample_id\)", nf) == stages
+    workflow = nf[nf.index("\nworkflow {"):]
+    called = re.findall(r"\b(" + "|".join(stages) + r")\b", workflow)
+    assert list(dict.fromkeys(called)) == stages
+    for name in egap.ASSEMBLERS:
+        assert f"params.no_{name} " in workflow
