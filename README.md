@@ -783,7 +783,7 @@ Reliability, provenance, and run-control release.
   - `sample_tsv.get_current_row_data`: the `"None"` placeholder scrub uses `DataFrame.mask` instead of `DataFrame.replace`, which crashed on pandas 1.4.4 when a column already held `pd.NA`.
 - **Testing**
   - New pytest baseline (`tests/`, 115 tests, no bioinformatics binaries required) and a GitHub Actions workflow covering Python 3.8 with pandas 2.0.3, Python 3.8 with pandas 1.4.4, and Python 3.11.
-  - `audit/`: fspassemblypipeline port assessment with prototypes for BUSCO lineage selection, checkpointing, contamination consensus, k-mer sizing and Merqury QV.
+  - `audit/`: fspassemblypipeline port assessment with prototypes for BUSCO lineage selection, checkpointing, contamination consensus, k-mer sizing and Merqury QV (the prototypes now live on the `audit/fsp-port-tests` branch).
 
 - **Major additions**
   - Per-assembler skip flags (`--no-masurca`/`-no_m`, `--no-flye`/`-no_f`, `--no-spades`/`-no_s`, `--no-hifiasm`/`-no_h`) honoured by both the CLI and the TUI.
