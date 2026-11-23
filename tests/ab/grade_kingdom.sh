@@ -33,7 +33,7 @@ import csv, sys
 sample, summary, stats, grade = sys.argv[1:5]
 s = dict(kv.split("=") for kv in open(summary).read().split()[1:])
 r = next(csv.DictReader(open(stats))) if stats else {}
-q = {l.rsplit(" ", 1)[0]: l.rsplit(" ", 1)[1] for l in open(grade).read().splitlines() if l.strip()}
+q = {l.strip().rsplit(" ", 1)[0]: l.strip().rsplit(" ", 1)[1] for l in open(grade).read().splitlines() if l.strip()}
 print(f"{sample}: wall {int(s['wall_s'])/3600:.1f} h, peak {int(s['peak_mem_bytes'])/2**30:.1f} GiB, "
       f"BUSCO {r.get('FIRST_BUSCO_C','?')}/{r.get('SECOND_BUSCO_C','?')}, "
       f"{q.get('# contigs','?')} contigs, N50 {q.get('N50','?')}, genome fraction {q.get('Genome fraction (%)','?')}%, "
