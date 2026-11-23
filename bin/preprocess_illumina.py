@@ -20,13 +20,12 @@ Updated on 2026-04-16
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
-import sys
 import shutil
 import glob
 from pathlib import Path
 
 import pandas as pd
-from utilities import run_subprocess_cmd, md5_check, initialize_logging_environment, log_print, load_sample_context
+from utilities import run_subprocess_cmd, md5_check, run_stage, log_print, load_sample_context
 from record_provenance import record_file
 from decontaminate_reads import (
     get_kraken2_db,
@@ -182,7 +181,6 @@ def illumina_extract_and_check(folder_name, SAMPLE_ID):
         if the files could not be produced.
     """
     log_print(f"Running MD5 Checksum Analysis on Raw Illumina FASTQ files in {folder_name}...")
-    illumina_df = pd.DataFrame(columns=["MD5", "Filename"])
     base_folder = SAMPLE_ID.split("-")[0]  # e.g., "Es_coli"
     illumina_dir = os.path.join(os.getcwd(), base_folder, "Illumina")  # Use current dir, not hardcoded EGAP_Test_Data
     os.makedirs(illumina_dir, exist_ok=True)
@@ -192,7 +190,7 @@ def illumina_extract_and_check(folder_name, SAMPLE_ID):
 
     if not os.path.isfile(combined_list[0]) or not os.path.isfile(combined_list[1]):
         if not os.path.isfile(combined_1_file) or not os.path.isfile(combined_2_file):
-            md5_check(folder_name, illumina_df)
+            md5_check(folder_name)
             raw_1_list = []
             raw_2_list = []
             for filename in os.listdir(folder_name):
@@ -734,34 +732,4 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
 
 if __name__ == "__main__":
-    # Check argument count before any log_print calls
-    if len(sys.argv) != 6:
-        print(f"ERROR: Expected 5 arguments (plus script name), got {len(sys.argv)-1}: {sys.argv[1:]}",
-              file=sys.stderr)
-        print("Usage: python3 preprocess_illumina.py <sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>",
-              file=sys.stderr)
-        sys.exit(1)
-
-    initialize_logging_environment(sys.argv[3], sys.argv[1])
-
-    # Log raw sys.argv immediately
-    log_print(f"DEBUG: Raw sys.argv = {sys.argv}")
-    log_print(f"DEBUG: Length of sys.argv = {len(sys.argv)}")
-
-    # Log each argument
-    for i, arg in enumerate(sys.argv):
-        log_print(f"DEBUG: sys.argv[{i}] = '{arg}'")
-
-    sample_id = sys.argv[1]
-    input_tsv = sys.argv[2]
-    output_dir = sys.argv[3]
-    cpu_threads = int(sys.argv[4])
-    ram_gb = int(sys.argv[5]) if sys.argv[5] != " " else 8
-
-    log_print(f"DEBUG: Parsed sample_id = '{sample_id}' {type(sample_id)}")
-    log_print(f"DEBUG: Parsed input_tsv = '{input_tsv}' {type(input_tsv)}")
-    log_print(f"DEBUG: Parsed output_dir = '{output_dir}' {type(output_dir)}")
-    log_print(f"DEBUG: Parsed cpu_threads = '{sys.argv[4]}' {sys.argv[4]} (converted to {cpu_threads}) {type(cpu_threads)}")
-    log_print(f"DEBUG: Parsed ram_gb = '{sys.argv[5]}' {sys.argv[5]} (converted to {ram_gb}) {type(ram_gb)}")
-
-    illu_dedup_f_reads, illu_dedup_r_reads = preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+    run_stage(preprocess_illumina, cast=int)

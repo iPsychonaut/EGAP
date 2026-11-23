@@ -1,19 +1,24 @@
-# TO BUILD: sudo singularity build entheome.sif entheome.sif.def
+# Entheome ecosystem Singularity/Apptainer image, built from the Docker image.
 #
-# TO USE:
-# export FUNANNOTATE_DB=/path/to/databases
-# singularity shell entheome.sif -B /path/to/databases:/path/to/databases
-# source /opt/conda/etc/profile.d/conda.sh
-# conda activate funannotate_env
-# funannotate setup -i all -d "$FUNANNOTATE_DB"
+# The Dockerfile is the single place where the three conda environments
+# (EGAP_env, EGEP_env, funannotate_env), their pins and the EGAP scripts are
+# defined. This file only wraps that image, so the two cannot drift apart.
 #
-# WITH GENEMARK INPUT:
-# singularity shell entheome.sif -B /path/to/genemark:/opt/genemark
-# source /opt/conda/etc/profile.d/conda.sh
-# conda activate EGEP_env
+# TO BUILD (on a machine with Docker and Singularity/Apptainer >= 3.8):
+#   docker build -t entheome_ecosystem:3.4.2 .
+#   sudo singularity build entheome.sif entheome.sif.def
+#
+# No Docker daemon on the Singularity build machine? Save the image where
+# Docker runs, copy the tar across, and swap the two header lines below:
+#   docker save entheome_ecosystem:3.4.2 -o entheome_ecosystem_3.4.2.tar
+#     Bootstrap: docker-archive
+#     From: entheome_ecosystem_3.4.2.tar
+# Or, once the image is pushed to a registry:
+#     Bootstrap: docker
+#     From: <registry user>/entheome_ecosystem:3.4.2
 
-Bootstrap: docker
-From: debian:buster
+Bootstrap: docker-daemon
+From: entheome_ecosystem:3.4.2
 
 %labels
     Author       Ian Bollinger <ian.bollinger@entheome.org>
@@ -21,290 +26,16 @@ From: debian:buster
     Version      3.4.2
     Description  Entheome ecosystem (EGAP v3.4.2 + EGEP + Funannotate) Singularity image
 
-%post
-    export DEBIAN_FRONTEND=noninteractive
-
-    # Set up repositories
-    echo "deb http://deb.debian.org/debian buster main contrib non-free" > /etc/apt/sources.list
-    echo "deb http://deb.debian.org/debian-security buster/updates main contrib non-free" >> /etc/apt/sources.list
-    echo "deb http://deb.debian.org/debian buster-updates main contrib non-free" >> /etc/apt/sources.list
-    echo "Acquire::Check-Valid-Until no;" >> /etc/apt/apt.conf.d/99no-check-valid-until
-
-    # Update and install base dependencies
-    apt-get update && apt-get install -y \
-        wget unzip curl bzip2 ncbi-blast+ git build-essential autoconf automake libtool pkg-config \
-        zlib1g-dev snap augustus augustus-data locales locales-all libgl1 procps strace \
-        python3 python3-pip ninja-build libffi-dev libmount-dev libpcre2-dev libpcre3-dev \
-        ca-certificates cmake bc \
-    && rm -rf /var/lib/apt/lists/* || { echo "Failed to install dependencies"; exit 1; }
-
-    # Create symbolic link for snap compatibility
-    ln -s /usr/bin/snap-hmm /usr/bin/snap || true
-
-    # Install Miniconda
-    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh || { echo "Failed to download Miniconda"; exit 1; }
-    bash miniconda.sh -b -p /opt/conda || { echo "Failed to install Miniconda"; exit 1; }
-    rm miniconda.sh || { echo "Failed to remove miniconda.sh"; exit 1; }
-
-    # Update PATH for Conda
-    export PATH="/opt/conda/bin:$PATH"
-
-    # Update Conda to the latest version
-    /opt/conda/bin/conda update -y conda || { echo "Failed to update Conda"; exit 1; }
-
-    # Initialize Conda for bash shells
-    /opt/conda/bin/conda init bash
-
-    # Configure conda channels (strict, deterministic solves)
-    /bin/bash -c "conda config --set channel_priority strict && \
-                  conda config --add channels conda-forge && \
-                  conda config --add channels bioconda && \
-                  conda config --add channels defaults" || { echo 'Failed to configure Conda channels'; exit 1; }
-
-    # -----------------------------
-    # Create EGAP_env (primary env)
-    # -----------------------------
-    # Pinning rationale (Python 3.12 solve checked 2026-10-12):
-    #   python 3.12       3.8 is end of life and blocks Flye 2.9.6, compleasm
-    #                     0.2.9+ and BUSCO 6. tiara-entheome needs <3.13.
-    #   pandas>=3,<4      copy-on-write and the str dtype; checked in its own A/B
-    #                     round (pandas 2.3 vs 3.0).
-    #   numpy>=1.26,<3    1.26 is the first numpy with py3.12.
-    #   plotly>=5.24,<6   NanoPlot 1.46.2 calls figure_factory.create_2d_density,
-    #                     which plotly 6 removed; py3.12 envs otherwise get 7.
-    #   busco=6.1.0       odb12.2 lineages and new scoring; checked against 5.8.3
-    #                     in the round-2 A/B.
-    #   compleasm>=0.2.10 0.2.10 build 1 (bioconda-recipes#70268, 2026-10-27)
-    #                     dropped the stale dendropy<4.6 pin that kept compleasm
-    #                     out of any py3.9+ env with sepp. Build 0 still has it;
-    #                     sepp's dendropy>=5 requirement excludes that build.
-    #   tiara-entheome    1.0.1 from bioconda; 1.0.0 imported pkg_resources, which
-    #                     current setuptools no longer ships. Brings pytorch,
-    #                     skorch, numba, tqdm and joblib.
-    #   kraken2=2.1.6     exact pin; tested working version.
-    #   sra-tools=3.2.0   exact pin; API changes between minor versions.
-    #   trimmomatic=0.40  exact pin; share-dir path used in symlinks below.
-    #   flye=2.9.6        exact pin. 2.9.6 tunes the --nano-hq default for R10
-    #                     reads (3% error), so ONT assemblies can differ from
-    #                     2.9.5 builds; checked in the round-2 A/B.
-    #   channel order     conda-forge first with strict priority (Bioconda's
-    #                     documented setup). With bioconda first, bioconda's stale
-    #                     biopython/tqdm/openpyxl copies win and the 3.12 solve did
-    #                     not finish in 20 min; this order solves in minutes.
-    /bin/bash -c "conda create -n EGAP_env -y --strict-channel-priority -c conda-forge -c bioconda \
-                 'python>=3.12,<3.13' \
-                 'pandas>=3,<4' \
-                 'numpy>=1.26,<3' \
-                 'plotly>=5.24,<6' \
-                 'masurca=4.1.4' \
-                 'quast=5.3.0' \
-                 'busco=6.1.0' \
-                 'compleasm>=0.2.10' \
-                 hmmer \
-                 miniprot \
-                 biopython \
-                 ragtag \
-                 'nanoplot=1.46.2' \
-                 termcolor \
-                 minimap2 \
-                 bwa-mem2 \
-                 samtools \
-                 bamtools \
-                 tgsgapcloser \
-                 abyss \
-                 sepp \
-                 psutil \
-                 beautifulsoup4 \
-                 ncbi-datasets-cli \
-                 matplotlib-base \
-                 'trimmomatic=0.40' \
-                 bwa \
-                 'polypolish=0.7.1' \
-                 'pypolca=0.5.0' \
-                 fastqc \
-                 'bbmap>=39.15,<39.76' \
-                 racon \
-                 kmc \
-                 'spades=4.3.0' \
-                 purge_dups \
-                 'flye=2.9.6' \
-                 pbccs \
-                 'hifiasm=0.25.0' \
-                 gfatools \
-                 bifrost \
-                 ratatosk \
-                 'sra-tools=3.2.0' \
-                 filtlong \
-                 pyinaturalist \
-                 jinja2 \
-                 geopy \
-                 tabulate \
-                 openpyxl \
-                 requests \
-                 rich \
-                 textual \
-                 'tiara-entheome=1.0.1' \
-                 'kraken2=2.1.6'" || { echo "Failed to create EGAP_env"; exit 1; }
-
-    # Per-env pin file — belt-and-suspenders guard against Flye being pulled up
-    mkdir -p /opt/conda/envs/EGAP_env/conda-meta
-    printf "flye 2.9.6\n" >> /opt/conda/envs/EGAP_env/conda-meta/pinned
-
-    # masurca 4.1.4 and flye 2.9.6 both ship bin/flye and bin/flye-minimap2.
-    # Whichever conda links last wins; when masurca's copies win, Flye gets a
-    # Python 2.7 launcher and minimap2 2.17, which rejects Flye's
-    # --secondary-seq option, so every Flye assembly aborts at the consensus
-    # stage. Reinstall Flye last so its copies win. The env is used in place
-    # here (no conda-pack), so this is enough; the Docker image also needs a
-    # copy step after packing. Untested in a Singularity build.
-    /opt/conda/bin/conda install -n EGAP_env -y --force-reinstall --no-deps \
-        -c bioconda -c conda-forge 'flye=2.9.6' || { echo "Failed to reinstall Flye"; exit 1; }
-
-    /opt/conda/envs/EGAP_env/bin/compleasm --help >/dev/null || { echo "compleasm smoke test failed"; exit 1; }
-
-    /opt/conda/envs/EGAP_env/bin/tiara-entheome --help >/dev/null || { echo "tiara-entheome smoke test failed"; exit 1; }
-
-    # Trimmomatic adapter symlinks — path encodes version=0.40, build=0
-    # Uses a glob so a patch-level rebuild (0.40-1, 0.40-2 …) still resolves.
-    TRIM_SHARE=$(find /opt/conda/envs/EGAP_env/share -maxdepth 1 -name "trimmomatic-0.40-*" -type d | sort | tail -1)
-    ln -sf "${TRIM_SHARE}/adapters/TruSeq3-PE.fa" /opt/conda/envs/EGAP_env/bin/TruSeq3-PE.fa
-    ln -sf "${TRIM_SHARE}/adapters/TruSeq3-SE.fa" /opt/conda/envs/EGAP_env/bin/TruSeq3-SE.fa
-
-    # -----------------------------
-    # Create EGEP_env (aux env)
-    # -----------------------------
-    /bin/bash -c "conda create -n EGEP_env --yes python>=3.10 glib=2.64.6 \
-                  mafft iqtree ete3 hmmer miniprot sepp 'compleasm>=0.2.10' trimal pandas biopython psutil \
-                  gffutils pysam matplotlib scipy clinker-py packaging meson" || { echo "Failed to create EGEP_env"; exit 1; }
-
-    # Debug: Check GLib installation
-    echo "Checking GLib installation:"
-    find /opt/conda -name "glibconfig.h" || { echo "glibconfig.h not found"; exit 1; }
-    ls -l /opt/conda/lib/glib-2.0/include/glibconfig.h || echo "glibconfig.h not in expected location"
-
-    # Set library and pkg-config paths, including both environments
-    export LD_LIBRARY_PATH="/opt/conda/envs/EGEP_env/lib:/opt/conda/envs/EGAP_env/lib:/opt/conda/lib:$LD_LIBRARY_PATH"
-    export PKG_CONFIG_PATH="/opt/conda/envs/EGEP_env/lib/pkgconfig:/opt/conda/envs/EGAP_env/lib/pkgconfig:/opt/conda/lib/pkgconfig:$PKG_CONFIG_PATH"
-    ldconfig
-    
-    # Build exonerate from source, linking against Conda’s GLib
-    git clone https://github.com/nathanweeks/exonerate.git || { echo "Failed to clone exonerate"; exit 1; }
-    cd exonerate
-    autoreconf -i || { echo "Failed to run autoreconf for exonerate"; exit 1; }
-    GLIB_CFLAGS=$(pkg-config --cflags glib-2.0) || { echo "pkg-config failed to find glib-2.0"; exit 1; }
-    GLIB_LIBS=$(pkg-config --libs glib-2.0) || { echo "pkg-config failed to find glib-2.0 libs"; exit 1; }
-    ./configure --prefix=/usr/local CFLAGS="$GLIB_CFLAGS" LDFLAGS="$GLIB_LIBS" || { echo "Configure failed for exonerate"; exit 1; }
-    make -j$(nproc) || { echo "Make failed for exonerate"; exit 1; }
-    make install || { echo "Make install failed for exonerate"; exit 1; }
-    cd ..
-    rm -rf exonerate
-
-    # Create funannotate_env
-    /bin/bash -c "conda create -n funannotate_env --yes 'python>=3.6,<3.9' funannotate" || { echo "Failed to create funannotate_env"; exit 1; }
-
-    # Adjust fasta symlink
-    rm -f "/opt/conda/envs/funannotate_env/bin/fasta" || true
-    ln -s "/opt/conda/envs/funannotate_env/bin/fasta36" "/opt/conda/envs/funannotate_env/bin/fasta" || true
-
-    # Install NCBI datasets CLI
-    wget https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/v2/linux-amd64/datasets -O /usr/local/bin/datasets
-    chmod +x /usr/local/bin/datasets
-
-    # Install sra-tools 3.1.1
-    wget https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/3.1.1/sratoolkit.3.1.1-ubuntu64.tar.gz -O sratoolkit.tar.gz || { echo "Failed to download sra-tools"; exit 1; }
-    tar -xzf sratoolkit.tar.gz || { echo "Failed to extract sra-tools"; exit 1; }
-    mv sratoolkit.3.1.1-ubuntu64/bin/* /usr/local/bin/ || { echo "Failed to install sra-tools"; exit 1; }
-    rm -rf sratoolkit.tar.gz sratoolkit.3.1.1-ubuntu64 || { echo "Failed to clean up sra-tools"; exit 1; }
-
-    # Install pigz 2.8
-    wget https://zlib.net/pigz/pigz-2.8.tar.gz -O pigz.tar.gz || { echo "Failed to download pigz"; exit 1; }
-    tar -xzf pigz.tar.gz || { echo "Failed to extract pigz"; exit 1; }
-    cd pigz-2.8
-    make -j$(nproc) || { echo "Failed to build pigz"; exit 1; }
-    mv pigz /usr/local/bin/ || { echo "Failed to install pigz"; exit 1; }
-    cd ..
-    rm -rf pigz.tar.gz pigz-2.8 || { echo "Failed to clean up pigz"; exit 1; }
-
-    # Update CA certificates
-    apt-get update && apt-get install -y ca-certificates
-    update-ca-certificates
-
-    # Install Centrifuge from source
-    apt-get update && apt-get install -y libtbb-dev libtbb2 || { echo "Failed to install TBB dependencies for Centrifuge"; exit 1; }
-    git clone https://github.com/DaehwanKimLab/centrifuge.git || { echo "Failed to clone Centrifuge"; exit 1; }
-    cd centrifuge
-    make -j$(nproc) || { echo "Make failed for Centrifuge"; exit 1; }
-    make install prefix=/usr/local || { echo "Make install failed for Centrifuge"; exit 1; }
-    cd ..
-    rm -rf centrifuge
-
-    # Build Trinity v2.8.6
-    wget https://github.com/trinityrnaseq/trinityrnaseq/releases/download/v2.8.6/trinityrnaseq-v2.8.6.FULL.tar.gz
-    tar xzvf trinityrnaseq-v2.8.6.FULL.tar.gz
-    cd trinityrnaseq-v2.8.6
-    make CC=gcc-8 CXX=g++-8
-
-    # Copy and link Trinity into the funannotate_env environment
-    mkdir -p /opt/conda/envs/funannotate_env/opt/trinity-2.8.6
-    cp -r ./* /opt/conda/envs/funannotate_env/opt/trinity-2.8.6/
-
-    # Remove or force-overwrite the old link, if it exists
-    rm -f /opt/conda/envs/funannotate_env/bin/Trinity
-    ln -s /opt/conda/envs/funannotate_env/opt/trinity-2.8.6/Trinity /opt/conda/envs/funannotate_env/bin/Trinity
-
-    cd ..
-    rm -rf trinityrnaseq-v2.8.6 trinityrnaseq-v2.8.6.FULL.tar.gz
-
-    # Make conda init available to all shells
-    echo "source /opt/conda/etc/profile.d/conda.sh" > /etc/profile.d/conda.sh
-
-    # DOWNLOAD & SYMLINK SPAdes 4.1.0 LINUX BINARY (WSL-FRIENDLY)
-    SPADES_VERSION=4.1.0
-    wget https://github.com/ablab/spades/releases/download/v${SPADES_VERSION}/SPAdes-${SPADES_VERSION}-Linux.tar.gz -O spades-linux.tgz
-    tar -xzf spades-linux.tgz -C /opt
-    mv /opt/SPAdes-${SPADES_VERSION}-Linux /opt/SPAdes
-    ln -sf /opt/SPAdes/bin/spades.py   /usr/local/bin/spades.py
-    ln -sf /opt/SPAdes/bin/spades-core /usr/local/bin/spades-core
-    rm spades-linux.tgz
-
-    # -----------------------------
-    # Build-time guard: verify Flye
-    # -----------------------------
-    /opt/conda/envs/EGAP_env/bin/python - <<'PY'
-import subprocess, sys
-from packaging.version import Version
-ver = subprocess.check_output(['/opt/conda/envs/EGAP_env/bin/flye','--version'], text=True).strip()
-if not (Version('2.9.5') <= Version(ver) < Version('3.0.0')):
-    print(f'ERROR: Flye version not in [2.9.5, 3.0.0): {ver}', file=sys.stderr)
-    sys.exit(1)
-print('Flye version OK:', ver)
-PY
-    # Flye's own minimap2 helper must have won over masurca's (see above).
-    /opt/conda/envs/EGAP_env/bin/flye-minimap2 --secondary-seq=yes --version \
-        || { echo "flye-minimap2 rejects --secondary-seq: masurca's copy won"; exit 1; }
-
 %environment
-    export PATH="/usr/local/bin:/opt/conda/envs/EGEP_env/bin:/opt/conda/envs/EGAP_env/bin:/opt/conda/envs/funannotate_env/bin:/opt/conda/bin:/usr/local/bin:$PATH"
-    export LD_LIBRARY_PATH="/opt/conda/envs/EGEP_env/lib:/opt/conda/envs/EGAP_env/lib:/opt/conda/lib:/usr/local/lib:$LD_LIBRARY_PATH"
-    export PKG_CONFIG_PATH="/opt/conda/envs/EGEP_env/lib/pkgconfig:/opt/conda/envs/EGAP_env/lib/pkgconfig:/opt/conda/lib/pkgconfig:$PKG_CONFIG_PATH"
-    export AUGUSTUS_CONFIG_PATH="/usr/share/augustus/config"
-    export EVM_HOME="/opt/conda/envs/funannotate_env/opt/evidencemodeler-1.1.1"
-    export PASAHOME="/opt/conda/envs/funannotate_env/opt/pasa-2.4.1"
-    export TRINITYHOME="/opt/conda/envs/funannotate_env/opt/trinity-2.8.6"
-    export QUARRY_PATH="/opt/conda/envs/funannotate_env/opt/codingquarry-2.0/QuarryFiles"
-    export ZOE="/usr/share/snap"
-    export USER="me"
-    source /opt/conda/etc/profile.d/conda.sh
-    # EGAP v3.4.2 — override at runtime via --env or bind-mount
-    # e.g.: singularity run --env KRAKEN2_DB=/kraken2_db -B /host/db:/kraken2_db entheome.sif
+    # PATH (EGEP_env, EGAP_env, funannotate_env), AUGUSTUS_CONFIG_PATH, EVM_HOME,
+    # PASAHOME, TRINITYHOME, QUARRY_PATH, ZOE, FUNANNOTATE_DB and PYTHONUNBUFFERED
+    # come from the Docker image's ENV lines. Only the values a user sets at run
+    # time are restated here, so a value from the host or --env wins.
+    # e.g.: singularity run --env KRAKEN2_DB=/kraken2_db -B /host/db:/kraken2_db entheome.sif ...
     export KRAKEN2_DB="${KRAKEN2_DB:-}"
-    export PYTHONUNBUFFERED=1
     export EGAP_DRY_RUN="${EGAP_DRY_RUN:-0}"
 
 %runscript
-    source /opt/conda/etc/profile.d/conda.sh
-    # No default environment activation; pipelines will handle this
-
     if [ -z "$FUNANNOTATE_DB" ]; then
         echo 'WARNING: FUNANNOTATE_DB is not set. Please set it to your database directory (e.g., export FUNANNOTATE_DB=/path/to/databases) and run "funannotate setup" manually if needed.'
     elif [ ! -d "$FUNANNOTATE_DB" ]; then
@@ -322,12 +53,15 @@ PY
     exec "$@"
 
 %help
-    Entheome ecosystem Singularity image (EGAP v3.4.2 + EGEP + Funannotate).
+    Entheome ecosystem Singularity image (EGAP v3.4.2 + EGEP + Funannotate),
+    built from the entheome_ecosystem Docker image.
 
-    Three conda environments are baked in:
-      EGAP_env         — genome assembly pipeline (primary)
-      EGEP_env         — auxiliary annotation tools
-      funannotate_env  — Funannotate for eukaryotic genome annotation
+    Three conda environments are baked in, unpacked at the image root (there
+    is no conda executable in the image, so nothing needs activating):
+      /EGAP_env         genome assembly pipeline (primary)
+      /EGEP_env         auxiliary annotation tools
+      /funannotate_env  Funannotate for eukaryotic genome annotation
+    All three bin/ folders are on PATH, EGEP_env first.
 
     ---------------------------------------------------------------------------
     Running EGAP
@@ -340,27 +74,26 @@ PY
           -B /host/kraken2_db:/kraken2_db \
           -B /host/data:/data \
           entheome.sif \
-          env PATH=/opt/conda/envs/EGAP_env/bin:$PATH CONDA_PREFIX=/opt/conda/envs/EGAP_env \
-          /opt/conda/envs/EGAP_env/bin/python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-              --input_tsv /data/samples.tsv \
-              --output_dir /data/output \
-              --cpu_threads 16 --ram_gb 64
+          EGAP --input_tsv /data/samples.tsv \
+               --output_dir /data/output \
+               --cpu_threads 16 --ram_gb 64
 
     Without Kraken2 (read decontamination skipped):
 
       singularity run -B /host/data:/data entheome.sif \
-          env PATH=/opt/conda/envs/EGAP_env/bin:$PATH CONDA_PREFIX=/opt/conda/envs/EGAP_env \
-          /opt/conda/envs/EGAP_env/bin/python /opt/conda/envs/EGAP_env/bin/EGAP.py \
-              --input_tsv /data/samples.tsv --output_dir /data/output
+          EGAP --input_tsv /data/samples.tsv --output_dir /data/output
 
-    EGAP_env must come first on PATH for EGAP: EGEP_env also ships trimmomatic
-    (a different version) and its own python, and the image PATH lists EGEP_env
-    first. CONDA_PREFIX is how EGAP finds Trimmomatic's TruSeq3-PE.fa adapters.
+    Always start EGAP through the EGAP launcher (/EGAP_env/bin/EGAP). It puts
+    EGAP_env first on PATH (EGEP_env also ships trimmomatic and its own python)
+    and sets CONDA_PREFIX, which is how EGAP finds Trimmomatic's TruSeq3-PE.fa
+    adapters. The Nextflow runner (draft_assembly.nf) does the same for each
+    stage.
 
     ---------------------------------------------------------------------------
     Environment variables
     ---------------------------------------------------------------------------
-    FUNANNOTATE_DB    Path to funannotate databases (required for EGEP steps)
+    FUNANNOTATE_DB    Path to funannotate databases (default: /opt/databases,
+                      set up when the Docker image was built)
     KRAKEN2_DB        Path to Kraken2 database directory (required for read
                       decontamination; unset = skip with warning)
     EGAP_DRY_RUN      Set to 1 to log file-management actions without
@@ -385,13 +118,13 @@ PY
     Interactive shell with every env on PATH:
       singularity shell entheome.sif
 
-    Activate a specific conda env:
-      source /opt/conda/etc/profile.d/conda.sh
-      conda activate EGAP_env         # for EGAP v3.4.2 assembly pipeline
-      conda activate EGEP_env         # for annotation helpers
-      conda activate funannotate_env  # for Funannotate
+    Use one environment's tools ahead of the others:
+      export PATH=/EGAP_env/bin:$PATH         # EGAP v3.4.2 assembly pipeline
+      export PATH=/EGEP_env/bin:$PATH         # annotation helpers
+      export PATH=/funannotate_env/bin:$PATH  # Funannotate
 
-    Initialise funannotate databases (first run only):
+    Initialise funannotate databases somewhere else (the image already holds
+    a set in /opt/databases):
       singularity run entheome.sif funannotate setup -i all -d $FUNANNOTATE_DB
 
     With GeneMark bind-mounted:

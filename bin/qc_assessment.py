@@ -29,13 +29,11 @@ from collections import Counter
 import matplotlib.pyplot as plt
 from utilities import (
     run_subprocess_cmd,
-    pigz_compress,
     pigz_decompress,
     restore_if_compressed,
     analyze_nanostats,
     initialize_logging_environment,
     load_sample_context,
-    log_print,
     validate_fasta,
 )
 from file_manager import clean_lineage_downloads
@@ -212,31 +210,6 @@ def nanoplot_qc_reads(INPUT_READS, READS_ORIGIN, CPU_THREADS, sample_stats_dict,
 
     sample_stats_dict = analyze_nanostats(READS_ORIGIN, nanoplot_out_file, sample_stats_dict)
     return sample_stats_dict
-
-
-# --------------------------------------------------------------
-# Parse NanoPlot summary for mean quality
-# --------------------------------------------------------------
-def get_mean_quality(nanoplot_dir, prefix):
-    """Extract mean quality from a NanoPlot summary file.
-
-    Reads the NanoPlot summary file to retrieve the mean quality score.
-
-    Args:
-        nanoplot_dir (str): Directory containing the NanoPlot summary file.
-        prefix (str): Prefix for the NanoPlot summary file (e.g., 'Corrected_ONT_').
-
-    Returns:
-        float or None: Mean quality value if found, else None.
-    """
-    summary_file = os.path.join(nanoplot_dir, f"{prefix}NanoStats.txt")
-    if not os.path.exists(summary_file):
-        return None
-    with open(summary_file, "r") as f:
-        for line in f:
-            if "Mean quality:" in line:
-                return float(line.split(":")[1].strip())
-    return None
 
 
 # --------------------------------------------------------------

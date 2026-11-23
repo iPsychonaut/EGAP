@@ -18,7 +18,6 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 
 import os
-import sys
 import warnings
 import requests
 import pandas as pd
@@ -26,7 +25,7 @@ from datetime import datetime
 from pathlib import Path
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
-from utilities import load_sample_context, calculate_genome_coverage
+from utilities import run_stage, load_sample_context, calculate_genome_coverage
 
 
 # ignore only the Data Validation extension warning from openpyxl
@@ -406,13 +405,4 @@ def process_metadata(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 6:
-        print("Usage: python3 process_metadata.py <sample_id> <input_tsv> "
-            "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
-        sys.exit(1)
-        
-    sra_output_path, assembly_metadata_path = process_metadata(sys.argv[1],       # sample_id
-                                                               sys.argv[2],       # input_tsv
-                                                               sys.argv[3],       # output_dir
-                                                               str(sys.argv[4]),  # cpu_threads
-                                                               str(sys.argv[5]))  # ram_gb
+    run_stage(process_metadata, log=False)

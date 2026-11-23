@@ -69,8 +69,8 @@ def test_done_marker_records_counts(tmp_path):
 
 def test_done_marker_does_not_verify_outputs(tmp_path):
     """Documents the checkpoint-integrity gap Matthew raised: the marker can be
-    written even when the output it vouches for does not exist. The prototype
-    in audit/prototypes/checkpoint.py is the proposed replacement."""
+    written even when the output it vouches for does not exist. A proposed
+    replacement is on the audit/fsp-port-tests branch (audit/prototypes/checkpoint.py)."""
     m = tmp_path / "decontamination_done.txt"
     da.write_done_marker(str(m), "/does/not/exist.fasta", 0, 0)
     assert m.exists()  # nothing stopped it

@@ -4,8 +4,7 @@
 sample_tsv.py
 
 Per-sample TSV-row helpers, statistics dictionary, NanoPlot parsers,
-long-read selection logic, and the typed ``SampleContext`` /
-``AssemblerStage`` contracts.
+long-read selection logic, and the typed ``SampleContext`` contract.
 
 Extracted from :mod:`utilities` in v3.4.1.  Hosts everything that
 operates on a single row of the master sample-driver TSV.  Depends on
@@ -23,12 +22,14 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import json
 import os
 import shutil
+import sys
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, List
 
 import pandas as pd
 
 from file_operations import to_abs
+from log import initialize_logging_environment
 
 
 # --------------------------------------------------------------
@@ -370,53 +371,38 @@ def load_sample_context(
     )
 
 
-@runtime_checkable
-class AssemblerStage(Protocol):
-    """Common entry-point signature for every EGAP assembler / preprocessor.
+# --------------------------------------------------------------
+# Shared __main__ for the stage scripts
+# --------------------------------------------------------------
+def run_stage(stage, cast=str, log=True):
+    """Check ``sys.argv``, start the sample log, and call *stage*.
 
-    Implementations live in ``bin/assemble_*.py`` and
-    ``bin/preprocess_*.py``.  Every implementation accepts the same
-    five-argument tuple the orchestrator hands out per sample, and
-    returns a path to the produced FASTA/FASTQ (or ``None`` when no
-    compatible inputs were available for that stage).
+    Every stage script takes the same five arguments from the orchestrator:
+    ``<sample_id> <input_tsv> <output_dir> <cpu_threads> <ram_gb>``.
 
-    Notes
-    -----
-    Declared with :func:`typing.runtime_checkable` so callers may use
-    ``isinstance(fn, AssemblerStage)`` for diagnostics, but the contract
-    is primarily intended for static type-checkers
-    (``mypy --strict``).  Adding ``-> AssemblerStage`` annotations to
-    the orchestrator's dispatch table is the cheapest way to lock in
-    the convention identified by the v3.4.1 graphify pass.
-
-    Parameters (of ``__call__``)
-    ----------------------------
-    sample_id : str
-        Identifier matching ``SAMPLE_ID`` in *input_tsv*.
-    input_tsv : str
-        Path to the master sample-driver TSV.
-    output_dir : str
-        Top-level results directory; implementations anchor under it.
-    cpu_threads : int
-        Number of CPU threads the stage may use.
-    ram_gb : int
-        RAM budget in gigabytes.
+    Parameters
+    ----------
+    stage : callable
+        The stage function, called as
+        ``stage(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)``.
+    cast : callable
+        Applied to *cpu_threads* and *ram_gb* (``str`` or ``int``).
+    log : bool
+        ``False`` for the scripts that do not write to the sample log.
 
     Returns
     -------
-    Optional[str]
-        Path to the produced artefact, or ``None`` when no compatible
-        reads/inputs were available for this stage.
+    object
+        Whatever *stage* returns, so the caller can turn it into an exit code.
     """
-
-    def __call__(
-        self,
-        sample_id: str,
-        input_tsv: str,
-        output_dir: str,
-        cpu_threads: int,
-        ram_gb: int,
-    ) -> Optional[str]: ...
+    if len(sys.argv) != 6:
+        print(f"Usage: python3 {os.path.basename(sys.argv[0])} <sample_id> <input_tsv> "
+              "<output_dir> <cpu_threads> <ram_gb>", file=sys.stderr)
+        sys.exit(1)
+    sample_id, input_tsv, output_dir, cpu_threads, ram_gb = sys.argv[1:]
+    if log:
+        initialize_logging_environment(output_dir, sample_id)
+    return stage(sample_id, input_tsv, output_dir, cast(cpu_threads), cast(ram_gb))
 
 
 # --------------------------------------------------------------

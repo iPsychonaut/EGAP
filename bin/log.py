@@ -6,7 +6,7 @@ log.py
 Logging helpers (file + ANSI-coloured stdout) for EGAP modules.
 
 Extracted from :mod:`utilities` in v3.4.1.  Module-level
-``DEFAULT_LOG_FILE`` and ``ENVIRONMENT_TYPE`` singletons are set by
+``DEFAULT_LOG_FILE`` singleton is set by
 :func:`initialize_logging_environment` and read by :func:`log_print`,
 so callers can ``log_print(msg)`` without threading a log handle
 through every call site.
@@ -21,51 +21,17 @@ Updated on 2026-05-24
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
 import os
-import platform
 from datetime import datetime
 
 
 # --------------------------------------------------------------
-# Module-level singletons populated by initialize_logging_environment.
+# Module-level singleton populated by initialize_logging_environment.
 # Declared at import time (rather than only inside the initializer) so
 # ``global DEFAULT_LOG_FILE`` in log_print has a bound name even if a
 # caller forgets to initialize first - they'll get a clear TypeError
 # from the file open() instead of a NameError.
 # --------------------------------------------------------------
 DEFAULT_LOG_FILE = None
-ENVIRONMENT_TYPE = None
-
-
-# --------------------------------------------------------------
-# Create or manage a log file
-# --------------------------------------------------------------
-def generate_log_file(log_file_path, use_numerical_suffix=False):
-    """Generate a log file, optionally with a numerical suffix if it exists.
-
-    Parameters
-    ----------
-    log_file_path : str
-        Desired path for the log file.
-    use_numerical_suffix : bool
-        If ``True``, append an incrementing integer suffix rather than
-        overwriting an existing file.
-
-    Returns
-    -------
-    str
-        Path to the created or selected log file.
-    """
-    if os.path.exists(log_file_path) and use_numerical_suffix:
-        counter = 1
-        base, ext = os.path.splitext(log_file_path)
-        new_log_file_path = f"{base}_{counter}{ext}"
-        while os.path.exists(new_log_file_path):
-            counter += 1
-            new_log_file_path = f"{base}_{counter}{ext}"
-        log_file_path = new_log_file_path
-    else:
-        open(log_file_path, "w").close()
-    return log_file_path
 
 
 # --------------------------------------------------------------
@@ -138,9 +104,8 @@ def log_print(input_message, log_file=None):
 def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     """Initialize the logging environment based on the input folder.
 
-    Sets the module-level ``DEFAULT_LOG_FILE`` and ``ENVIRONMENT_TYPE``
-    globals and creates the log file.  The log file path is adjusted for
-    WSL/Linux (``/mnt/<drive>/...``) when running on a non-Windows OS.
+    Sets the module-level ``DEFAULT_LOG_FILE`` global and creates (or
+    truncates) the log file.
 
     Parameters
     ----------
@@ -153,34 +118,15 @@ def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
         ``<INPUT_FOLDER>/<sample_id>_log.txt`` so that each sample in
         a multi-sample TSV run gets its own log file.
     """
-    global DEFAULT_LOG_FILE, ENVIRONMENT_TYPE
+    global DEFAULT_LOG_FILE
     print(INPUT_FOLDER)
-    if sample_id:
-        input_file_path = f"{INPUT_FOLDER}/{sample_id}_log.txt"
-    else:
-        input_file_path = f"{INPUT_FOLDER}/{INPUT_FOLDER.split('/')[-1]}_log.txt"
-    os_name = platform.system()
-    if os_name == "Windows":
-        print("UNLOGGED:\tWINDOWS ENVIRONMENT")
-        ENVIRONMENT_TYPE = "WIN"
-    elif os_name in ["Linux", "Darwin"]:
-        drive, path_without_drive = os.path.splitdrive(input_file_path)
-        if drive:
-            drive_letter = drive.strip(":\\/")
-            path_without_drive_mod = path_without_drive.replace("\\", "/")
-            input_file_path = f"/mnt/{drive_letter.lower()}{path_without_drive_mod}"
-        print("UNLOGGED:\tLINUX/WSL/MAC ENVIRONMENT")
-        ENVIRONMENT_TYPE = "LINUX/WSL/MAC"
-    else:
-        print(f"UNLOGGED ERROR:\tUnsupported OS: {os_name}")
-        return
+    input_file_path = f"{INPUT_FOLDER}/{sample_id or INPUT_FOLDER.split('/')[-1]}_log.txt"
     # Anchor the log path to its absolute form so a later subprocess that
     # ``chdir``s (e.g. ``assemble_masurca`` running ``assemble.sh`` from
     # the ``masurca_assembly`` subdir) can still resolve DEFAULT_LOG_FILE.
     # Without this, ``log_print`` raises FileNotFoundError when invoked
     # after any chdir, which masks the real per-stage error message and
     # crashes graceful-recovery paths that depend on logging.
-    input_file_path = os.path.abspath(input_file_path)
-    print(input_file_path)
-    run_log = generate_log_file(input_file_path, use_numerical_suffix=False)
-    DEFAULT_LOG_FILE = run_log
+    DEFAULT_LOG_FILE = os.path.abspath(input_file_path)
+    print(DEFAULT_LOG_FILE)
+    open(DEFAULT_LOG_FILE, "w").close()

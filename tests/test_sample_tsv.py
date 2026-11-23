@@ -169,3 +169,41 @@ def test_flye_ont_mode_raw_fallback(tmp_path):
     raw = tmp_path / "SRRX.fastq"
     raw.write_text("@r\nACGT\n+\nIIII\n")
     assert sample_tsv.flye_ont_mode(str(raw), str(selected)) == "--nano-raw"
+
+
+def test_md5_check_and_coverage(tmp_path, capsys):
+    """md5_check reads MD5.txt without a DataFrame; coverage reads .gz in place."""
+    import gzip
+    import hashlib
+    from file_operations import calculate_genome_coverage, md5_check
+
+    good, bad = tmp_path / "a_1.fastq", tmp_path / "a_2.fastq"
+    good.write_text("@r\nACGT\n+\nIIII\n")
+    bad.write_text("@r\nAC\n+\nII\n")
+    (tmp_path / "MD5.txt").write_text(
+        f"{hashlib.md5(good.read_bytes()).hexdigest()}  a_1.fastq\n{'0' * 32}  a_2.fastq\n\n")
+    assert md5_check(str(tmp_path)) is False
+    out = capsys.readouterr().out
+    assert "PASS: MD5 check passed for a_1.fastq" in out and "failed for a_2.fastq" in out
+    (tmp_path / "MD5.txt").unlink()
+    assert md5_check(str(tmp_path)) is True
+
+    asm = tmp_path / "asm.fasta.gz"
+    with gzip.open(asm, "wt") as fh:
+        fh.write(">c\nAC\n")
+    assert calculate_genome_coverage([str(good), str(bad)], str(asm), 1) == 3.0
+    assert asm.exists()
+
+
+def test_file_manager_removes_and_dry_runs(tmp_path, monkeypatch):
+    import file_manager as fm
+
+    f, d = tmp_path / "a.tmp", tmp_path / "d.tmp"
+    f.write_text("x")
+    d.mkdir()
+    (d / "inner").write_text("y")
+    monkeypatch.setenv("EGAP_DRY_RUN", "1")
+    assert fm.remove_glob(str(tmp_path / "*.tmp")) == 2 and f.exists() and d.exists()
+    monkeypatch.delenv("EGAP_DRY_RUN")
+    assert not fm.remove_dir(str(f)) and not fm.remove_file(str(d))
+    assert fm.remove_glob(str(tmp_path / "*.tmp")) == 2 and not f.exists() and not d.exists()
