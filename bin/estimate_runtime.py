@@ -97,18 +97,17 @@ def parse_genome_size(est_size):
     Parameters
     ----------
     est_size : str or float
-        Estimated genome size with an ``m``/``g`` suffix.
+        Estimated genome size with a ``k``/``m``/``g`` suffix. Only the first
+        letter of the suffix counts, so ``"5mb"`` reads the same as ``"5m"``.
 
     Returns
     -------
     int or None
         Genome size in base pairs, or ``None`` if it cannot be parsed.
     """
-    m = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", str(est_size).strip())
-    if not m:
-        return None
-    multipliers = {"m": 10 ** 6, "g": 10 ** 9, "k": 10 ** 3}
-    return int(float(m.group(1)) * multipliers.get(m.group(2).strip().lower(), 10 ** 6))
+    m = re.match(r"^(\d+(?:\.\d+)?)\s*(\D+)$", str(est_size).strip())
+    mult = {"k": 10 ** 3, "m": 10 ** 6, "g": 10 ** 9}.get(m.group(2)[0].lower()) if m else None
+    return int(float(m.group(1)) * mult) if mult else None
 
 
 def estimate_fastq_bases(path):

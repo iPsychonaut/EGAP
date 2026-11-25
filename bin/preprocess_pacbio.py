@@ -27,12 +27,12 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 import os
 import glob
 import shutil
-import re
 from typing import Optional
 
 import pandas as pd
 from utilities import run_subprocess_cmd, select_long_reads, run_stage, load_sample_context, to_abs
 from qc_assessment import nanoplot_qc_reads
+from estimate_runtime import parse_genome_size
 from record_provenance import record_file
 
 
@@ -150,12 +150,8 @@ def preprocess_pacbio(
             return None
 
         # Parse estimated genome size (e.g. "5.0m")
-        m = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", str(est_size))
-        if m:
-            est_num, est_unit = m.group(1), m.group(2)
-            mult = {'m': 10**6, 'g': 10**9}.get(est_unit.lower(), 25_000_000)
-            est_size_bp = int(float(est_num) * mult)
-        else:
+        est_size_bp = parse_genome_size(est_size)
+        if not est_size_bp:
             print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
             est_size_bp = 25_000_000
 

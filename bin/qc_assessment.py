@@ -99,20 +99,6 @@ def lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
     """
     return busco_odb if re.search(r"_odb\d+$", str(busco_odb)) else f"{busco_odb}_{db_version}"
 
-def normalize_busco_keycase(sample_stats_dict: dict, busco_count: str) -> None:
-    """
-    Ensure keys are in the UPPERCASE style expected elsewhere, e.g.:
-    FIRST_BUSCO_S, FIRST_BUSCO_D, FIRST_BUSCO_F, FIRST_BUSCO_M, FIRST_BUSCO_C
-    """
-    up = busco_count.upper()
-    lo = busco_count.lower()
-    for tag in ("S", "D", "F", "M", "C"):
-        low_key = f"{lo}_BUSCO_{tag}"
-        up_key  = f"{up}_BUSCO_{tag}"
-        if low_key in sample_stats_dict and up_key not in sample_stats_dict:
-            sample_stats_dict[up_key] = sample_stats_dict[low_key]
-
-
 def run_lineage_eval(assembly_path: str,
                      sample_id: str,
                      sample_stats_dict: dict,
@@ -140,7 +126,6 @@ def run_lineage_eval(assembly_path: str,
         try:
             compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
                                busco_count, busco_odb, assembly_type, cpu_threads)
-            normalize_busco_keycase(sample_stats_dict, busco_count)
         except Exception as e:
             print(f"WARN:\tCompleasm raised an exception: {e}")
         if not _have_metrics() and FALLBACK_TO_BUSCO_ON_FAIL:
@@ -632,20 +617,20 @@ def compleasm_assembly(assembly_path, sample_id, sample_stats_dict, busco_count,
         with open(compleasm_summary, "r") as compleasm_file:
             for line in compleasm_file:
                 if "S:" in line:
-                    sample_stats_dict[f"{busco_count}_BUSCO_S"] = float(line.split("S:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
+                    sample_stats_dict[f"{busco_count.upper()}_BUSCO_S"] = float(line.split("S:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
                 elif "D:" in line:
-                    sample_stats_dict[f"{busco_count}_BUSCO_D"] = float(line.split("D:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
+                    sample_stats_dict[f"{busco_count.upper()}_BUSCO_D"] = float(line.split("D:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
                 elif "F:" in line:
-                    sample_stats_dict[f"{busco_count}_BUSCO_F"] = float(line.split("F:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
+                    sample_stats_dict[f"{busco_count.upper()}_BUSCO_F"] = float(line.split("F:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
                 elif "M:" in line:
-                    sample_stats_dict[f"{busco_count}_BUSCO_M"] = float(line.split("M:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
+                    sample_stats_dict[f"{busco_count.upper()}_BUSCO_M"] = float(line.split("M:")[-1].split(", ")[0].replace("\n", "").replace("%", ""))
     except FileNotFoundError:
         print(f"ERROR:\tCompleasm summary not found: {compleasm_summary}")
         return assembly_path
 
     # Compute combined completeness: S + D
-    sample_stats_dict[f"{busco_count}_BUSCO_C"] = (sample_stats_dict[f"{busco_count}_BUSCO_S"] +
-                                                   sample_stats_dict[f"{busco_count}_BUSCO_D"])
+    sample_stats_dict[f"{busco_count.upper()}_BUSCO_C"] = (sample_stats_dict[f"{busco_count.upper()}_BUSCO_S"] +
+                                                   sample_stats_dict[f"{busco_count.upper()}_BUSCO_D"])
 
     return assembly_path
 

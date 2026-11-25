@@ -1159,7 +1159,7 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
         "ont_metrics": ont_metrics,
         "ont_raw_map": ont_raw_map, "ont_filt_map": ont_filt_map, "ont_corr_map": ont_corr_map,
-        "ont_raw_link": ont_raw_link, "ont_filtered_link": ont_filt_link, "ont_corrected_link": ont_corr_link,
+        "ont_raw_link": ont_raw_link, "ont_filt_link": ont_filt_link, "ont_corr_link": ont_corr_link,
 
         "illumina_metrics": illumina_metrics,
         "illumina_raw_f_map": illumina_raw_f_map, "illumina_raw_r_map": illumina_raw_r_map,
@@ -1169,7 +1169,7 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
         "pacbio_metrics": pacbio_metrics,
         "pacbio_raw_map": pacbio_raw_map, "pacbio_filt_map": pacbio_filt_map,
-        "pacbio_raw_link": pacbio_raw_link, "pacbio_filtered_link": pacbio_filt_link,
+        "pacbio_raw_link": pacbio_raw_link, "pacbio_filt_link": pacbio_filt_link,
 
         "quast_metrics": quast_metrics, "busco_metrics": busco_metrics,
 

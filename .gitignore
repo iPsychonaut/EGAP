@@ -9,6 +9,9 @@ graphify-out/
 # Large reference databases (e.g. Kraken2 tarballs dropped into resources/)
 resources/*.tar.gz
 
+# Local end-to-end test reads (about 5 GB of SRA downloads)
+golden_baseline/
+
 # Pipeline run outputs (never commit assemblies/intermediates/logs)
 egap_test_out/
 *_egap_out/

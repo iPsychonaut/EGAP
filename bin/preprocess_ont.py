@@ -20,12 +20,12 @@ import os
 import shutil
 import subprocess
 import glob
-import re
 from typing import Optional
 
 import pandas as pd
 from utilities import run_subprocess_cmd, select_long_reads, run_stage, load_sample_context
 from qc_assessment import nanoplot_qc_reads
+from estimate_runtime import parse_genome_size
 from record_provenance import record_file
 
 # String values written by older pipeline runs (na_rep="None") that must be
@@ -171,12 +171,8 @@ def preprocess_ont(
         ont_raw_reads = resolved_reads
     
         # Parse estimated genome size
-        m = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", str(est_size))
-        if m:
-            est_size_numb, est_size_mult = m.group(1), m.group(2)
-            multipliers = {'m': 10**6, 'g': 10**9}
-            est_size_bp = int(float(est_size_numb) * multipliers.get(est_size_mult.lower(), 25_000_000))
-        else:
+        est_size_bp = parse_genome_size(est_size)
+        if not est_size_bp:
             print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
             est_size_bp = 25_000_000
     

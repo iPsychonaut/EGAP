@@ -26,7 +26,7 @@ from utilities import run_subprocess_cmd, log_print, run_stage, load_sample_cont
 from qc_assessment import qc_assessment
 from file_manager import remove_file, remove_dir
 from monitor_assembly import AssemblyMonitor
-from estimate_runtime import log_estimate_for
+from estimate_runtime import log_estimate_for, parse_genome_size
 from record_provenance import record_file
 
 # --------------------------------------------------------------
@@ -563,12 +563,8 @@ def masurca_config_gen(
         avg_insert, std_dev = 251, 30
 
     # Jellyfish hash size
-    m = re.match(r"^(\d+(?:\.\d+)?)(\D+)$", str(est_size))
-    if m:
-        est_size_numb, est_size_mult = m.group(1), m.group(2)
-        multipliers = {'m': 10**6, 'g': 10**9}
-        jf_size = int(float(est_size_numb) * multipliers.get(est_size_mult.lower(), 25_000_000))
-    else:
+    jf_size = parse_genome_size(est_size)
+    if not jf_size:
         log_print(f"NOTE:\tUnable to parse input estimated size {est_size}, using default: 25000000")
         jf_size = 25_000_000
 
