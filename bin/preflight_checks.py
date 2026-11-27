@@ -24,6 +24,7 @@ Created on 2026-06-21
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
+import os
 import sys
 import shutil
 
@@ -77,6 +78,8 @@ def run_preflight(ram_gb, required_tools=None, abort=True):
 
     # 1) Required tools on PATH (wrong-environment guard).
     tools = required_tools if required_tools is not None else SENTINEL_TOOLS
+    if os.environ.get("EGAP_BUSCO_ONLY", "0").strip() == "1":
+        tools = [t for t in tools if t != "compleasm"]  # --busco_only never calls it
     missing = [t for t in tools if shutil.which(t) is None]
     if missing:
         problems.append(

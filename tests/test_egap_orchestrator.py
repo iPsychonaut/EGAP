@@ -143,3 +143,23 @@ def test_nextflow_runs_every_egap_stage_in_order(egap):
     assert list(dict.fromkeys(called)) == stages
     for name in egap.ASSEMBLERS:
         assert f"params.no_{name} " in workflow
+    # Run flags that stages read from the environment must be exported here too.
+    for variable in ("EGAP_DRY_RUN", "EGAP_INTERMEDIATE_FORMAT", "EGAP_BUSCO_ONLY"):
+        assert f"export {variable}=" in nf, variable
+
+
+def test_busco_only_flag_sets_the_environment_and_the_settings_row(egap, monkeypatch):
+    # apply_run_flags writes os.environ directly; registering both variables
+    # with monkeypatch first makes it restore them after the test.
+    monkeypatch.setenv("EGAP_INTERMEDIATE_FORMAT", "pigz")
+    monkeypatch.setenv("EGAP_BUSCO_ONLY", "0")
+
+    def completeness_row(argv):
+        args = egap.build_parser().parse_args(["-tsv", "s.tsv", "-o", "out"] + argv)
+        egap.apply_run_flags(args)
+        settings = egap.get_pipeline_settings("now", 8, 1, "s.tsv", "out", args)
+        return settings["input-setup settings"]["completeness tool"]
+
+    assert completeness_row([]).startswith("Compleasm")
+    assert completeness_row(["--busco_only"]) == "BUSCO only"
+    assert egap.os.environ["EGAP_BUSCO_ONLY"] == "1"
