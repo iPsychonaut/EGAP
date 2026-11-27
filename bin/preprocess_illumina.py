@@ -107,6 +107,22 @@ def nonempty(p):
 
 
 # --------------------------------------------------------------
+# Helper: FastQC on one read pair
+# --------------------------------------------------------------
+def run_fastqc(out_dir, forward, reverse, cpu_threads):
+    """Run FastQC on a read pair into *out_dir*, unless both reports are already there.
+
+    The skip test counts ``*_fastqc.zip`` files, because FastQC's output names
+    drop a ``.fastq.gz`` extension and so cannot be derived from the input name.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    if len(glob.glob(os.path.join(out_dir, "*_fastqc.zip"))) >= 2:
+        log_print(f"SKIP:\tFastQC results already exist in {out_dir}")
+        return
+    run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "--outdir", out_dir, forward, reverse], False)
+
+
+# --------------------------------------------------------------
 # Helper: locate TruSeq3-PE adapter file
 # --------------------------------------------------------------
 def find_truseq_adapters():
@@ -520,17 +536,7 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
         return illu_dedup_f_reads, illu_dedup_r_reads
 
     # ---------- FastQC on raw ----------
-    fastqc_results_dir = str(illumina_dir / "fastqc_results")
-    os.makedirs(fastqc_results_dir, exist_ok=True)
-    # Derive expected FastQC output names to check for skip
-    _r1_base = os.path.splitext(os.path.basename(illu_raw_f_reads))[0]
-    _r2_base = os.path.splitext(os.path.basename(illu_raw_r_reads))[0]
-    _fqc_r1 = os.path.join(fastqc_results_dir, f"{_r1_base}_fastqc.html")
-    _fqc_r2 = os.path.join(fastqc_results_dir, f"{_r2_base}_fastqc.html")
-    if os.path.exists(_fqc_r1) and os.path.exists(_fqc_r2):
-        log_print(f"SKIP:\tFastQC results already exist: {_fqc_r1} & {_fqc_r2}")
-    else:
-        run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "--outdir", fastqc_results_dir, illu_raw_f_reads, illu_raw_r_reads], False)
+    run_fastqc(str(illumina_dir / "fastqc_results"), illu_raw_f_reads, illu_raw_r_reads, cpu_threads)
 
     # ---------- Trimmomatic ----------
     # Derive paired/unpaired output names from input
@@ -672,6 +678,10 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
                 "  input with fewer than 16 threads; use bbmap >=39.15,<39.76."
             )
 
+    # ---------- FastQC on trimmed (after Trimmomatic and BBDuk, before dedup) ----------
+    # Feeds TRIMMED_ILLU_TOTAL_BASES / _COVERAGE in the final QC and the report.
+    run_fastqc(str(illumina_dir / "trimmed_fastqc_results"), bbduk_f_map, bbduk_r_map, cpu_threads)
+
     # ---------- Clumpify (dedupe) ----------
     if nonempty(illu_dedup_f_reads) and nonempty(illu_dedup_r_reads):
         log_print(f"SKIP:\tClumpify deduplicated files exist: {illu_dedup_f_reads} & {illu_dedup_r_reads}.")
@@ -691,17 +701,8 @@ def preprocess_illumina(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
 
     log_print(f"PASS:\tPreprocessed Raw Illumina Reads for {species_id}: {illu_dedup_f_reads}, {illu_dedup_r_reads}.")
 
-    # ---------- FastQC on dedup ----------
-    dedup_fastqc_results_dir = str(illumina_dir / "dedup_fastqc_results")
-    os.makedirs(dedup_fastqc_results_dir, exist_ok=True)
-    _dd_f_base = os.path.splitext(os.path.basename(illu_dedup_f_reads))[0]
-    _dd_r_base = os.path.splitext(os.path.basename(illu_dedup_r_reads))[0]
-    _dd_fqc_f = os.path.join(dedup_fastqc_results_dir, f"{_dd_f_base}_fastqc.html")
-    _dd_fqc_r = os.path.join(dedup_fastqc_results_dir, f"{_dd_r_base}_fastqc.html")
-    if os.path.exists(_dd_fqc_f) and os.path.exists(_dd_fqc_r):
-        log_print(f"SKIP:\tDedup FastQC results already exist: {_dd_fqc_f} & {_dd_fqc_r}")
-    else:
-        run_subprocess_cmd(["fastqc", "-t", str(cpu_threads), "--outdir", dedup_fastqc_results_dir, illu_dedup_f_reads, illu_dedup_r_reads], False)
+    # ---------- FastQC on dedup (before Kraken2 decontamination below) ----------
+    run_fastqc(str(illumina_dir / "dedup_fastqc_results"), illu_dedup_f_reads, illu_dedup_r_reads, cpu_threads)
 
     # ---------- Kraken2 Decontamination ----------
     # Resolve Kraken2 DB — if not configured, skip gracefully (non-fatal)

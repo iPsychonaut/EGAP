@@ -19,10 +19,12 @@ Updated on 2026-05-24
 
 Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.com)
 """
+import glob
 import json
 import os
 import shutil
 import sys
+import zipfile
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
@@ -69,6 +71,7 @@ def gen_sample_stats_dict(row):
                          "TRIMMED_ILLU_COVERAGE": None,
                          "DEDUPED_ILLU_TOTAL_BASES": None,
                          "DEDUPED_ILLU_COVERAGE": None,
+                         "COVERAGE_BASIS": None,
                          "RAW_ONT_READS": None,
                          "RAW_ONT_MEAN_LENGTH": None,
                          "RAW_ONT_MEAN_QUAL": None,
@@ -92,11 +95,6 @@ def gen_sample_stats_dict(row):
                          "RAW_PACBIO_MEAN_QUAL": None,
                          "RAW_PACBIO_TOTAL_BASES": None,
                          "RAW_PACBIO_COVERAGE": None,
-                         "HIFI_PACBIO_READS": None,
-                         "HIFI_PACBIO_MEAN_LENGTH": None,
-                         "HIFI_PACBIO_MEAN_QUAL": None,
-                         "HIFI_PACBIO_TOTAL_BASES": None,
-                         "HIFI_PACBIO_COVERAGE": None,
                          "FILT_PACBIO_READS": None,
                          "FILT_PACBIO_MEAN_LENGTH": None,
                          "FILT_PACBIO_MEAN_QUAL": None,
@@ -408,6 +406,86 @@ def run_stage(stage, cast=str, log=True):
 # --------------------------------------------------------------
 # Parse NanoPlot statistics for long reads
 # --------------------------------------------------------------
+# NanoPlot folders written by preprocess_ont / preprocess_pacbio, per read set.
+NANOSTATS_ORIGINS = {"ONT": ("Raw_ONT_", "Filt_ONT_", "Corr_ONT_"),
+                     "PacBio": ("Raw_PacBio_", "Filt_PacBio_")}
+# FastQC folders written by preprocess_illumina, keyed by their stats prefix.
+FASTQC_FOLDERS = {"RAW_ILLU": "fastqc_results",
+                  "TRIMMED_ILLU": "trimmed_fastqc_results",
+                  "DEDUPED_ILLU": "dedup_fastqc_results"}
+_BASE_UNITS = {"bp": 1, "kbp": 1e3, "mbp": 1e6, "gbp": 1e9}
+
+
+def fastqc_total_bases(zip_path):
+    """Return the "Total Bases" of one FastQC report zip as a number of bases, or ``None``.
+
+    ``None`` covers an unreadable zip and FastQC releases before 0.12, which do
+    not report the figure.
+    """
+    # ponytail: FastQC prints this to four significant digits ("396.4 Mbp"), so
+    # coverage is good to about 0.05%. For exact totals, sum length x count from
+    # the ">>Sequence Length Distribution" module (exact only when it is unbinned).
+    try:
+        with zipfile.ZipFile(zip_path) as archive:
+            name = next(n for n in archive.namelist() if n.endswith("/fastqc_data.txt"))
+            for line in archive.read(name).decode("utf-8", "replace").splitlines():
+                if line.startswith("Total Bases\t"):
+                    value, unit = line.split("\t")[1].split()
+                    return float(value) * _BASE_UNITS[unit.lower()]
+    except (OSError, zipfile.BadZipFile, StopIteration, ValueError, KeyError):
+        pass
+    return None
+
+
+def load_read_stats(species_dir, sample_stats_dict):
+    """Fill read counts and total bases from the NanoPlot and FastQC outputs on disk.
+
+    Each stage is its own process with a fresh stats record, so nothing that
+    preprocessing measured reaches the final QC unless it is read back here.
+    Read sets with no output on disk keep ``None``.
+
+    Parameters
+    ----------
+    species_dir : str
+        ``<output_dir>/<SPECIES_ID>``, holding ``ONT/``, ``PacBio/`` and ``Illumina/``.
+    sample_stats_dict : dict
+        Statistics dictionary to update in-place.
+
+    Returns
+    -------
+    dict
+        The updated *sample_stats_dict*.
+    """
+    for technology, origins in NANOSTATS_ORIGINS.items():
+        for origin in origins:
+            nanostats = os.path.join(species_dir, technology, f"{origin}nanoplot_analysis",
+                                     f"{origin}NanoStats.txt")
+            if os.path.exists(nanostats):
+                analyze_nanostats(origin, nanostats, sample_stats_dict)
+    for prefix, folder in FASTQC_FOLDERS.items():
+        totals = [fastqc_total_bases(report) for report in
+                  sorted(glob.glob(os.path.join(species_dir, "Illumina", folder, "*_fastqc.zip")))]
+        if len(totals) == 2 and None not in totals:  # forward + reverse
+            sample_stats_dict[f"{prefix}_TOTAL_BASES"] = sum(totals)
+    return sample_stats_dict
+
+
+def add_read_coverage(sample_stats_dict, genome_bp):
+    """Set ``<SET>_COVERAGE`` for every read set that has a ``<SET>_TOTAL_BASES``.
+
+    Returns the number of read sets given a coverage (0 when *genome_bp* is
+    unknown or no read set has a total, as for QC-only samples).
+    """
+    if genome_bp is None or pd.isna(genome_bp) or genome_bp <= 0:
+        return 0
+    done = 0
+    for key, total in list(sample_stats_dict.items()):
+        if key.endswith("_TOTAL_BASES") and total is not None and not pd.isna(total):
+            sample_stats_dict[key.replace("_TOTAL_BASES", "_COVERAGE")] = round(total / genome_bp, 2)
+            done += 1
+    return done
+
+
 def analyze_nanostats(READS_ORIGIN, nanoplot_out_file, sample_stats_dict):
     """Parse NanoPlot statistics and update the sample statistics dictionary.
 

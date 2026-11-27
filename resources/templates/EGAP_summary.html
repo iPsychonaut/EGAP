@@ -210,6 +210,28 @@
     <details>
       <summary>Input Preprocessing</summary>
       <div>
+        {% if coverage_rows %}
+        <!-- Sequencing coverage per read set -->
+        <details open>
+          <summary>Sequencing Coverage</summary>
+          <div>
+            <p>Total bases of each read set divided by the {{ coverage_basis }}.
+              Illumina totals are FastQC's figures (four significant digits), and the
+              deduplicated set is counted before Kraken2 decontamination.</p>
+            <table>
+              <thead>
+                <tr><th>Read set</th><th>Total bases</th><th>Coverage</th></tr>
+              </thead>
+              <tbody>
+              {% for r in coverage_rows %}
+                <tr><td>{{ r.read_set }}</td><td>{{ r.total_bases }}</td><td>{{ r.coverage }}</td></tr>
+              {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </details>
+        {% endif %}
+
         <!-- ONT Reads Summary -->
         <details>
           <summary>ONT Reads Summary</summary>
@@ -256,37 +278,41 @@
               {% if reads_files.illumina_dedup_r %}<li>Reverse (dedup): <a href="{{ reads_files.illumina_dedup_r.href }}">{{ reads_files.illumina_dedup_r.name }}</a></li>{% endif %}
             </ul>
             {% endif %}
-            <p><strong>Raw vs. Deduplicated (Forward):</strong>
+            <p><strong>Raw vs. Trimmed vs. Deduplicated (Forward):</strong>
               {% if illumina_raw_f_link %}<a href="{{ illumina_raw_f_link }}">Raw</a>{% else %}Raw{% endif %} |
+              {% if illumina_trimmed_f_link %}<a href="{{ illumina_trimmed_f_link }}">Trimmed</a>{% else %}Trimmed{% endif %} |
               {% if illumina_dedup_f_link %}<a href="{{ illumina_dedup_f_link }}">Dedup</a>{% else %}Dedup{% endif %}
             </p>
             <table>
               <thead>
-                <tr><th>Metric</th><th>Raw</th><th>Dedup</th></tr>
+                <tr><th>Metric</th><th>Raw</th><th>Trimmed</th><th>Dedup</th></tr>
               </thead>
               <tbody>
               {% for m in illumina_metrics %}
                 <tr>
                   <td>{{ m }}</td>
                   <td>{{ illumina_raw_f_map.get(m, '-') }}</td>
+                  <td>{{ illumina_trimmed_f_map.get(m, '-') }}</td>
                   <td>{{ illumina_dedup_f_map.get(m, '-') }}</td>
                 </tr>
               {% endfor %}
               </tbody>
             </table>
-            <p><strong>Raw vs. Deduplicated (Reverse):</strong>
+            <p><strong>Raw vs. Trimmed vs. Deduplicated (Reverse):</strong>
               {% if illumina_raw_r_link %}<a href="{{ illumina_raw_r_link }}">Raw</a>{% else %}Raw{% endif %} |
+              {% if illumina_trimmed_r_link %}<a href="{{ illumina_trimmed_r_link }}">Trimmed</a>{% else %}Trimmed{% endif %} |
               {% if illumina_dedup_r_link %}<a href="{{ illumina_dedup_r_link }}">Dedup</a>{% else %}Dedup{% endif %}
             </p>
             <table>
               <thead>
-                <tr><th>Metric</th><th>Raw</th><th>Dedup</th></tr>
+                <tr><th>Metric</th><th>Raw</th><th>Trimmed</th><th>Dedup</th></tr>
               </thead>
               <tbody>
               {% for m in illumina_metrics %}
                 <tr>
                   <td>{{ m }}</td>
                   <td>{{ illumina_raw_r_map.get(m, '-') }}</td>
+                  <td>{{ illumina_trimmed_r_map.get(m, '-') }}</td>
                   <td>{{ illumina_dedup_r_map.get(m, '-') }}</td>
                 </tr>
               {% endfor %}

@@ -427,6 +427,38 @@ def find_busco_genes_table(busco_dir: str, busco_db: str) -> str:
     return ""
 
 
+# Read sets in the order the coverage table lists them: stats prefix -> label.
+COVERAGE_LABELS = {
+    "RAW_ILLU": "Illumina, raw",
+    "TRIMMED_ILLU": "Illumina, trimmed",
+    "DEDUPED_ILLU": "Illumina, deduplicated",
+    "RAW_ONT": "ONT, raw",
+    "FILT_ONT": "ONT, filtered",
+    "CORRECT_ONT": "ONT, corrected",
+    "RAW_PACBIO": "PacBio, raw",
+    "FILT_PACBIO": "PacBio, filtered",
+}
+
+
+def coverage_rows(stats_csv: str):
+    """Return ``(rows, basis)`` for the report's coverage table from the final stats CSV.
+
+    *rows* holds one ``{read_set, total_bases, coverage}`` dict per read set
+    that has a coverage value; *basis* says what the totals were divided by.
+    Both are empty when the CSV is missing (QC failed) or has no coverage.
+    """
+    if not os.path.exists(stats_csv):
+        return [], ""
+    stats = pd.read_csv(stats_csv).iloc[0]
+    rows = [{"read_set": label,
+             "total_bases": f"{int(stats[f'{prefix}_TOTAL_BASES']):,}",
+             "coverage": f"{stats[f'{prefix}_COVERAGE']:g}x"}
+            for prefix, label in COVERAGE_LABELS.items()
+            if pd.notna(stats.get(f"{prefix}_COVERAGE")) and pd.notna(stats.get(f"{prefix}_TOTAL_BASES"))]
+    basis = stats.get("COVERAGE_BASIS")
+    return rows, basis if isinstance(basis, str) else ""
+
+
 def completeness_metrics(busco_dir: str) -> dict:
     """Return the summary metrics of a BUSCO or Compleasm folder, ``{}`` if none parse."""
     short_summaries = glob.glob(os.path.join(busco_dir, "short_summary*.txt"))
@@ -590,6 +622,8 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             base = os.path.basename(ndir)
             if base == "fastqc_results":
                 run_label, f_pattern, r_pattern = "RAW", "*_1_fastqc.html", "*_2_fastqc.html"
+            elif base == "trimmed_fastqc_results":
+                run_label, f_pattern, r_pattern = "TRIMMED", "*_forward_mapped_fastqc.html", "*_reverse_mapped_fastqc.html"
             elif base == "dedup_fastqc_results":
                 run_label, f_pattern, r_pattern = "DEDUP", "*_forward_dedup_fastqc.html", "*_reverse_dedup_fastqc.html"
             else:
@@ -830,6 +864,13 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     illumina_raw_r_link  = sample_stats_dict.get("RAW_ILLU_R_FASTQC_HTML", "")
     illumina_dedup_f_link= sample_stats_dict.get("DEDUP_ILLU_F_FASTQC_HTML", "")
     illumina_dedup_r_link= sample_stats_dict.get("DEDUP_ILLU_R_FASTQC_HTML", "")
+    illumina_trimmed_f_map = df_to_map(sample_stats_dict.get("TRIMMED_ILLU_F_BASIC_STATS_DF"))
+    illumina_trimmed_r_map = df_to_map(sample_stats_dict.get("TRIMMED_ILLU_R_BASIC_STATS_DF"))
+    illumina_trimmed_f_link = sample_stats_dict.get("TRIMMED_ILLU_F_FASTQC_HTML", "")
+    illumina_trimmed_r_link = sample_stats_dict.get("TRIMMED_ILLU_R_FASTQC_HTML", "")
+
+    # Sequencing coverage per read set, from the stats CSV the final QC wrote
+    coverage_table, coverage_basis = coverage_rows((assembly_base or "") + "_final_stats.csv")
 
     # PacBio
     pacbio_raw_df  = sample_stats_dict.get("RAW_PACBIO_NANOSTATS_DF")
@@ -1000,6 +1041,9 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
         "illumina_dedup_f_map": illumina_dedup_f_map, "illumina_dedup_r_map": illumina_dedup_r_map,
         "illumina_raw_f_link": illumina_raw_f_link, "illumina_raw_r_link": illumina_raw_r_link,
         "illumina_dedup_f_link": illumina_dedup_f_link, "illumina_dedup_r_link": illumina_dedup_r_link,
+        "illumina_trimmed_f_map": illumina_trimmed_f_map, "illumina_trimmed_r_map": illumina_trimmed_r_map,
+        "illumina_trimmed_f_link": illumina_trimmed_f_link, "illumina_trimmed_r_link": illumina_trimmed_r_link,
+        "coverage_rows": coverage_table, "coverage_basis": coverage_basis,
 
         "pacbio_metrics": pacbio_metrics,
         "pacbio_raw_map": pacbio_raw_map, "pacbio_filt_map": pacbio_filt_map,
