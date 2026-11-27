@@ -334,6 +334,7 @@ Which assemblers EGAP invokes depends entirely on which read types you supply in
 | `--dry_run` | | flag | `False` | Log all file-management actions (removals, compressions) without executing them. Equivalent to setting `EGAP_DRY_RUN=1` in the environment. |
 | `--tui` | | flag | `False` | Launch the interactive TUI instead of plain terminal output. All other flags pass through to the TUI. |
 | `--intermediate_format` | | `pigz` or `fastb` | `pigz` | Format for nucleotide FASTA intermediates. FASTQ always uses pigz. Equivalent to setting `EGAP_INTERMEDIATE_FORMAT` in the environment. |
+| `--busco_only` | | flag | `False` | Measure completeness with BUSCO alone. By default Compleasm runs and BUSCO is only its fallback. BUSCO downloads its lineage data into each working folder, so expect more download time than with Compleasm's shared library. Equivalent to setting `EGAP_BUSCO_ONLY=1` in the environment. |
 | `--prepare_only` | | flag | `False` | Print the settings, run the pre-flight checks and normalise the sample table, then exit before any stage runs. Used by the Nextflow runner. |
 | `--no-masurca` | `-no_m` | flag | `False` | Skip the MaSuRCA assembler. |
 | `--no-flye` | `-no_f` | flag | `False` | Skip the Flye assembler. |
@@ -369,6 +370,8 @@ EGAP -tsv /path/to/input.tsv -o /path/to/output_dir -t 16 -r 64 --tui --dry_run
 | Variable | Description |
 |----------|-------------|
 | `EGAP_DRY_RUN=1` | Enable dry-run mode (equivalent to `--dry_run`). Checked at each file-management call so it can be set after import. |
+| `EGAP_BUSCO_ONLY=1` | Measure completeness with BUSCO alone (equivalent to `--busco_only`). |
+| `EGAP_INTERMEDIATE_FORMAT=pigz` | Format for nucleotide FASTA intermediates, `pigz` or `fastb` (equivalent to `--intermediate_format`). |
 | `KRAKEN2_DB=/path/to/db` | Path to a Kraken2 database for read decontamination. Alternatively, supply a `KRAKEN2_DB` column in the TSV. If neither is set, the decontamination step is skipped with a warning. |
 
 ## TUI Interface

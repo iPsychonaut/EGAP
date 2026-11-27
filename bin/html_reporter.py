@@ -31,6 +31,7 @@ from record_provenance import (load_provenance, pipeline_steps,
                                meaningful_tools, resolve_versions,
                                versions_from_entries)
 from file_operations import resolve_templates_dir
+from qc_assessment import busco_output_paths, completeness_tool_order
 from utilities import load_sample_context, run_stage, to_abs
 
 
@@ -178,32 +179,15 @@ def parse_compleasm_full_table(tsv_path: str) -> pd.DataFrame:
     return df[ordered_cols]
 
 def load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.DataFrame:
-    """
-    Locate and parse BUSCO/Compleasm 'full_table' with robust column normalization.
-
-    Search order (first found wins):
-      1) run_{lineage}/full_table.tsv                   (BUSCO)
-      2) {lineage}/full_table_busco_format.tsv          (Compleasm BUSCO-format)
-      3) {lineage}/full_table.tsv                       (Compleasm native)
-    """
-    if not busco_dir or not busco_db:
+    """Parse the gene table of a BUSCO or Compleasm folder; empty when absent or unreadable."""
+    path = find_busco_genes_table(busco_dir, busco_db) if busco_dir and busco_db else ""
+    if not path:
         return pd.DataFrame()
-
-    lineage = lineage_dirname(busco_db)
-
-    candidates = [
-        os.path.join(busco_dir, f"run_{lineage}", "full_table.tsv"),
-        os.path.join(busco_dir, lineage, "full_table_busco_format.tsv"),
-        os.path.join(busco_dir, lineage, "full_table.tsv"),
-    ]
-    for p in candidates:
-        if os.path.exists(p):
-            try:
-                return parse_compleasm_full_table(p)
-            except Exception as e:
-                print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {p}: {e}")
-                return pd.DataFrame()
-    return pd.DataFrame()
+    try:
+        return parse_compleasm_full_table(path)
+    except Exception as e:
+        print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {path}: {e}")
+        return pd.DataFrame()
 
 
 def parse_nanostats(nanostats_path):
@@ -432,7 +416,8 @@ def find_busco_genes_table(busco_dir: str, busco_db: str) -> str:
     """
     lineage = lineage_dirname(busco_db)
     candidates = [
-        os.path.join(busco_dir, f"run_{lineage}", "full_table.tsv"),
+        # BUSCO; busco_output_paths also finds 6.1's run_<lineage>.2 folder
+        busco_output_paths(busco_dir, lineage, os.path.basename(busco_dir))[1],
         os.path.join(busco_dir, lineage, "full_table_busco_format.tsv"),
         os.path.join(busco_dir, lineage, "full_table.tsv"),
     ]
@@ -440,6 +425,18 @@ def find_busco_genes_table(busco_dir: str, busco_db: str) -> str:
         if os.path.exists(p):
             return p
     return ""
+
+
+def completeness_metrics(busco_dir: str) -> dict:
+    """Return the summary metrics of a BUSCO or Compleasm folder, ``{}`` if none parse."""
+    short_summaries = glob.glob(os.path.join(busco_dir, "short_summary*.txt"))
+    if not short_summaries:
+        return parse_compleasm_summary(os.path.join(busco_dir, "summary.txt"))
+    with open(short_summaries[0], "r") as f:
+        for line in f:
+            if "%" in line and "C:" in line:
+                return parse_busco_summary_line(line)
+    return {}
 
 
 def find_busco_svg(busco_dir: str, busco_db: str) -> str:
@@ -661,9 +658,11 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
                 continue
             busco_type = "FIRST" if busco_index == 0 else "SECOND"
         
-            # Accept both BUSCO and Compleasm output directories
-            busco_dirs = glob.glob(os.path.join(assembly_dir, f"*_{busco_db}_busco")) + \
-                         glob.glob(os.path.join(assembly_dir, f"*_{busco_db}_compleasm"))
+            # Both tools' folders may exist. The last one with a usable summary
+            # wins below, so list this run's tool last.
+            this_tool, other_tool = completeness_tool_order()
+            busco_dirs = glob.glob(os.path.join(assembly_dir, f"*_{busco_db}_{other_tool}")) + \
+                         glob.glob(os.path.join(assembly_dir, f"*_{busco_db}_{this_tool}"))
             if not busco_dirs:
                 print(f"SKIP:\tNo BUSCO/Compleasm outputs for {busco_db} in {assembly_dir}")
                 continue
@@ -671,17 +670,7 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             for busco_dir in busco_dirs:
                 svg_path = find_busco_svg(busco_dir, busco_db)
                 
-                # Prefer BUSCO short_summary, else Compleasm summary.txt
-                metrics = {}
-                summary_files = glob.glob(os.path.join(busco_dir, "short_summary*.txt"))
-                if summary_files:
-                    with open(summary_files[0], "r") as f:
-                        for line in f:
-                            if "%" in line and "C:" in line:
-                                metrics = parse_busco_summary_line(line)
-                                break
-                else:
-                    metrics = parse_compleasm_summary(os.path.join(busco_dir, "summary.txt"))
+                metrics = completeness_metrics(busco_dir)
         
                 if not metrics:
                     print(f"SKIP:\tNo parsable BUSCO/Compleasm summary in {busco_dir}")
@@ -698,11 +687,6 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
                 sample_stats_dict[f"{asm_type}_{busco_type}_BUSCO_GENES_DF"]  = busco_genes_df
 
     # ------------------------------ Final assembly QUAST/BUSCO (robust discovery) ------------------------------
-    def first_existing(paths):
-        for p in paths:
-            if p and os.path.exists(p):
-                return p
-        return None
     
     # Candidate basenames (without extension) we can accept
     candidate_bases = []
@@ -763,41 +747,25 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
             continue
         busco_type = "FIRST" if busco_index == 0 else "SECOND"
     
-        busco_dir_candidates = []
-        for base in ([assembly_base] if assembly_base else []) + [b for b in candidate_bases if b and b != assembly_base]:
-            busco_dir_candidates.append(f"{base}_{busco_db}_busco")
-            busco_dir_candidates.append(f"{base}_{busco_db}_compleasm")
+        # This run's tool first; take the first folder with a usable summary.
+        bases = ([assembly_base] if assembly_base else []) + [b for b in candidate_bases if b and b != assembly_base]
+        busco_dir_candidates = [f"{base}_{busco_db}_{tool}" for base in bases
+                                for tool in completeness_tool_order()]
     
-        chosen_busco_dir = first_existing(busco_dir_candidates)
+        chosen_busco_dir, metrics = None, {}
+        for candidate in busco_dir_candidates:
+            if os.path.isdir(candidate):
+                metrics = completeness_metrics(candidate)
+                if metrics:
+                    chosen_busco_dir = candidate
+                    break
         if not chosen_busco_dir:
-            print(f"WARN:\tNo BUSCO/Compleasm dir found for {busco_db}. Tried: {busco_dir_candidates}")
-            continue
-    
-        metrics = {}
-        short_sum = first_existing(glob.glob(os.path.join(chosen_busco_dir, "short_summary*.txt")))
-        if short_sum:
-            with open(short_sum, "r") as f:
-                for line in f:
-                    if "%" in line and "C:" in line:
-                        metrics = parse_busco_summary_line(line)
-                        break
-        else:
-            metrics = parse_compleasm_summary(os.path.join(chosen_busco_dir, "summary.txt"))
-    
-        if not metrics:
-            print(f"WARN:\tNo parsable BUSCO/Compleasm summary in {chosen_busco_dir}")
+            print(f"WARN:\tNo BUSCO/Compleasm results found for {busco_db}. Tried: {busco_dir_candidates}")
             continue
     
         metrics_df = pd.DataFrame(list(metrics.items()), columns=["Metric", "Value"])
-    
-        genes_file = find_busco_genes_table(chosen_busco_dir, busco_db)
-        busco_genes_df = pd.DataFrame()
-        if genes_file:
-            try:
-                busco_genes_df = parse_compleasm_full_table(genes_file)
-            except Exception as e:
-                print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {genes_file}: {e}")
-    
+        busco_genes_df = load_busco_or_compleasm_genes_table(chosen_busco_dir, busco_db)
+
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_DF"]        = metrics_df
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_HTML"]      = os.path.join(chosen_busco_dir, f"{sample_id}_{busco_db}_EGAP_busco.html")
         sample_stats_dict[f"FINAL_{busco_type}_BUSCO_GENES_DF"]  = busco_genes_df

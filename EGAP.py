@@ -263,6 +263,8 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output
             "CPU threads": str(cpu_threads),
             "dry run": str(os.environ.get("EGAP_DRY_RUN", "0").strip() == "1"),
             "assemblers skipped": ", ".join(skipped) or "none",
+            "completeness tool": ("BUSCO only" if os.environ.get("EGAP_BUSCO_ONLY", "0").strip() == "1"
+                                  else "Compleasm, BUSCO as fallback"),
             "input tsv": str(input_tsv),
             "output to": str(output_dir),
         },
@@ -465,6 +467,10 @@ def build_parser():
                         help="Format for nucleotide FASTA intermediates: pigz (default) "
                              "or fastb. FASTQ always uses pigz. Equivalent to "
                              "EGAP_INTERMEDIATE_FORMAT=<value>.")
+    parser.add_argument("--busco_only", action="store_true", default=False,
+                        help="Measure completeness with BUSCO alone. By default Compleasm "
+                             "runs and BUSCO is only its fallback. Equivalent to "
+                             "EGAP_BUSCO_ONLY=1.")
     parser.add_argument("--tui", action="store_true", default=False,
                         help="Run the pipeline through the interactive TUI instead of "
                              "plain terminal output.")
@@ -485,6 +491,8 @@ def apply_run_flags(args):
     """Export the flags that stage subprocesses read from the environment."""
     if args.dry_run:
         os.environ["EGAP_DRY_RUN"] = "1"
+    if args.busco_only:
+        os.environ["EGAP_BUSCO_ONLY"] = "1"
     os.environ["EGAP_INTERMEDIATE_FORMAT"] = args.intermediate_format
 
 
@@ -514,7 +522,7 @@ if __name__ == "__main__":
     cpu_threads = args.cpu_threads
     ram_gb      = args.ram_gb
 
-    apply_run_flags(args)  # EGAP_DRY_RUN / EGAP_INTERMEDIATE_FORMAT for the stage subprocesses
+    apply_run_flags(args)  # EGAP_DRY_RUN / EGAP_BUSCO_ONLY / EGAP_INTERMEDIATE_FORMAT for the stages
     dry_run = args.dry_run
     current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 

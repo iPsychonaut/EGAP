@@ -39,13 +39,25 @@ from utilities import (
 from file_manager import clean_lineage_downloads
 
 
-# === Global BUSCO/Compleasm toggle ===
-# If True, prefer Compleasm over BUSCO for completeness analysis.
-USE_COMPLEASM = True
+# === BUSCO/Compleasm choice ===
+def busco_only() -> bool:
+    """True when the run asked for BUSCO alone (``--busco_only`` / ``EGAP_BUSCO_ONLY=1``).
 
-# If True, automatically fall back to BUSCO when Compleasm fails
-# or produces no metrics (recommended so downstream code always has data).
-FALLBACK_TO_BUSCO_ON_FAIL = True
+    By default Compleasm measures completeness and BUSCO is the fallback when
+    Compleasm produces no metrics. Read at call time, like ``EGAP_DRY_RUN``, so
+    the orchestrator can set it after this module is imported.
+    """
+    return os.environ.get("EGAP_BUSCO_ONLY", "0").strip() == "1"
+
+
+def completeness_tool_order():
+    """Return the output-folder suffixes of this run's tool first, the other second.
+
+    A sample folder can hold both ``*_busco`` and ``*_compleasm`` results (a
+    fallback, or an earlier run in the other mode); readers take the first that
+    has a usable summary.
+    """
+    return ("busco", "compleasm") if busco_only() else ("compleasm", "busco")
 
 # One shared Compleasm lineage library for the whole run, so each lineage is
 # downloaded once and reused instead of re-downloading into a per-working-dir
@@ -108,10 +120,10 @@ def run_lineage_eval(assembly_path: str,
                      cpu_threads) -> bool:
     """
     Single entry point for BUSCO-like evaluation.
-    Respects USE_COMPLEASM and will optionally fall back to BUSCO.
+    Runs Compleasm with BUSCO as the fallback, or BUSCO alone under ``busco_only()``.
 
-    Returns ``True`` when completeness was measured (by Compleasm or BUSCO) and
-    ``False`` when both failed for this lineage (also recorded in
+    Returns ``True`` when completeness was measured and ``False`` when every
+    tool that was tried failed for this lineage (also recorded in
     ``_COMPLETENESS_FAILURES`` so the final QC can fail loudly).
     """
     up = busco_count.upper()
@@ -121,34 +133,30 @@ def run_lineage_eval(assembly_path: str,
         return (f"{up}_BUSCO_C" in sample_stats_dict or
                 (f"{up}_BUSCO_S" in sample_stats_dict and f"{up}_BUSCO_D" in sample_stats_dict))
 
-    if USE_COMPLEASM:
+    only_busco = busco_only()
+    if not only_busco:
         print("INFO:\tUsing Compleasm for BUSCO-like analysis.")
         try:
             compleasm_assembly(assembly_path, sample_id, sample_stats_dict,
                                busco_count, busco_odb, assembly_type, cpu_threads)
         except Exception as e:
             print(f"WARN:\tCompleasm raised an exception: {e}")
-        if not _have_metrics() and FALLBACK_TO_BUSCO_ON_FAIL:
-            print("WARN:\tCompleasm produced no metrics; falling back to BUSCO.")
-            try:
-                busco_assembly(assembly_path, sample_id, sample_stats_dict,
-                               busco_count, busco_odb, assembly_type, cpu_threads)
-            except Exception as e:
-                print(f"WARN:\tBUSCO fallback raised an exception: {e}")
-    else:
-        print("INFO:\tUsing BUSCO for completeness analysis.")
+    if only_busco or not _have_metrics():
+        print("INFO:\tUsing BUSCO for completeness analysis (--busco_only)." if only_busco else
+              "WARN:\tCompleasm produced no metrics; falling back to BUSCO.")
         try:
             busco_assembly(assembly_path, sample_id, sample_stats_dict,
                            busco_count, busco_odb, assembly_type, cpu_threads)
         except Exception as e:
             print(f"WARN:\tBUSCO raised an exception: {e}")
 
-    # Fail loudly (recorded for the final QC) only when BOTH tools failed and we
-    # have no completeness number at all -- never a silent skip.
+    # Fail loudly (recorded for the final QC) only when every tool that was
+    # tried failed and we have no completeness number at all -- never a silent skip.
     got = _have_metrics()
     if not got:
+        tried = "BUSCO" if only_busco else "both Compleasm and BUSCO"
         print(f"ERROR:\tCompleteness could NOT be measured for lineage "
-              f"'{busco_odb}' ({busco_count}); both Compleasm and BUSCO failed.")
+              f"'{busco_odb}' ({busco_count}); {tried} failed.")
         _COMPLETENESS_FAILURES.append(f"{busco_count}:{busco_odb}")
     return got
 

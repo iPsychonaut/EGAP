@@ -20,7 +20,7 @@ nextflow.enable.dsl=2
 //     to QC and the report for that sample. Use -resume after fixing the cause.
 //   * Parameters are Nextflow params (nextflow.config or --name value):
 //       --input_tsv --output_dir --cpu_threads --ram_gb
-//       --dry_run --intermediate_format
+//       --dry_run --intermediate_format --busco_only
 //       --no_masurca --no_flye --no_spades --no_hifiasm
 //
 // Usage:
@@ -56,6 +56,7 @@ def egapEnv() {
     export MPLCONFIGDIR=/tmp/matplotlib-cache
     export EGAP_INTERMEDIATE_FORMAT="${params.intermediate_format}"
     export EGAP_DRY_RUN="${params.dry_run ? 1 : 0}"
+    export EGAP_BUSCO_ONLY="${params.busco_only ? 1 : 0}"
     """.stripIndent()
 }
 
@@ -109,7 +110,7 @@ process prepare {
     python3 "${workflow.projectDir}/EGAP.py" --prepare_only \\
         --input_tsv "${absPath(params.input_tsv)}" --output_dir "${absPath(params.output_dir)}" \\
         --cpu_threads ${params.cpu_threads} --ram_gb ${params.ram_gb} \\
-        --intermediate_format ${params.intermediate_format} ${params.dry_run ? '--dry_run' : ''} ${skips}
+        --intermediate_format ${params.intermediate_format} ${params.dry_run ? '--dry_run' : ''} ${params.busco_only ? '--busco_only' : ''} ${skips}
     """.stripIndent()
 }
 
