@@ -95,6 +95,7 @@ test:
     - python
   commands:
     - EGAP --help
+    - test -f "${PREFIX}/share/egap/resources/templates/EGAP_summary.html"
 
 about:
   home: https://github.com/iPsychonaut/EGAP
@@ -111,7 +112,8 @@ about:
 
 extra:
   notes: |
-    This package installs the EGAP and EGAP_TUI commands in $PREFIX/bin.
+    This package installs the EGAP and EGAP_TUI commands in $PREFIX/bin and
+    the pipeline itself (EGAP.py, bin/, resources/) in $PREFIX/share/egap.
     Please refer to the upstream GitHub page for usage instructions.
   recipe-maintainers:
     - iPsychonaut

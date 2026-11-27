@@ -30,11 +30,37 @@ import os
 import shutil
 import tempfile
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from pathlib import Path
 from typing import List
 
 from Bio import SeqIO
 
 from subprocess_runner import run_subprocess_cmd
+
+
+# --------------------------------------------------------------
+# Bundled resources
+# --------------------------------------------------------------
+# Every install layout has the same tree: <root>/EGAP.py, <root>/bin/ and
+# <root>/resources/ (git checkout, /EGAP_env in the Docker image,
+# $PREFIX/share/egap in the conda package).
+RESOURCES_DIR = Path(__file__).resolve().parent.parent / "resources"
+
+
+def resolve_templates_dir():
+    """Return the folder holding the report and NCBI metadata templates.
+
+    ``$EGAP_TEMPLATES_DIR`` overrides the bundled ``resources/templates``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the folder does not exist (a broken install or a wrong override).
+    """
+    path = Path(os.environ.get("EGAP_TEMPLATES_DIR") or RESOURCES_DIR / "templates")
+    if not path.is_dir():
+        raise FileNotFoundError(f"EGAP templates folder not found: {path}")
+    return path
 
 
 # --------------------------------------------------------------

@@ -18,13 +18,9 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 import os
 import glob
-import sys
 import re
 from io import StringIO
-from pathlib import Path
 from datetime import datetime
-import urllib.request
-from typing import Optional  # <-- Py3.8/3.9-safe Optional
 
 import pandas as pd
 from bs4 import BeautifulSoup
@@ -34,6 +30,7 @@ from process_metadata import get_inat_obs, reverse_geocode
 from record_provenance import (load_provenance, pipeline_steps,
                                meaningful_tools, resolve_versions,
                                versions_from_entries)
+from file_operations import resolve_templates_dir
 from utilities import load_sample_context, run_stage, to_abs
 
 
@@ -69,12 +66,6 @@ def _file_link(path):
 
 
 # ------------------------------ Helpers ------------------------------
-REQUIRED_TEMPLATES = ("EGAP_summary.html", "EGAP_busco.html")
-RAW_URLS = {
-    "EGAP_summary.html": "https://raw.githubusercontent.com/iPsychonaut/EGAP/main/resources/templates/EGAP_summary.html",
-    "EGAP_busco.html"  : "https://raw.githubusercontent.com/iPsychonaut/EGAP/main/resources/templates/EGAP_busco.html",
-}
-
 def lineage_dirname(busco_odb: str, db_version: str = "odb12") -> str:
     """
     Return a lineage directory name guaranteed to end with _odbNN,
@@ -213,110 +204,6 @@ def load_busco_or_compleasm_genes_table(busco_dir: str, busco_db: str) -> pd.Dat
                 print(f"WARN:\tFailed to parse BUSCO/Compleasm genes table {p}: {e}")
                 return pd.DataFrame()
     return pd.DataFrame()
-
-
-def has_both_templates(dir_path: Path) -> bool:
-    return all((dir_path / fname).exists() for fname in REQUIRED_TEMPLATES)
-
-def download_templates_to(dst_dir: Path) -> bool:
-    """Try to download both templates into dst_dir. Return True if both exist afterward."""
-    dst_dir.mkdir(parents=True, exist_ok=True)
-    ok = True
-    for name, url in RAW_URLS.items():
-        out = dst_dir / name
-        try:
-            print(f"INFO:\tDownloading template '{name}' -> {out}")
-            urllib.request.urlretrieve(url, out.as_posix())
-        except Exception as e:
-            ok = False
-            print(f"WARN:\tFailed to download {name} from {url}: {e}")
-    return ok and has_both_templates(dst_dir)
-
-def resolve_templates_dir(output_dirto_abs: str) -> Optional[Path]:
-    """
-    Robustly locate a folder containing BOTH 'EGAP_summary.html' and 'EGAP_busco.html'.
-    If not found, attempt to download both files into the SAME directory as html_reporter.py.
-    If download fails, return None (caller will stub out the report and continue).
-
-    Search order (first folder that contains BOTH wins):
-      1) $EGAP_TEMPLATES_DIR
-      2) $EGAP_PROJECT_DIR/resources/templates
-      3) <script>/../resources/templates
-      4) <script>/../../resources/templates
-      5) <sys.prefix>/share/egap/templates  (conda share)
-      6) <sys.prefix>/share/EGAP/templates
-      7) site-packages scans: */EGAP/resources/templates, */egap/resources/templates
-      8) <output_dir>/resources/templates
-      9) If none above found, download both templates into <script_dir> and use it.
-    """
-    script_file = Path(__file__).resolve()
-    script_dir  = script_file.parent
-    sys_prefix  = Path(sys.prefix).resolve()
-    output_dir_p = Path(output_dirto_abs).resolve()
-
-    tried = []
-
-    def check_and_return(p: Path):
-        tried.append(p)
-        if has_both_templates(p):
-            return p
-        return None
-
-    # 1) Explicit override
-    env_templates = os.environ.get("EGAP_TEMPLATES_DIR")
-    if env_templates:
-        p = Path(env_templates).expanduser().resolve()
-        found = check_and_return(p)
-        if found: return found
-
-    # 2) Project dir provided
-    env_project = os.environ.get("EGAP_PROJECT_DIR")
-    if env_project:
-        p = Path(env_project).expanduser().resolve() / "resources" / "templates"
-        found = check_and_return(p)
-        if found: return found
-
-    # 3–4) Repo layouts near the script
-    for p in [
-        script_dir.parent / "resources" / "templates",
-        script_dir.parent.parent / "resources" / "templates",
-    ]:
-        found = check_and_return(p)
-        if found: return found
-
-    # 5–6) Conda share
-    for share_name in ("egap", "EGAP"):
-        p = sys_prefix / "share" / share_name / "templates"
-        found = check_and_return(p)
-        if found: return found
-
-    # 7) site-packages scan
-    for sp in [Path(p) for p in sys.path if isinstance(p, str)]:
-        for p in [
-            sp / "EGAP" / "resources" / "templates",
-            sp / "egap" / "resources" / "templates",
-            sp / "resources" / "templates",
-        ]:
-            found = check_and_return(p)
-            if found: return found
-
-    # 8) project-local
-    p = output_dir_p / "resources" / "templates"
-    found = check_and_return(p)
-    if found: return found
-
-    # 9) Download into the SAME directory that html_reporter.py is in
-    print("INFO:\tTemplates not found in standard locations; attempting download into script directory.")
-    if download_templates_to(script_dir):
-        print(f"PASS:\tTemplates downloaded to {script_dir}")
-        return script_dir
-
-    # Still nothing: inform and continue (return None; caller will stub).
-    msg = "Templates directory with BOTH required files not found.\nTried:\n  " + "\n  ".join(str(x) for x in tried)
-    msg += ("\nAlso attempted download into script directory but failed.\n"
-            "A report cannot be generated unless 'EGAP_summary.html' and 'EGAP_busco.html' are available.")
-    print("WARN:\t" + msg)
-    return None
 
 
 def parse_nanostats(nanostats_path):
@@ -588,14 +475,14 @@ def find_busco_svg(busco_dir: str, busco_db: str) -> str:
 def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """
     Render the EGAP HTML report for a sample.
-    Returns: path to <sample_dir>/<sample_id>_EGAP_summary.html (or a stub if templates are missing)
+    Returns: path to <sample_dir>/<sample_id>_EGAP_summary.html
     """
     # Resolve critical paths first (CWD-safe)
     input_tsvto_abs = to_abs(input_tsv)
     output_dirto_abs = to_abs(output_dir)
 
-    # Locate or fetch templates
-    templates_dir = resolve_templates_dir(output_dirto_abs)
+    # Fail now, before any work, if the install has no templates
+    templates_dir = resolve_templates_dir()
 
     now = datetime.now().strftime("%Y%m%d-%H:%M:%S")
 
@@ -920,31 +807,10 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
         _db_info["slot"] = "First" if busco_type == "FIRST" else "Second"
         busco_db_details.append(_db_info)
 
-    # ------------------------------ Render or stub ------------------------------
+    # ------------------------------ Render ------------------------------
     os.makedirs(sample_dir, exist_ok=True)
     html_report_outpath = os.path.join(sample_dir, f"{sample_id}_EGAP_summary.html")
 
-    if templates_dir is None:
-        # No templates available; write a stub and succeed
-        stub = f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<title>{sample_id} — EGAP summary (templates missing)</title></head>
-<body>
-<h1>EGAP Summary (Templates Missing)</h1>
-<p>A full report could not be generated because both template files are required:</p>
-<ul>
-  <li><code>EGAP_summary.html</code></li>
-  <li><code>EGAP_busco.html</code></li>
-</ul>
-<p>Place these files somewhere discoverable (see logs), or set <code>EGAP_TEMPLATES_DIR</code>, then re-run.</p>
-<p>The pipeline continues without failing.</p>
-</body></html>"""
-        with open(html_report_outpath, "w") as fh:
-            fh.write(stub)
-        print(f"WARN:\tTemplates unavailable; wrote stub report: {html_report_outpath}")
-        return html_report_outpath
-
-    # Templates are available: render real report
     print(f"DEBUG - templates_dir - {templates_dir}")
     env = Environment(
         loader=FileSystemLoader(str(templates_dir)),

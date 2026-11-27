@@ -362,8 +362,8 @@ RUN /funannotate_env/bin/funannotate setup -d "/opt/databases"
 # stay cached. .dockerignore limits the context to these paths.
 COPY --chmod=755 EGAP.py /EGAP_env/EGAP.py
 COPY --chmod=755 bin/*.py /EGAP_env/bin/
-# html_reporter looks in <script>/../resources/templates; without this it
-# downloads the templates from GitHub main at run time.
+# The report and metadata templates are read from bin/../resources/templates
+# (file_operations.resolve_templates_dir); there is no run-time download.
 COPY resources/templates/ /EGAP_env/resources/templates/
 
 # -----------------------------------------------------------------------------

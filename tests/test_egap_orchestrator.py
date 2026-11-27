@@ -53,23 +53,68 @@ def test_version_string_matches_recipe(egap):
     assert f'version = "{egap.VERSION}"' in meta
 
 
-def test_locate_bin_dir_prefers_repo_bin_over_hidden_worktree(egap, tmp_path):
-    scripts = ["a", "b"]
-    for d in (tmp_path / ".claude" / "worktrees" / "x" / "bin", tmp_path / "bin"):
-        d.mkdir(parents=True)
-        for s in scripts:
-            (d / f"{s}.py").touch()
-    assert egap.locate_bin_dir(scripts, tmp_path) == tmp_path / "bin"
+TEMPLATES = ("EGAP_summary.html", "EGAP_busco.html",
+             "GCA_metadata_acc.xlsx", "SRA_metadata_acc.xlsx")
 
 
-def test_locate_bin_dir_walk_skips_hidden_dirs(egap, tmp_path):
-    scripts = ["a", "b"]
-    for d in (tmp_path / ".claude" / "worktrees" / "x" / "bin", tmp_path / "src" / "scripts"):
-        d.mkdir(parents=True)
-        for s in scripts:
-            (d / f"{s}.py").touch()
-    assert egap.locate_bin_dir(scripts, tmp_path) == tmp_path / "src" / "scripts"
-    assert egap.locate_bin_dir(scripts, tmp_path / ".claude" / "nope") is None
+def test_every_stage_has_a_script_beside_egap(egap):
+    assert egap.BIN_DIR == REPO_ROOT / "bin"
+    for stage in egap.PROCESSES + egap.FINAL_STEPS + ["final_compress"]:
+        assert (egap.BIN_DIR / f"{stage}.py").is_file(), stage
+
+
+def test_templates_are_bundled_and_overridable(monkeypatch, tmp_path):
+    from file_operations import resolve_templates_dir
+
+    monkeypatch.delenv("EGAP_TEMPLATES_DIR", raising=False)
+    bundled = resolve_templates_dir()
+    assert bundled == REPO_ROOT / "resources" / "templates"
+    for name in TEMPLATES:
+        assert (bundled / name).is_file(), name
+
+    monkeypatch.setenv("EGAP_TEMPLATES_DIR", str(tmp_path))
+    assert resolve_templates_dir() == tmp_path
+    monkeypatch.setenv("EGAP_TEMPLATES_DIR", str(tmp_path / "missing"))
+    with pytest.raises(FileNotFoundError):
+        resolve_templates_dir()
+
+
+def _usable_bash():
+    """Path to a bash that understands this platform's paths, or None.
+
+    On Windows ``bash`` may resolve to the WSL launcher in System32, which
+    cannot take ``C:/`` paths; Git Bash can.
+    """
+    import shutil
+    bash = shutil.which("bash")
+    if bash and "system32" in bash.lower():
+        return None
+    return bash
+
+
+@pytest.mark.skipif(_usable_bash() is None, reason="needs a bash that takes native paths")
+def test_conda_build_script_installs_one_runnable_tree(tmp_path):
+    """build.sh into a scratch PREFIX: the tree, the templates and a working launcher."""
+    import os
+    import subprocess
+    prefix = tmp_path / "prefix"
+    env = dict(os.environ, PREFIX=prefix.as_posix())
+    subprocess.run([_usable_bash(), "build.sh"], cwd=REPO_ROOT, env=env, check=True,
+                   capture_output=True)
+
+    share = prefix / "share" / "egap"
+    assert (share / "EGAP.py").is_file()
+    assert (share / "bin" / "html_reporter.py").is_file()
+    assert (share / "resources" / "TruSeq3-PE.fa").is_file()
+    for name in TEMPLATES:
+        assert (share / "resources" / "templates" / name).is_file(), name
+
+    for command in ("EGAP", "EGAP_TUI"):
+        assert (prefix / "bin" / command).is_file()
+    done = subprocess.run([sys.executable, str(prefix / "bin" / "EGAP"), "--help"],
+                          capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr
+    assert "--input_tsv" in done.stdout
 
 
 def test_flags_stage_list_and_stage_commands(egap, tmp_path):
