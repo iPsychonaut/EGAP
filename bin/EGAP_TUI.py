@@ -611,7 +611,7 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                     self.log_line(f"  {k}: {v}")
 
             processes = egap.resolve_processes(self.args, say=self.log_line)
-            bin_dir = egap.resolve_bin_dir(processes, Path(egap.__file__).resolve().parent)
+            bin_dir = egap.BIN_DIR
 
             # ---- Fail-fast environment preflight (tools on PATH, RAM sanity) ----
             try:

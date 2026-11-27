@@ -25,6 +25,15 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 
+# Stage scripts sit in bin/ beside this file in every install layout: the git
+# checkout, /EGAP_env in the Docker image, $PREFIX/share/egap in the conda
+# package. Fail here, on import, so even `EGAP --help` exposes a broken install.
+BIN_DIR = Path(__file__).resolve().parent / "bin"
+if not BIN_DIR.is_dir():
+    sys.exit(f"ERROR:	EGAP stage scripts not found: {BIN_DIR} does not exist. Reinstall EGAP.")
+if str(BIN_DIR) not in sys.path:
+    sys.path.insert(0, str(BIN_DIR))
+
 
 # --------------------------------------------------------------
 # Tee: mirror stdout to a log file in real time
@@ -336,8 +345,7 @@ def preprocess_tsv(tsv_file_path):
     5) Return the normalized DataFrame (collapsed columns re-expanded to the
        legacy per-stage column names) for the orchestrator's sample loop.
     """
-    # bin/ is on sys.path by the time this runs (main() inserts it before the
-    # call; the TUI imports egap with bin/ already importable).
+    # bin/ is on sys.path: this module inserts BIN_DIR on import.
     from sample_tsv import read_sample_table
 
     # (a) Read the raw table (collapsed schema preserved) for the on-disk rename.
@@ -381,33 +389,6 @@ def preprocess_tsv(tsv_file_path):
 
     # (e) Hand back a normalized view with the legacy per-stage column names.
     return read_sample_table(tsv_file_path)
-
-# --------------------------------------------------------------
-# Locates the one directory under `search_root` that contains ALL of `required_scripts`
-# --------------------------------------------------------------
-def locate_bin_dir(required_scripts, search_root):
-    """
-    Walk `search_root` and its subdirectories. At each directory, check if
-    that directory’s file‐list contains every name in `required_scripts`.
-    If so, return that Path immediately. If no such directory is found, return None.
-    """
-    # We only need to look at folders (not individual files) and see if each
-    # proc_name+".py" is present.
-    # Prefer the repo's own bin/ so a stray checkout (e.g. .claude/worktrees/*/bin)
-    # can never shadow it.
-    own_bin = Path(search_root) / "bin"
-    if all((own_bin / f"{proc}.py").is_file() for proc in required_scripts):
-        return own_bin
-    for root, subdirs, files in os.walk(search_root):
-        # Prune hidden directories (.git, .claude, ...) in place
-        subdirs[:] = [d for d in subdirs if not d.startswith(".")]
-        # root is a str; convert to Path for convenience
-        root_path = Path(root)
-        # Check if *all* required script filenames appear in `files`
-        if all(f"{proc}.py" in files for proc in required_scripts):
-            return root_path
-    return None
-
 
 # --------------------------------------------------------------
 # Orchestrate the Entheome Genome Assembly Pipeline
@@ -458,7 +439,7 @@ def sample_is_qc_only(row):
 # --------------------------------------------------------------
 def build_parser():
     """Return the EGAP command-line parser."""
-    parser = argparse.ArgumentParser(description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{VERSION}")
+    parser = argparse.ArgumentParser(prog="EGAP", description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{VERSION}")
     parser.add_argument("--input_tsv", "-tsv",
                         type=str,
                         required=True,
@@ -517,16 +498,6 @@ def resolve_processes(args, say=print):
     return [p for p in PROCESSES if p.removeprefix("assemble_") not in disabled]
 
 
-def resolve_bin_dir(processes, project_dir):
-    """Return the directory holding every stage script, or raise FileNotFoundError."""
-    scripts = processes + FINAL_STEPS + ["final_compress"]
-    bin_dir = locate_bin_dir(scripts, project_dir)
-    if bin_dir is None:
-        raise FileNotFoundError("Could not locate a single folder containing all of: "
-                                + ", ".join(f"{p}.py" for p in scripts))
-    return bin_dir
-
-
 def stage_cmd(bin_dir, proc, sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """Return the command line for one stage script."""
     lead = [sys.executable, str(Path(bin_dir) / f"{proc}.py")]
@@ -551,9 +522,6 @@ if __name__ == "__main__":
 
     # ---- TUI mode: hand off to EGAP_TUI and exit ----
     if args.tui:
-        _bin_dir = Path(__file__).resolve().parent / "bin"
-        if str(_bin_dir) not in sys.path:
-            sys.path.insert(0, str(_bin_dir))
         from EGAP_TUI import ENTHEOME_GENOME_ASSEMBLY_PIPELINE  # noqa: PLC0415
         _tui_app = ENTHEOME_GENOME_ASSEMBLY_PIPELINE()
         # Pass the already-parsed namespace so the TUI skips its own argparse.
@@ -611,11 +579,9 @@ if __name__ == "__main__":
     # Honour per-assembler skip flags (--no-masurca/-no_m, etc.). EGAP runs every
     # assembler compatible with the read types unless explicitly disabled here.
     processes = resolve_processes(args)
-    bin_dir = resolve_bin_dir(processes, Path(__file__).resolve().parent)
+    bin_dir = BIN_DIR
 
     # ---- Fail-fast environment preflight (tools on PATH, RAM sanity) ----
-    if str(bin_dir) not in sys.path:
-        sys.path.insert(0, str(bin_dir))
     try:
         from preflight_checks import run_preflight
         run_preflight(ram_gb)

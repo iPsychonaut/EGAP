@@ -27,6 +27,7 @@ from pathlib import Path
 import pandas as pd
 from utilities import run_subprocess_cmd, md5_check, run_stage, log_print, load_sample_context
 from record_provenance import record_file
+from file_operations import RESOURCES_DIR
 from decontaminate_reads import (
     get_kraken2_db,
     get_kraken_keep_domains,
@@ -147,7 +148,7 @@ def find_truseq_adapters():
             return candidates[0]
     # 3) Repository-bundled fallback at <repo_root>/resources/TruSeq3-PE.fa
     #    Anchored to this script's location so it works regardless of CWD.
-    bundled_adapters = Path(__file__).resolve().parent.parent / "resources" / "TruSeq3-PE.fa"
+    bundled_adapters = RESOURCES_DIR / "TruSeq3-PE.fa"
     if bundled_adapters.is_file():
         return str(bundled_adapters)
     # 4) Fallback: search common paths

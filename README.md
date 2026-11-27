@@ -121,7 +121,7 @@ A single EGAP run can peak at ~300 GB of intermediate files before cleanup; see 
 ### Software
 
 - **OS:** Linux x86_64 (primary target; tested on Debian/Ubuntu). macOS x86_64/arm64 is supported by `EGAP_setup.sh` but some assemblers are Linux-only.
-- **Python:** 3.8 (EGAP pins to `>=3.8,<3.9`; the bioconda tool stack is validated against that interpreter). This caps the scientific Python stack at the last 3.8 builds: `pandas 2.0.3`, `numpy 1.24.x`, `matplotlib 3.7.x`, `biopython 1.83`. Code must also run on `pandas 1.4.4`, the floor that older solves land on; CI tests both.
+- **Python:** 3.12 (`>=3.12,<3.13`) with `pandas >=3,<4` and `numpy >=1.26,<3`. The Docker image and the conda recipe in this repository pin these; CI tests Python 3.12 and 3.13.
 - **Conda:** Miniforge3, Miniconda3, or Anaconda (the installer uses Miniforge3).
 - **git, wget, tar** on PATH.
 - **Optional:** Docker ≥ 20.10 for container usage, Apptainer/Singularity ≥ 3.8 for HPC usage.
@@ -245,7 +245,7 @@ singularity run -B /path/to/data/mnt:/path/to/data/mnt entheome.sif \
 In a dedicated environment through the Bioconda channel with the following command:
 
 ```bash
-conda create -y -n EGAP_env python=3.8 && conda activate EGAP_env && conda install -y -c bioconda egap
+conda create -y -n EGAP_env --strict-channel-priority -c conda-forge -c bioconda egap && conda activate EGAP_env
 ```
 
 ##### Kraken2 Database Setup (required for read decontamination):

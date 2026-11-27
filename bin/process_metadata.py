@@ -22,9 +22,9 @@ import warnings
 import requests
 import pandas as pd
 from datetime import datetime
-from pathlib import Path
 from geopy.geocoders import Nominatim
 from geopy.extra.rate_limiter import RateLimiter
+from file_operations import resolve_templates_dir
 from utilities import run_stage, load_sample_context, calculate_genome_coverage
 
 
@@ -384,11 +384,7 @@ def process_metadata(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     print(f"DEBUG - species_dir - {species_dir}")
     print(f"DEBUG - search_id - {search_id}")
 
-    # Path to this script
-    script_file = Path(__file__).resolve()
-    bin_dir = script_file.parent
-    resources_dir = bin_dir.parent / "resources"
-    templates_dir = resources_dir / "templates"
+    templates_dir = resolve_templates_dir()
     print(f"DEBUG - templates_dir - {templates_dir}")
 
     # Generate SRA metadata TSV
