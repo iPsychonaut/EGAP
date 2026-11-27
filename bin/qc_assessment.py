@@ -24,7 +24,6 @@ import sys
 import shutil
 import re
 import pandas as pd
-from Bio import SeqIO
 from collections import Counter
 import matplotlib.pyplot as plt
 from utilities import (
@@ -37,6 +36,8 @@ from utilities import (
     validate_fasta,
 )
 from file_manager import clean_lineage_downloads
+from file_operations import _sum_bases
+from sample_tsv import add_read_coverage, load_read_stats
 
 
 # === BUSCO/Compleasm choice ===
@@ -668,10 +669,6 @@ def qc_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_threads, 
     sample_stats_dict = ctx.sample_stats_dict
 
     # Identify read paths, reference, and BUSCO lineage info from TSV
-    ont_raw_reads = current_series["ONT_RAW_READS"]
-    illu_raw_f_reads = current_series["ILLUMINA_RAW_F_READS"]
-    illu_raw_r_reads = current_series["ILLUMINA_RAW_R_READS"]
-    pacbio_raw_reads = current_series["PACBIO_RAW_READS"]
     ref_seq = current_series["REF_SEQ"]
     ref_seq_gca = current_series["REF_SEQ_GCA"]
     first_busco_odb = current_series["BUSCO_1"]
@@ -766,46 +763,6 @@ def qc_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_threads, 
         sample_stats_dict["ASSEMBLY_N50"] = None
         sample_stats_dict["ASSEMBLY_L50"] = None
         sample_stats_dict["ASSEMBLY_GC"] = None
-
-    # --------------------------------------------------------------
-    # Compute coverage if reference length is known
-    # --------------------------------------------------------------
-    try:
-        if ref_seq and os.path.exists(ref_seq):
-            ref_total_bases = 0
-            for record in SeqIO.parse(ref_seq, "fasta"):
-                ref_total_bases += len(record.seq)
-    
-            if not pd.isna(illu_raw_f_reads) and not pd.isna(illu_raw_r_reads):
-                sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["TRIMMED_ILLU_COVERAGE"] = round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / ref_total_bases, 2)
-            if not pd.isna(ont_raw_reads):
-                sample_stats_dict["RAW_ONT_COVERAGE"] = round(sample_stats_dict["RAW_ONT_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / ref_total_bases, 2)
-            if not pd.isna(pacbio_raw_reads):
-                sample_stats_dict["RAW_PACBIO_COVERAGE"] = round(sample_stats_dict["RAW_PACBIO_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["HIFI_PACBIO_COVERAGE"] = round(sample_stats_dict["HIFI_PACBIO_TOTAL_BASES"] / ref_total_bases, 2) if "HIFI_PACBIO_TOTAL_BASES" in sample_stats_dict else None
-                sample_stats_dict["FILT_PACBIO_COVERAGE"] = round(sample_stats_dict["FILT_PACBIO_TOTAL_BASES"] / ref_total_bases, 2)
-        else:
-            # If no reference, approximate coverage with QUAST's genome size
-            if not pd.isna(illu_raw_f_reads) and not pd.isna(illu_raw_r_reads):
-                if pd.notna(sample_stats_dict["GENOME_SIZE"]):
-                    sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["TRIMMED_ILLU_COVERAGE"] = round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-            if not pd.isna(ont_raw_reads):
-                if pd.notna(sample_stats_dict["GENOME_SIZE"]):
-                    sample_stats_dict["RAW_ONT_COVERAGE"] = round(sample_stats_dict["RAW_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-            if not pd.isna(pacbio_raw_reads):
-                if pd.notna(sample_stats_dict["GENOME_SIZE"]):
-                    sample_stats_dict["RAW_PACBIO_COVERAGE"] = round(sample_stats_dict["RAW_PACBIO_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["FILT_PACBIO_COVERAGE"] = round(sample_stats_dict["FILT_PACBIO_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-    except TypeError:
-        print("SKIP:\tNot updating coverage as raw reads were not analyzed and updated.")
 
     # Annotate sample metadata
     sample_stats_dict["SPECIES_ID"] = sample_id.split("-")[0]
@@ -1047,7 +1004,7 @@ def final_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_thread
         result = run_subprocess_cmd(quast_cmd, shell_check=False)
         if result != 0:
             print(f"WARN:\tQUAST failed with return code {result}. Skipping QUAST metrics.")
-            return None, None, sample_stats_dict
+            return None, None
     
     # Parse QUAST report to populate sample_stats_dict
     try:
@@ -1081,44 +1038,18 @@ def final_assessment(assembly_type, input_tsv, sample_id, output_dir, cpu_thread
         sample_stats_dict["ASSEMBLY_GC"] = None
 
     # --------------------------------------------------------------
-    # Compute coverage if reference length is known
+    # Read-set totals and coverage, from the NanoPlot and FastQC outputs on disk
     # --------------------------------------------------------------
-    try:
-        if ref_seq and os.path.exists(ref_seq):
-            ref_total_bases = 0
-            for record in SeqIO.parse(ref_seq, "fasta"):
-                ref_total_bases += len(record.seq)
-
-            if not pd.isna(illumina_f_raw_reads) and not pd.isna(illumina_r_raw_reads):
-                sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["TRIMMED_ILLU_COVERAGE"] = round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / ref_total_bases, 2)
-            if not pd.isna(ont_raw_reads):
-                sample_stats_dict["RAW_ONT_COVERAGE"] = round(sample_stats_dict["RAW_ONT_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / ref_total_bases, 2)
-            if not pd.isna(pacbio_raw_reads):
-                sample_stats_dict["RAW_PACBIO_COVERAGE"] = round(sample_stats_dict["RAW_PACBIO_TOTAL_BASES"] / ref_total_bases, 2)
-                sample_stats_dict["HIFI_PACBIO_COVERAGE"] = round(sample_stats_dict["HIFI_PACBIO_TOTAL_BASES"] / ref_total_bases, 2) if "HIFI_PACBIO_TOTAL_BASES" in sample_stats_dict else None
-                sample_stats_dict["FILT_PACBIO_COVERAGE"] = round(sample_stats_dict["FILT_PACBIO_TOTAL_BASES"] / ref_total_bases, 2)
-        else:
-            # If no reference, approximate coverage with QUAST's genome size
-            if not pd.isna(illumina_f_raw_reads) and not pd.isna(illumina_r_raw_reads):
-                if pd.notna(sample_stats_dict["GENOME_SIZE"]):
-                    sample_stats_dict["RAW_ILLU_COVERAGE"] = round(sample_stats_dict["RAW_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["TRIMMED_ILLU_COVERAGE"] = round(sample_stats_dict["TRIMMED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["DEDUPED_ILLU_COVERAGE"] = round(sample_stats_dict["DEDUPED_ILLU_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-            if not pd.isna(ont_raw_reads):
-                if pd.notna(sample_stats_dict["GENOME_SIZE"]):
-                    sample_stats_dict["RAW_ONT_COVERAGE"] = round(sample_stats_dict["RAW_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["FILT_ONT_COVERAGE"] = round(sample_stats_dict["FILT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["CORRECT_ONT_COVERAGE"] = round(sample_stats_dict["CORRECT_ONT_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-            if not pd.isna(pacbio_raw_reads):
-                if pd.notna(sample_stats_dict["GENOME_SIZE"]):
-                    sample_stats_dict["RAW_PACBIO_COVERAGE"] = round(sample_stats_dict["RAW_PACBIO_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-                    sample_stats_dict["FILT_PACBIO_COVERAGE"] = round(sample_stats_dict["FILT_PACBIO_TOTAL_BASES"] / sample_stats_dict["GENOME_SIZE"], 2)
-    except TypeError:
-        print("SKIP:\tNot updating coverage as raw reads were not analyzed and updated.")
+    # Every stage starts from an empty stats record, so the totals are read
+    # here rather than carried over from preprocessing. Coverage is measured
+    # against the reference when there is one, else against this assembly.
+    load_read_stats(species_dir, sample_stats_dict)
+    if isinstance(ref_seq, str) and os.path.exists(ref_seq):
+        genome_bp, basis = _sum_bases(ref_seq, "fasta", cpu_threads), "reference length"
+    else:
+        genome_bp, basis = sample_stats_dict["GENOME_SIZE"], "assembly length"
+    if add_read_coverage(sample_stats_dict, genome_bp):
+        sample_stats_dict["COVERAGE_BASIS"] = f"{basis}, {int(genome_bp):,} bp"
 
     # Annotate sample metadata
     sample_stats_dict["SPECIES_ID"] = sample_id.split("-")[0]

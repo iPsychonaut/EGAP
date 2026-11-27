@@ -4,3 +4,7 @@ numpy>=1.26,<3
 biopython>=1.79
 matplotlib>=3.3
 psutil
+jinja2
+beautifulsoup4
+geopy
+requests

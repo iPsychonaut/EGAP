@@ -625,7 +625,13 @@ EGAP generates final assemblies along with:
 - **QUAST** metrics (contig count, N50, L50, GC%, coverage)
 - **BUSCO/Compleasm** plots showing Single, Duplicated, Fragmented & Missing scores.
 - Final assembly classification: **AMAZING, GREAT, OK,** or **POOR**
+- **Sequencing coverage** per read set (Illumina raw, trimmed and deduplicated; ONT raw, filtered and corrected; PacBio raw and filtered), in the report and as `*_TOTAL_BASES` / `*_COVERAGE` columns of `{sample_id}_final_EGAP_assembly_final_stats.csv`.
 - **Per-sample log file** (`{sample_id}_log.txt`) with the full run record.
+
+Coverage is the total bases of a read set divided by the reference length when a reference is supplied, otherwise by the final assembly length; the `COVERAGE_BASIS` column records which. Three things to know when quoting these numbers:
+- Illumina totals come from FastQC's "Total Bases", which is printed to four significant digits.
+- The deduplicated Illumina total is measured before Kraken2 decontamination.
+- Trimmed-read FastQC was added after v3.4.2. An output folder whose Illumina preprocessing finished under an earlier version has no trimmed figures until that preprocessing is rerun.
 
 ### Statistics Thresholds
 
