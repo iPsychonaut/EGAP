@@ -18,6 +18,10 @@ nextflow.enable.dsl=2
 // Differences from EGAP.py, on purpose:
 //   * A failed stage stops the run (Nextflow's default). EGAP.py carries on
 //     to QC and the report for that sample. Use -resume after fixing the cause.
+//   * --input_tsv must be a TSV. This file reads the table before any process
+//     runs, so it cannot take a sample workbook (.xlsx). For a workbook, run
+//     `EGAP --prepare_only --input_tsv book.xlsx --output_dir <out>` first and
+//     pass <out>/<book>_samples.tsv here.
 //   * Parameters are Nextflow params (nextflow.config or --name value):
 //       --input_tsv --output_dir --cpu_threads --ram_gb
 //       --dry_run --intermediate_format --busco_only
@@ -340,6 +344,22 @@ process html_reporter {
     stage('html_reporter', sample_id)
 }
 
+// Appends this sample's rows to the run's two NCBI metadata files. Safe only
+// because maxForks = 1 (nextflow.config): two samples never write them at once.
+process process_metadata {
+    tag "${sample_id}"
+    containerOptions bindOpts()
+
+    input:
+    val sample_id
+
+    output:
+    val sample_id
+
+    script:
+    stage('process_metadata', sample_id)
+}
+
 process final_compress {
     tag "${sample_id}"
     containerOptions bindOpts()
@@ -388,9 +408,9 @@ workflow {
 
     ch = ch | compare_assemblies | polish_assembly | curate_assembly | decontaminate_assembly
 
-    def reported = ch.mix(refs.qc) | qc_assessment | html_reporter
+    def reported = ch.mix(refs.qc) | qc_assessment | html_reporter | process_metadata
 
-    // Compress what is left once QC and the report have read it (not on a dry run).
+    // Compress what is left once QC, the report and the metadata have read it (not on a dry run).
     if( !params.dry_run ) {
         final_compress(reported)
     }

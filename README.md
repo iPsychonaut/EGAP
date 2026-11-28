@@ -327,8 +327,9 @@ Which assemblers EGAP invokes depends entirely on which read types you supply in
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
-| `--input_tsv` | `-tsv` | str | *(required)* | Path to TSV with sample data |
+| `--input_tsv` (alias `--input_workbook`) | `-tsv` | str | *(required)* | Sample table: a TSV, or a workbook (`.xlsx`) as described under [Sample workbook](#sample-workbook-xlsx) |
 | `--output_dir` | `-o` | str | *(required)* | Path to the desired output directory |
+| `--new_workbook` | | path | | Write a sample workbook to this path and exit. Every column header carries a tooltip. With `--input_tsv existing.tsv`, the samples of that TSV are copied in. Needs neither `--output_dir` nor any tool installed. |
 | `--cpu_threads` | `-t` | int | `1` | Number of CPU threads to use |
 | `--ram_gb` | `-r` | int | `8` | RAM in GB to allocate |
 | `--dry_run` | | flag | `False` | Log all file-management actions (removals, compressions) without executing them. Equivalent to setting `EGAP_DRY_RUN=1` in the environment. |
@@ -587,6 +588,42 @@ Empty cells are left blank. The literal `None` placeholder is still accepted for
 - **PT_EVI_PATH**: Path(s) to protein evidence for annotation (or blank).
 - **KRAKEN2_DB** *(optional, new in v3.4.1)*: Path to a Kraken2 database for read decontamination. Overrides the `KRAKEN2_DB` environment variable. Omit the column entirely or leave blank to rely on the env var or skip decontamination.
 
+### Sample workbook (.xlsx)
+
+The same input can be given as a workbook, which also carries the metadata for NCBI submission:
+
+```bash
+# a blank workbook, or one filled from an existing TSV
+EGAP --new_workbook samples.xlsx
+EGAP --new_workbook samples.xlsx --input_tsv resources/EGAP_test.tsv
+
+# run from it
+EGAP --input_workbook samples.xlsx --output_dir /path/to/output -t 16 -r 64
+```
+
+| Sheet | Holds | Read by EGAP |
+|-------|-------|--------------|
+| 1. `Sample Information` | The columns described above. This sheet is the ground truth for which samples run. | yes |
+| 2. `Sample Metadata` | What the NCBI submission sheets need, one row per sample. | yes |
+| 3. `Sample Settings` | Per-sample tool settings. | not yet; reserved |
+
+- **Tooltips:** every column header in a generated workbook has a comment (hover over the header cell) saying whether the value is required, the expected format and what it is for. Columns with a fixed set of values have a dropdown.
+- **One rule:** every row on a sheet after the first must use a `SAMPLE_ID` that exists on the first sheet, and may appear once. A row for an unknown or repeated sample stops the run at start-up. Sheets with no `SAMPLE_ID` column (notes, term lists) are ignored.
+- **Your workbook is never rewritten.** EGAP reads it once at start-up and writes `<output_dir>/<workbook name>_samples.tsv`, which is what the stages read.
+- **Nextflow** takes a TSV only. For a workbook, run `EGAP --prepare_only --input_workbook samples.xlsx --output_dir <out>` and pass `<out>/<workbook name>_samples.tsv` to `nextflow run`.
+- A plain TSV keeps working, and may carry the metadata columns too.
+
+`Sample Metadata` columns:
+
+- **SAMPLE_ID**: must match a `SAMPLE_ID` on the first sheet.
+- **BIOSAMPLE_ACCESSION** *(optional)*: BioSample the reads and the assembly belong to (e.g., `SAMN...`).
+- **SAMPLE_TISSUE**: tissue or material sequenced (e.g., `mycelium`). Needed for the SRA sheet.
+- **SEQUENCING_METHODOLOGY**: SRA library strategy (e.g., `WGS`). Needed for the SRA sheet.
+- **LIBRARY_SOURCE** *(optional)*: SRA library source (e.g., `GENOMIC`).
+- **LIBRARY_SELECTION** *(optional)*: SRA library selection (e.g., `RANDOM`).
+- **INSTRUMENT_ILLUMINA**, **INSTRUMENT_ONT**, **INSTRUMENT_PACBIO** *(optional)*: SRA instrument model for each read type.
+- **INATURALIST_ID** *(optional)*: iNaturalist observation number; adds collector, date, place and photo to the report.
+
 ### Notes
 
 - If you are providing **ANY** raw reads, ensure they exist in their appropriate folder (`/path/to/sample_dir/Illumina`, `/path/to/sample_dir/ONT`, etc.); you may need to generate the sample_dir based on the output_dir, species_id, and then sample_id (`/output_dir/species_id/sample_id`).
@@ -629,6 +666,9 @@ EGAP generates final assemblies along with:
 - Final assembly classification: **AMAZING, GREAT, OK,** or **POOR**
 - **Sequencing coverage** per read set (Illumina raw, trimmed and deduplicated; ONT raw, filtered and corrected; PacBio raw and filtered), in the report and as `*_TOTAL_BASES` / `*_COVERAGE` columns of `{sample_id}_final_EGAP_assembly_final_stats.csv`.
 - **Per-sample log file** (`{sample_id}_log.txt`) with the full run record.
+- **NCBI submission sheets** in the output folder, laid out like NCBI's templates and filled as each sample finishes: `<table name>_EGAP_Assembly_metadata.tsv` (one row per assembly) and `<table name>_EGAP_SRA_metadata.tsv` (one row per read library).
+
+The assembly sheet is written for every sample that reaches a final assembly. The SRA sheet needs `SAMPLE_TISSUE` and `SEQUENCING_METHODOLOGY` from the sample metadata, and lists only read sets supplied as local files: reads downloaded from SRA are already there. QC-only samples get neither. Check both sheets before submitting; EGAP fills what it knows and leaves the rest blank.
 
 Coverage is the total bases of a read set divided by the reference length when a reference is supplied, otherwise by the final assembly length; the `COVERAGE_BASIS` column records which. Three things to know when quoting these numbers:
 - Illumina totals come from FastQC's "Total Bases", which is printed to four significant digits.
