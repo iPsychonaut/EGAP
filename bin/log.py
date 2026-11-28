@@ -104,8 +104,9 @@ def log_print(input_message, log_file=None):
 def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     """Initialize the logging environment based on the input folder.
 
-    Sets the module-level ``DEFAULT_LOG_FILE`` global and creates (or
-    truncates) the log file.
+    Sets the module-level ``DEFAULT_LOG_FILE`` global and makes sure the log
+    file exists. The file is never emptied: every stage of a sample is its own
+    process and calls this, so truncating here erased the earlier stages.
 
     Parameters
     ----------
@@ -129,4 +130,4 @@ def initialize_logging_environment(INPUT_FOLDER, sample_id=None):
     # crashes graceful-recovery paths that depend on logging.
     DEFAULT_LOG_FILE = os.path.abspath(input_file_path)
     print(DEFAULT_LOG_FILE)
-    open(DEFAULT_LOG_FILE, "w").close()
+    open(DEFAULT_LOG_FILE, "a").close()

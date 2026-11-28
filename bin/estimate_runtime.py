@@ -219,12 +219,17 @@ def collect_metrics(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     if long_gbp == 0.0 and hifi_gbp > 0.0:
         long_gbp, long_src = hifi_gbp, hifi_src
 
+    # A read set counts when files are on disk, or when the table names an SRA
+    # accession or a folder of raw reads that preprocessing has yet to fetch or merge.
+    def listed(technology):
+        return any(pd.notna(s.get(f"{technology}_{source}")) for source in ("SRA", "RAW_DIR"))
+
     has = set()
-    if illumina_gbp > 0 or pd.notna(s["ILLUMINA_SRA"]):
+    if illumina_gbp > 0 or listed("ILLUMINA"):
         has.add("illumina")
-    if long_gbp > 0 or pd.notna(s["ONT_SRA"]) or pd.notna(s["PACBIO_SRA"]):
+    if long_gbp > 0 or listed("ONT") or listed("PACBIO"):
         has.add("long")
-    if hifi_gbp > 0 or pd.notna(s["PACBIO_SRA"]):
+    if hifi_gbp > 0 or listed("PACBIO"):
         has.add("hifi")
 
     # Fill assumed volumes when reads are not yet on disk, so the estimate still

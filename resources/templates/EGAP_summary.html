@@ -107,9 +107,24 @@
         <p>No provenance was captured for this run.</p>
         {% else %}
         <h3 style="margin-bottom:0.2em;">Pipeline steps</h3>
+        {% if prov_timings %}
+        <table>
+          <thead>
+            <tr><th>Step</th><th>Started</th><th>Duration</th><th>Result</th></tr>
+          </thead>
+          <tbody>
+          {% for t in prov_timings %}
+            <tr><td>{{ t.label }}</td><td>{{ t.started }}</td><td>{{ t.duration }}</td><td>{{ t.result }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <p>Steps that finished before this report was written, for the most recent run into this
+          output folder. A step whose outputs already existed finishes in seconds.</p>
+        {% else %}
         <ol>
           {% for s in prov_steps %}<li>{{ s.label }}</li>{% endfor %}
         </ol>
+        {% endif %}
 
         <h3 style="margin-bottom:0.2em;">Programs &amp; versions</h3>
         {% if prov_programs %}
