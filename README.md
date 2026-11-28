@@ -335,6 +335,7 @@ Which assemblers EGAP invokes depends entirely on which read types you supply in
 | `--tui` | | flag | `False` | Launch the interactive TUI instead of plain terminal output. All other flags pass through to the TUI. |
 | `--intermediate_format` | | `pigz` or `fastb` | `pigz` | Format for nucleotide FASTA intermediates. FASTQ always uses pigz. Equivalent to setting `EGAP_INTERMEDIATE_FORMAT` in the environment. |
 | `--busco_only` | | flag | `False` | Measure completeness with BUSCO alone. By default Compleasm runs and BUSCO is only its fallback. BUSCO downloads its lineage data into each working folder, so expect more download time than with Compleasm's shared library. Equivalent to setting `EGAP_BUSCO_ONLY=1` in the environment. |
+| `--estimate_only` | | flag | `False` | Print a runtime and peak-RAM estimate per assembler for every sample, then exit. Uses the sample table plus `--cpu_threads` and `--ram_gb`; runs nothing and needs no tools installed, so it can be used to size a machine before a run. The figures are order-of-magnitude. |
 | `--prepare_only` | | flag | `False` | Print the settings, run the pre-flight checks and normalise the sample table, then exit before any stage runs. Used by the Nextflow runner. |
 | `--no-masurca` | `-no_m` | flag | `False` | Skip the MaSuRCA assembler. |
 | `--no-flye` | `-no_f` | flag | `False` | Skip the Flye assembler. |
@@ -406,7 +407,7 @@ Both launch modes take the same flags as `EGAP.py`.
 ```
 
 - **Live Log:** real-time streaming of all subprocess output, with numpy API noise filtered out.
-- **Step Progress Table:** one row per sample × step; cells update from `PENDING → RUNNING → PASS/FAIL` as each step completes.
+- **Step Progress Table:** one row per sample × step; cells update from `PENDING → RUNNING → PASS/FAIL` as each step completes, with the time each step started and how long it took.
 - **CPU / RAM Monitor:** per-core utilization history bars and live RAM/swap usage, refreshed every 0.5 s.
 - **Settings Panel:** all pipeline settings pulled from `EGAP.py`'s single source of truth, auto-scrolling through the full list.
 
@@ -467,6 +468,7 @@ Each row in the input TSV gets its own log file written in real time throughout 
 ```
 
 - Opened in **append** mode so re-runs accumulate into the same file.
+- Each step ends with a `NOTE: <step> took H:MM:SS (exit code N)` line. The same timings are stored in `{output_dir}/{sample_id}_provenance.json` and shown in the report's Pipeline steps table. Nextflow runs do not write them; use Nextflow's own `-with-report`.
 - Contains all standard output for that sample's steps (ANSI escape codes stripped for clean reading).
 - In plain terminal mode, stdout is simultaneously mirrored to the terminal and the log file via an internal `_Tee` class.
 - In TUI mode, the TUI's `log_line()` method writes to both the on-screen log widget and the per-sample file.
@@ -748,7 +750,7 @@ Pilon emits IUPAC ambiguity codes (notably `K` for G/T and `R` for A/G) at posit
 - **Integration with Additional Sequencing Platforms**:
   - Support for ONT-only and ONT + Reference input modes.
 - **FASTA/FASTQ Compression at Handoff Points**: Automatically compress intermediate read files with pigz at appropriate handoff points between steps, with transparent decompression for tools that require uncompressed input.
-- **Automated HTML Report Improvements**: Expand the HTML report to include decontamination statistics, file management savings, and TUI-style step timing.
+- **Automated HTML Report Improvements**: Expand the HTML report to include decontamination statistics and file management savings.
 
 ## References
 

@@ -27,7 +27,7 @@ from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from process_metadata import get_inat_obs, reverse_geocode
-from record_provenance import (load_provenance, pipeline_steps,
+from record_provenance import (load_provenance, pipeline_steps, stage_timings,
                                meaningful_tools, resolve_versions,
                                versions_from_entries)
 from file_operations import resolve_templates_dir
@@ -993,12 +993,19 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     # -------- Pipeline provenance: steps, commands (settings), versions --------
     prov_source = "none"
     prov_steps = []
+    prov_timings = []
     prov_programs = []
     prov_commands = []
     try:
         prov_entries, prov_source = load_provenance(output_dirto_abs, sample_id)
         prov_steps = [{"stage": s, "label": STAGE_LABELS.get(s, s)}
                       for s in pipeline_steps(prov_entries)]
+        prov_timings = [{"label": STAGE_LABELS.get(t["stage"], t["stage"]),
+                         "started": t.get("started", ""),
+                         "duration": t["duration"],
+                         "result": ("passed" if t.get("returncode") == 0
+                                    else f"failed (exit code {t.get('returncode')})")}
+                        for t in stage_timings(prov_entries)]
         _tools = meaningful_tools(prov_entries)
         # Prefer versions captured at run time (durable, match the run env);
         # probe/conda-resolve only the tools missing a captured version.
@@ -1010,7 +1017,7 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
         prov_commands = [{"stage": e.get("stage", "unknown"),
                           "tool": e.get("tool", ""),
                           "command": e.get("command", "")}
-                         for e in prov_entries if e.get("type") != "file"]
+                         for e in prov_entries if e.get("type") not in ("file", "stage")]
     except Exception as e:
         print(f"WARN:\tProvenance assembly failed: {e}")
     busco_dbs = [str(db) for db in (first_busco_db, second_busco_db) if pd.notna(db)]
@@ -1022,6 +1029,7 @@ def html_reporter(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
         # Pipeline provenance + artefact links
         "prov_source": prov_source,
         "prov_steps": prov_steps,
+        "prov_timings": prov_timings,
         "prov_programs": prov_programs,
         "prov_commands": prov_commands,
         "busco_dbs": busco_dbs,

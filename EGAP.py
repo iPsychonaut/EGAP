@@ -23,7 +23,7 @@ import re
 import os
 from pathlib import Path
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Stage scripts sit in bin/ beside this file in every install layout: the git
 # checkout, /EGAP_env in the Docker image, $PREFIX/share/egap in the conda
@@ -33,6 +33,8 @@ if not BIN_DIR.is_dir():
     sys.exit(f"ERROR:	EGAP stage scripts not found: {BIN_DIR} does not exist. Reinstall EGAP.")
 if str(BIN_DIR) not in sys.path:
     sys.path.insert(0, str(BIN_DIR))
+
+from record_provenance import record_stage  # noqa: E402  (needs BIN_DIR on sys.path)
 
 
 # --------------------------------------------------------------
@@ -474,6 +476,10 @@ def build_parser():
     parser.add_argument("--tui", action="store_true", default=False,
                         help="Run the pipeline through the interactive TUI instead of "
                              "plain terminal output.")
+    parser.add_argument("--estimate_only", action="store_true", default=False,
+                        help="Print a runtime and peak-RAM estimate per assembler for every "
+                             "sample, from the table and --cpu_threads/--ram_gb, then exit. "
+                             "Runs nothing and needs no tools installed.")
     parser.add_argument("--prepare_only", action="store_true", default=False,
                         help="Print the settings, run the pre-flight checks and normalise "
                              "the sample table, then exit before any stage runs. The "
@@ -506,6 +512,36 @@ def resolve_processes(args, say=print):
     return [p for p in PROCESSES if p.removeprefix("assemble_") not in disabled]
 
 
+def finish_stage(output_dir, sample_id, stage, run, started, returncode, say=print):
+    """Report how long one stage took and record it in the sample's provenance JSON.
+
+    Called by both runners (this file's loop and bin/EGAP_TUI.py) right after a
+    stage process ends, so every stage is timed in one place. The HTML report
+    reads these records for its step table.
+
+    Parameters
+    ----------
+    run : str
+        This run's start-up time; groups the stages of one run so a rerun into
+        the same output folder is told apart from the first.
+    started : datetime.datetime
+        When the stage process was launched.
+    say : callable
+        ``print``, or the TUI's ``log_line``.
+
+    Returns
+    -------
+    str
+        The elapsed time as ``H:MM:SS``.
+    """
+    seconds = (datetime.now() - started).total_seconds()
+    elapsed = str(timedelta(seconds=int(seconds)))
+    say(f"NOTE:\t{stage} took {elapsed} (exit code {returncode})")
+    record_stage(output_dir, sample_id, stage, run,
+                 started.strftime("%Y-%m-%d %H:%M:%S"), seconds, returncode)
+    return elapsed
+
+
 def stage_cmd(bin_dir, proc, sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
     """Return the command line for one stage script."""
     lead = [sys.executable, str(Path(bin_dir) / f"{proc}.py")]
@@ -525,6 +561,17 @@ if __name__ == "__main__":
     apply_run_flags(args)  # EGAP_DRY_RUN / EGAP_BUSCO_ONLY / EGAP_INTERMEDIATE_FORMAT for the stages
     dry_run = args.dry_run
     current_moment = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # ---- Estimate only: one table per sample, then exit ----
+    # Before anything touches the disk or the environment, so it works on a
+    # machine with no tools installed and with reads that are not downloaded yet.
+    if args.estimate_only:
+        from estimate_runtime import collect_metrics, estimate_all, format_table
+        from sample_tsv import read_sample_table
+        for sample_id in read_sample_table(input_tsv)["SAMPLE_ID"]:
+            metrics = collect_metrics(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
+            print(format_table(metrics, estimate_all(metrics)))
+        sys.exit(0)
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -640,7 +687,9 @@ if __name__ == "__main__":
                 continue
             cmd = stage_cmd(bin_dir, proc, sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
             print(f"\n→ Running {proc}: {' '.join(cmd)}\n")
+            started = datetime.now()
             rc = run_filtered(cmd)
+            finish_stage(output_dir, sample_id, proc, current_moment, started, rc)
             if rc == 0:
                 continue
             sample_step_failed = True
@@ -662,7 +711,10 @@ if __name__ == "__main__":
         else:
             cmd = stage_cmd(bin_dir, "final_compress", sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
             print(f"\n→ Running final_compress: {' '.join(cmd)}\n")
-            if run_filtered(cmd) != 0:
+            started = datetime.now()
+            rc = run_filtered(cmd)
+            finish_stage(output_dir, sample_id, "final_compress", current_moment, started, rc)
+            if rc != 0:
                 print(f"\nWARN:\tfinal_compress returned non-zero for {sample_id}; files left uncompressed.")
 
         if sample_step_failed:

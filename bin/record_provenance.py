@@ -34,7 +34,7 @@ import sys
 import json
 import glob
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 # Generic shell/util tokens that are commands but not "programs" worth a version.
@@ -133,9 +133,13 @@ def _infer_stage():
     return stage or "unknown"
 
 
-def _append_entry(entry):
-    """Append *entry* to the per-sample provenance JSON (no-op if unavailable)."""
-    path = _provenance_path()
+def _append_entry(entry, path=None):
+    """Append *entry* to the per-sample provenance JSON (no-op if unavailable).
+
+    *path* defaults to the file beside the active sample log; the orchestrator,
+    which has no active log module, passes it explicitly.
+    """
+    path = path or _provenance_path()
     if not path:
         return
     data = []
@@ -285,6 +289,45 @@ def load_provenance(output_dir, sample_id):
     if entries:
         return entries, "log"
     return [], "none"
+
+
+def record_stage(output_dir, sample_id, stage, run, started, seconds, returncode):
+    """Record one stage's start time, duration and exit code.
+
+    Written by the orchestrator (``EGAP.finish_stage``) after each stage process
+    ends, because that is the one place every stage passes through: stages that
+    run no external command, or that fail before logging starts, leave no
+    command entries of their own.
+
+    Parameters
+    ----------
+    run : str
+        The run's start-up time, shared by every stage of that run.
+    started : str
+        ``YYYY-MM-DD HH:MM:SS`` when the stage process was launched.
+    seconds : float
+        Wall-clock duration of the stage process.
+    returncode : int
+        Exit code of the stage process.
+    """
+    _append_entry({"type": "stage", "stage": stage, "run": run, "started": started,
+                   "seconds": round(seconds, 1), "returncode": returncode},
+                  path=os.path.join(os.path.abspath(output_dir), f"{sample_id}_provenance.json"))
+
+
+def stage_timings(entries):
+    """Return the stage records of the most recent run, in the order they ran.
+
+    The provenance file accumulates across reruns into the same output folder;
+    only the latest run is a coherent timeline. Each record gains a ``duration``
+    string (``H:MM:SS``). Empty for runs that recorded no stages (Nextflow, or
+    output from before stage timing existed).
+    """
+    stages = [e for e in entries if e.get("type") == "stage"]
+    if not stages:
+        return []
+    return [{**e, "duration": str(timedelta(seconds=int(e.get("seconds") or 0)))}
+            for e in stages if e.get("run") == stages[-1].get("run")]
 
 
 def pipeline_steps(entries):

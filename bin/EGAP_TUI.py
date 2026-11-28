@@ -221,6 +221,9 @@ class StepStatus:
     sample_id: str
     step: str
     status: str  # PENDING, RUNNING, PASS, FAIL
+    started: str = ""                    # clock time the stage was launched
+    elapsed: str = ""                    # H:MM:SS once it has finished
+    return_code: Optional[int] = None
 
 class Panel(Static):
     def __init__(self, title: str, **kwargs):
@@ -479,6 +482,8 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         self.progress_table.add_column("Sample", key="sample")
         self.progress_table.add_column("Step", key="step")
         self.progress_table.add_column("Status", key="status")
+        self.progress_table.add_column("Started", key="started")
+        self.progress_table.add_column("Elapsed", key="elapsed")
     
         self.row_key_map.clear()
         for s in self.steps:
@@ -488,6 +493,8 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                 s.sample_id,
                 s.step,
                 self.status_cell(s.status),
+                s.started,
+                s.elapsed,
                 key=row_key,
             )
     
@@ -505,6 +512,8 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
     
         try:
             self.progress_table.update_cell(row_key, "status", self.status_cell(s.status))
+            self.progress_table.update_cell(row_key, "started", s.started)
+            self.progress_table.update_cell(row_key, "elapsed", s.elapsed, update_width=True)
         except Exception as e:
             self.log_line(f"EXCEPTION updating table row: {sample_id}::{step} -> {e}")
 
@@ -514,8 +523,8 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         step: str,
         status: str,
         return_code: Optional[int] = None,
-        started_at: Optional[str] = None,
-        ended_at: Optional[str] = None,
+        started: Optional[str] = None,
+        elapsed: Optional[str] = None,
     ) -> None:
         idx = self.step_index.get((sample_id, step))
         if idx is None:
@@ -524,10 +533,10 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
         s.status = status
         if return_code is not None:
             s.return_code = return_code
-        if started_at is not None:
-            s.started_at = started_at
-        if ended_at is not None:
-            s.ended_at = ended_at
+        if started is not None:
+            s.started = started
+        if elapsed is not None:
+            s.elapsed = elapsed
         self.update_table_row(sample_id, step)
 
     def set_params_body(self) -> None:
@@ -638,9 +647,6 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             self.log_line(f"Loaded {len(sample_proc_map)} sample(s) from TSV.")
             self.init_step_plan(sample_proc_map)
 
-            def now() -> str:
-                return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
             for sample_id, sample_processes in sample_proc_map.items():
                 if self.shutdown_requested:
                     return
@@ -677,14 +683,20 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
                         self.log_line(f"\nDRY-RUN:\tWould run final_compress for {sample_id}.")
                         continue
 
-                    self.set_step_status(sample_id, proc, "RUNNING", started_at=now())
+                    started = datetime.now()
+                    self.set_step_status(sample_id, proc, "RUNNING",
+                                         started=started.strftime("%H:%M:%S"))
                     rc = await self.run_subprocess_stream(egap.stage_cmd(
                         bin_dir, proc, sample_id, input_tsv, output_dir, cpu_threads, ram_gb))
                     if self.shutdown_requested:
-                        self.set_step_status(sample_id, proc, "FAIL", return_code=130, ended_at=now())
-                        return
+                        rc = 130
+                    # Same record EGAP.py writes: the report's step table reads it.
+                    elapsed = egap.finish_stage(output_dir, sample_id, proc, self.pipeline_start_time,
+                                                started, rc, say=self.log_line)
                     self.set_step_status(sample_id, proc, "PASS" if rc == 0 else "FAIL",
-                                         return_code=rc, ended_at=now())
+                                         return_code=rc, elapsed=elapsed)
+                    if self.shutdown_requested:
+                        return
                     if rc == 0:
                         continue
                     if proc == "final_compress":
