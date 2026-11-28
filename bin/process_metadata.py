@@ -3,9 +3,16 @@
 """
 process_metadata.py
 
-Generates metadata for genome assemblies and Sequence Read Archive (SRA) submissions.
-Processes sample data from a TSV to create TSV files with assembly metadata and SRA metadata,
-and retrieves iNaturalist observation data with reverse geocoding for location details.
+Writes the NCBI submission sheets for a run: one row per read library for SRA
+and one row per assembly for GenBank. Runs as a final step for every sample,
+after the QC and the report, and appends to two files in the output folder, so
+a run of many samples ends with one sheet of each kind.
+
+Inputs come from the sample table: the read and reference columns, and the
+"Sample Metadata" columns (BioSample, tissue, library strategy, instruments).
+A sample with no metadata still gets its assembly row; it only misses the SRA rows.
+
+Also holds the two iNaturalist helpers the HTML report uses.
 
 Stage:
     Metadata (NCBI SRA / GenBank / iNaturalist)
@@ -18,14 +25,18 @@ Author: Ian Bollinger (ian.bollinger@entheome.org / ian.michael.bollinger@gmail.
 """
 
 import os
+import sys
 import warnings
-import requests
-import pandas as pd
 from datetime import datetime
-from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
+from pathlib import Path
+
+import pandas as pd
+
 from file_operations import resolve_templates_dir
-from utilities import run_stage, load_sample_context, calculate_genome_coverage
+from sample_tsv import load_sample_context, long_read_info, run_stage
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # EGAP.py sits beside bin/
+from EGAP import VERSION  # noqa: E402
 
 
 # ignore only the Data Validation extension warning from openpyxl
@@ -51,23 +62,27 @@ def reverse_geocode(lat, lon, user_agent="reverse_geocoder"):
     Returns:
         tuple: (country, state, county) as strings, or (None, None, None) if geocoding fails.
     """
+    # Imported here so the metadata sheets below do not need geopy.
+    from geopy.extra.rate_limiter import RateLimiter
+    from geopy.geocoders import Nominatim
+
     geolocator = Nominatim(user_agent=user_agent)
 
     # RateLimiter to respect usage policy (1 request per second)
     geocode = RateLimiter(geolocator.reverse, min_delay_seconds=1)
     location = geocode((lat, lon), addressdetails=True)
     if location is None:
-        return {"country": None, "state": None, "county": None}
+        return None, None, None
     address = location.raw.get("address", {})
     country = address.get("country")
-    state = address.get("state") or address.get("region"),
-    county = address.get("county") or address.get("city_district"),
+    state = address.get("state") or address.get("region")
+    county = address.get("county") or address.get("city_district")
 
     print(f"Country:\t{country}")
     print(f"State:\t{state}")
     print(f"County:\t{county}")
 
-    return country, state[0], county[0]
+    return country, state, county
 
 
 # --------------------------------------------------------------
@@ -86,6 +101,8 @@ def get_inat_obs(search_id):
         tuple: (collector, observation_date, latitude, longitude, photo_url)
                or None for photo URLs if no photos are available.
     """
+    import requests  # here, so the metadata sheets below do not need it
+
     url = f"https://api.inaturalist.org/v1/observations/{search_id}"
     r = requests.get(url)
     r.raise_for_status()
@@ -108,296 +125,187 @@ def get_inat_obs(search_id):
 
 
 # --------------------------------------------------------------
-# Generate assembly metadata TSV
+# NCBI submission sheets
 # --------------------------------------------------------------
-def gen_assembly_metadata_tsv(input_tsv, sample_id, output_dir, templates_dir, cpu_threads):
-    """Generate a TSV file with metadata for a genome assembly.
+# One entry per read technology: the sample-table columns that say a sample has
+# it (the SRA column first), the processed reads EGAP leaves in the species
+# folder, and how its SRA library row is described.
+READ_SETS = (
+    {"technology": "ONT", "platform": "OXFORD_NANOPORE", "layout": "SINGLE",
+     "inputs": ("ONT_SRA", "ONT_RAW_DIR", "ONT_RAW_READS"),
+     "files": ("ONT/{species_id}_ONT_highest_mean_qual_long_reads.fastq",),
+     "design": "Filtlong length filtering, Ratatosk Illumina-Reads corrected"},
+    {"technology": "Illumina", "platform": "ILLUMINA", "layout": "PAIRED",
+     "inputs": ("ILLUMINA_SRA", "ILLUMINA_RAW_DIR", "ILLUMINA_RAW_F_READS"),
+     "files": ("Illumina/{species_id}_illu_forward_dedup.fastq",
+               "Illumina/{species_id}_illu_reverse_dedup.fastq"),
+     "design": ("Trimmomatic adapter removal and quality trimming, BBDuk Decontamination "
+                "using Kmers, Clumpify reads deduplication")},
+    {"technology": "PacBio", "platform": "PACBIO_SMRT", "layout": "SINGLE",
+     "inputs": ("PACBIO_SRA", "PACBIO_RAW_DIR", "PACBIO_RAW_READS"),
+     "files": ("PacBio/{species_id}_PacBio_highest_mean_qual_long_reads.fastq",),
+     "design": "Filtlong quality and length filtering"},
+)
+# select_long_reads records which stage its pick came from; the final stats use these prefixes.
+_LONG_READ_STATS = {"corrected": "CORRECT", "filtered": "FILT", "raw": "RAW"}
 
-    Creates a TSV file containing assembly metadata (e.g., date, method, coverage)
-    based on sample data from a TSV and the final assembly FASTA.
 
-    Args:
-        input_tsv (str): Path to the input TSV with sample metadata.
-        sample_id (str): Sample identifier.
-        output_dir (str): Directory for output files.
+def cell(row, column):
+    """Return the stripped text of *row[column]*, or ``None`` for a blank or missing cell."""
+    value = row.get(column)
+    if value is None or pd.isna(value):
+        return None
+    text = str(value).strip()
+    return text if text and text.lower() not in ("none", "nan") else None
 
-    Returns:
-        str: Path to the generated assembly metadata TSV file.
+
+def template_columns(file_name, sheet_name):
+    """Return the header of one NCBI template sheet, so newer templates can be dropped in."""
+    return list(pd.read_excel(resolve_templates_dir() / file_name, sheet_name=sheet_name).columns)
+
+
+def upsert_rows(path, columns, key_column, key_values, new_rows):
+    """Replace the rows keyed by *key_values* in the TSV at *path* with *new_rows*.
+
+    Creates the file when absent. A rerun therefore replaces a sample's rows
+    rather than appending duplicates, and other samples' rows are kept.
     """
-    print(f"Generating Assembly Metadata TSV entry for {sample_id}...")
-
-    # Load the input_tsv into dataframe and collect current sample_id information
-    ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, None)
-    current_series = ctx.current_series
-
-    # Identify read paths, reference, and BUSCO lineage info from TSV
-    illumina_sra = current_series["ILLUMINA_SRA"]
-    illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
-    illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
-    ont_sra = current_series["ONT_SRA"]
-    ont_raw_reads = current_series["ONT_RAW_READS"]
-    pacbio_sra = current_series["PACBIO_SRA"]
-    pacbio_raw_reads = current_series["PACBIO_RAW_READS"]
-    species_id = current_series["SPECIES_ID"]
-
-    # Versioning
-    assembly_method = "EGAP"
-    assembly_method_version = "3.1"
-    
-    # Determine where the final assembly FASTA lives
-    species_id    = current_series["SPECIES_ID"]
-    species_dir = os.path.join(output_dir, species_id)
-    sample_dir = os.path.join(species_dir, sample_id)
-    assembly_name = f"{sample_id}_final_EGAP_assembly.fasta"
-    assembly_path = os.path.join(sample_dir, assembly_name)
-
-    all_reads = []
-    if pd.notna(ont_sra) or pd.notna(ont_raw_reads):
-        all_reads.append(os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq"))
-    if pd.notna(illumina_sra) or (pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads)):
-        all_reads.append(os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq"))
-        all_reads.append(os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq"))
-    if pd.notna(pacbio_sra) or pd.notna(pacbio_raw_reads):
-        all_reads.append(os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq"))    
-    genome_coverage = str(calculate_genome_coverage(all_reads, assembly_path, cpu_threads)) + "x" 
-
-    print(f"DEBUG - genome_coverage - {genome_coverage}")
-    
-    # Comma‐separated tech list
-    techs = []
-    if pd.notna(illumina_sra): techs.append("Illumina")
-    if pd.notna(ont_sra):      techs.append("ONT")
-    if pd.notna(pacbio_sra):   techs.append("PacBio")
-    sequencing_technology = ", ".join(techs) or None
-    
-    # Pick a reference if present
-    reference_genome = None
-    if pd.notna(current_series.get("REF_SEQ_GCA")):
-        reference_genome = current_series["REF_SEQ_GCA"]
-    elif pd.notna(current_series.get("REF_SEQ")):
-        reference_genome = current_series["REF_SEQ"]
-    
-    # Final assembly date
-    assembly_date = datetime.now().strftime("%Y-%m-%d")
-    
-    # Locate template and pull in the DataFrame
-    gca_file  = os.path.join(templates_dir, "GCA_metadata_acc.xlsx")
-    genome_df = pd.read_excel(gca_file, sheet_name="Genome_data")
-    
-    # Ensure one row exists for this sample
-    mask = genome_df["sample_name"] == sample_id
-    if not mask.any():
-        blank = {col: None for col in genome_df.columns}
-        blank["biosample_accession"] = species_id
-        blank["sample_name"] = sample_id
-        genome_df.loc[len(genome_df)] = blank
-        mask = genome_df["sample_name"] == sample_id
-    
-    # Write eight metadata fields into that row
-    genome_df.loc[mask, ["assembly_date",
-                         "assembly_name",
-                         "assembly_method",
-                         "assembly_method_version",
-                         "genome_coverage",
-                         "sequencing_technology",
-                         "reference_genome",
-                         "filename"
-    ]] = [assembly_date,
-          assembly_name,
-          assembly_method,
-          assembly_method_version,
-          genome_coverage,
-          sequencing_technology,
-          reference_genome,
-          assembly_name]
-
-    output_filename = f"{os.path.basename(input_tsv).replace('.tsv','')}_EGAP_Assembly_metadata.tsv"
-    assembly_metadata_path = os.path.join(output_dir, output_filename)
-    genome_df.to_csv(assembly_metadata_path, sep="\t", index=False)
-    
-    print(f"PASS:\tSuccessfully generated the {sample_id} Assembly Metadata TSV entry into: {assembly_metadata_path}")
-
-    return assembly_metadata_path
+    # ponytail: read-modify-write of a file every sample shares. Safe because
+    # samples run one at a time (EGAP.py's loop; maxForks = 1 under Nextflow).
+    # Give each sample its own file and merge at the end if that ever changes.
+    kept = []
+    if os.path.exists(path):
+        existing = pd.read_csv(path, sep="\t", dtype=str)
+        kept = existing[~existing[key_column].isin(key_values)].to_dict("records")
+    pd.DataFrame(kept + new_rows, columns=columns).to_csv(path, sep="\t", index=False)
+    return path
 
 
-# --------------------------------------------------------------
-# Generate SRA metadata TSV
-# --------------------------------------------------------------
-def gen_sra_metadata_xlsx(input_tsv, sample_id, output_dir, templates_dir):
-    """Generate a TSV file with metadata for SRA submission.
+def sample_read_sets(row):
+    """Return the READ_SETS entries this sample has input for."""
+    return [read_set for read_set in READ_SETS if any(cell(row, c) for c in read_set["inputs"])]
 
-    Creates a TSV file with SRA metadata (e.g., library details, read files) based on
-    sample data from a TSV, supporting Illumina, ONT, and PacBio reads.
 
-    Args:
-        input_tsv (str): Path to the input TSV with sample metadata.
-        sample_id (str): Sample identifier.
-        output_dir (str): Directory for output files.
+def genome_coverage(stats, read_sets, species_dir, species_id):
+    """Return coverage of the reads the assembly was built from, as ``"87.5x"``, or ``None``.
 
-    Returns:
-        str or None: Path to the generated SRA metadata TSV file, or None if required fields are missing.
+    Uses the totals the final QC stored (deduplicated Illumina reads, and for
+    long reads whichever of raw, filtered or corrected was selected), divided by
+    the assembly length. Not the report's per-read-set coverage, whose
+    denominator is the reference when there is one.
     """
-    print("Generating SRA Metadata TSV entry...")
-    
-    # Load the input_tsv into dataframe and collect current sample_id information
-    ctx = load_sample_context(sample_id, input_tsv, output_dir, None, None)
-    current_series = ctx.current_series
-
-    # Identify read paths, reference, and BUSCO lineage info from TSV
-    illumina_sra = current_series["ILLUMINA_SRA"]
-    illumina_f_raw_reads = current_series["ILLUMINA_RAW_F_READS"]
-    illumina_r_raw_reads = current_series["ILLUMINA_RAW_R_READS"]
-    ont_sra = current_series["ONT_SRA"]
-    ont_raw_reads = current_series["ONT_RAW_READS"]
-    pacbio_sra = current_series["PACBIO_SRA"]
-    pacbio_raw_reads = current_series["PACBIO_RAW_READS"]
-    species_id = current_series["SPECIES_ID"]
-    search_id = current_series["INATRUALIST_ID"]
-    sample_tissue = current_series["SAMPLE_TISSUE"]
-    library_strategy = current_series["SEQUENCING_METHODOLOGY"]
-    library_source = current_series["LIBRARY_SOURCE"]
-    species_dir = os.path.join(output_dir, species_id)
-        
-    if pd.isna(sample_tissue):
-        print("SKIP:\tNo SRA Metadata processing performed, missing SAMPLE_TISSUE: {sample_tissue}.")
-    elif pd.isna(library_strategy):
-        print("SKIP:\tNo SRA Metadata processing performed, missing SEQUENCING_METHODOLOGY: {library_strategy}.")
-    else:        
-        # Generate SRA Metadata Dataframe from either template or existing files
-        existing_sra_metadata = os.path.join(os.path.dirname(input_tsv), f"{os.path.basename(input_tsv).replace('.tsv','')}_EGAP_SRA_metadata.xlsx")
-        if os.path.exists(existing_sra_metadata):
-            base_file_path = existing_sra_metadata
+    total = 0.0
+    for read_set in read_sets:
+        if read_set["technology"] == "Illumina":
+            prefix = "DEDUPED_ILLU"
         else:
-            base_file_path = os.path.join(templates_dir, "SRA_metadata_acc.xlsx")
-        sample_data = {}
-        print(f"DEBUG - base_file_path - {base_file_path}")
-        main_sra_df = pd.read_excel(base_file_path, sheet_name="SRA_data")
-        sample_data[search_id] = main_sra_df.columns.tolist()
+            selected = os.path.join(species_dir, read_set["files"][0].format(species_id=species_id))
+            stage = _LONG_READ_STATS.get(long_read_info(selected).get("source"), "RAW")
+            prefix = f"{stage}_{read_set['technology'].upper()}"
+        bases = stats.get(f"{prefix}_TOTAL_BASES")
+        if bases is not None and pd.notna(bases):
+            total += float(bases)
+    size = stats.get("GENOME_SIZE")
+    if not total or size is None or pd.isna(size) or float(size) <= 0:
+        return None
+    return f"{total / float(size):.1f}x"
 
-        # Initialize new SRA metadata DataFrame
-        sra_columns = main_sra_df.columns.tolist()
-        new_sra_df = pd.DataFrame(columns=sra_columns)
 
-        reads = []
-        library_ids = []
-        filetype = "fastq"
-        title = f"{library_strategy} of {species_id}: {sample_tissue}"
-        if pd.notna(ont_sra) or pd.notna(ont_raw_reads):
-            reads.append(os.path.join(species_dir, "ONT", f"{species_id}_ONT_highest_mean_qual_long_reads.fastq"))
-            design_description = "Filtlong length filtering, Ratatosk Illumina-Reads corrected"
-            library_ids.append(f"{species_id}_EGAP_Corrected_ONT")
-        if pd.notna(illumina_sra) or (pd.notna(illumina_f_raw_reads) and pd.notna(illumina_r_raw_reads)):
-            reads.append([os.path.join(species_dir, "Illumina", f"{species_id}_illu_forward_dedup.fastq"), os.path.join(species_dir, "Illumina", f"{species_id}_illu_reverse_dedup.fastq")])
-            design_description = "Trimmomatic adapter removal and quality trimming, BBDuk Decontamination using Kmers, Clumpify reads deduplication"
-            library_ids.append(f"{species_id}_EGAP_Forward_Deduplicated_Illumina")
-            library_ids.append(f"{species_id}_EGAP_Reverse_Deduplicated_Illumina")
-        if pd.notna(pacbio_sra) or pd.notna(pacbio_raw_reads):
-            reads.append(os.path.join(species_dir, "PacBio", f"{species_id}_PacBio_highest_mean_qual_long_reads.fastq"))
-            design_description = "Filtlong quality and length filtering"
-            library_ids.append(f"{species_id}_EGAP_Filtered_PacBio")
-
-        print(f"DEBUG - reads - {reads}")    
-        print(f"DEBUG - library_ids - {library_ids}")
-        print(f"DEBUG - title - {title}")
-        print(f"DEBUG - design_description - {design_description}")
-
-        for index, filename in enumerate(reads):
-            library_id = library_ids[index]
-        
-            # split out one or two filenames
-            if isinstance(filename, list):
-                fname1, fname2 = filename
-            else:
-                fname1, fname2 = filename, None
-        
-            row = {"biosample_accession":    species_id,
-                   "library_ID":             library_id,
-                   "title":                  title.format(library_strategy=library_strategy,
-                                                          species_id=species_id,
-                                                          sample_tissue=sample_tissue),
-                   "library_strategy":       library_strategy,
-                   "library_source":         library_source,
-                   "library_selection":      None,
-                   "library_layout":         "PAIRED" if isinstance(filename, list) else "SINGLE",
-                   "platform":               None,
-                   "instrument_model":       None,
-                   "design_description":     design_description,
-                   "filetype":               filetype,
-                   "filename":               fname1,
-                   "filename2":              fname2,
-                   "filename3":              None,
-                   "filename4":              None,
-                   "assembly":               None,
-                   "fasta_file":             None}
-                    
-            # Append the new row using loc
-            new_sra_df.loc[len(new_sra_df)] = row
-
-        
-        # Save the new SRA metadata workbook
-        output_filename = f"{os.path.basename(input_tsv).replace('.tsv','')}_EGAP_SRA_metadata.tsv"
-        sra_metadata_path = os.path.join(output_dir, output_filename)
-        
-        # Write single‐sheet TSV
-        new_sra_df.to_csv(sra_metadata_path, sep="\t", index=False)
-
-        print(f"PASS:\tSuccessfully generated the SRA Metadata TSV entry into: {sra_metadata_path}")
-
-        return sra_metadata_path
+def sra_rows(row, sample_id, species_id, read_sets):
+    """Return one SRA library row per read set that is not already in SRA."""
+    tissue, strategy = cell(row, "SAMPLE_TISSUE"), cell(row, "SEQUENCING_METHODOLOGY")
+    rows = []
+    for read_set in read_sets:
+        if cell(row, read_set["inputs"][0]):
+            continue  # downloaded from SRA: nothing to submit
+        files = [os.path.basename(f.format(species_id=species_id)) for f in read_set["files"]]
+        rows.append({
+            "biosample_accession": cell(row, "BIOSAMPLE_ACCESSION"),
+            "library_ID": f"{sample_id}_{read_set['technology']}",
+            "title": f"{strategy} of {species_id}: {tissue}",
+            "library_strategy": strategy,
+            "library_source": cell(row, "LIBRARY_SOURCE"),
+            "library_selection": cell(row, "LIBRARY_SELECTION"),
+            "library_layout": read_set["layout"],
+            "platform": read_set["platform"],
+            "instrument_model": cell(row, f"INSTRUMENT_{read_set['technology'].upper()}"),
+            "design_description": read_set["design"],
+            "filetype": "fastq",
+            "filename": files[0],
+            "filename2": files[1] if len(files) > 1 else None,
+        })
+    return rows
 
 
 def process_metadata(sample_id, input_tsv, output_dir, cpu_threads, ram_gb):
-    """Generate NCBI SRA and assembly metadata TSVs for a single sample.
+    """Add one sample's rows to the run's NCBI SRA and assembly metadata sheets.
 
-    Resolves the sample's species directory, locates the metadata templates
-    bundled in ``resources/templates``, and emits two spreadsheets: an SRA
-    submission metadata file and an assembly metadata file. iNaturalist
-    location data is retrieved and reverse-geocoded when an INATRUALIST_ID
-    column is present on the sample's TSV row.
+    Writes ``<output_dir>/<table stem>_EGAP_SRA_metadata.tsv`` and
+    ``<output_dir>/<table stem>_EGAP_Assembly_metadata.tsv``, laid out like the
+    NCBI templates in ``resources/templates``. Skips, without failing:
+
+    * the whole step, when the sample has no final assembly statistics (a
+      QC-only sample, or an assembly that did not finish);
+    * the SRA rows, when SAMPLE_TISSUE or SEQUENCING_METHODOLOGY is blank, or
+      every read set came from SRA.
 
     Args:
-        sample_id (str): The SAMPLE_ID value identifying which TSV row to
-            process.
-        input_tsv (str): Path to the EGAP input TSV.
-        output_dir (str): Root output directory for the EGAP run. Species
-            subdirectories live directly beneath this path.
-        cpu_threads (int | str): Number of threads available for computations
-            performed during assembly-metadata generation (e.g. genome coverage
-            calculations).
-        ram_gb (int | str): RAM budget passed for API compatibility with
-            other EGAP steps. Not currently used by this step.
+        sample_id (str): The SAMPLE_ID of the row to process.
+        input_tsv (str): Path to the sample table the stages read.
+        output_dir (str): Root output directory of the run.
+        cpu_threads (int | str): Unused; every stage takes the same five arguments.
+        ram_gb (int | str): Unused, as above.
 
     Returns:
-        tuple[str, str]: A pair of ``(sra_output_path, assembly_metadata_path)``
-        pointing at the two TSVs generated for the sample.
+        tuple[str | None, str | None]: ``(sra_path, assembly_path)``; ``None``
+        for a sheet that was skipped.
     """
-    # Load input TSV and extract sample data
     ctx = load_sample_context(sample_id, input_tsv, output_dir, cpu_threads, ram_gb)
-    current_series = ctx.current_series
+    row = ctx.current_series
+    species_id = row["SPECIES_ID"]
+    species_dir = os.path.join(ctx.output_dir, species_id)
+    assembly_stem = f"{sample_id}_final_EGAP_assembly"
+    stats_csv = os.path.join(species_dir, sample_id, f"{assembly_stem}_final_stats.csv")
+    if not os.path.exists(stats_csv):
+        print(f"SKIP:\tNo NCBI metadata for {sample_id}: no final assembly statistics at "
+              f"{stats_csv} (a QC-only sample, or the assembly did not finish).")
+        return None, None
+    stats = pd.read_csv(stats_csv).iloc[0]
+    read_sets = sample_read_sets(row)
+    table_stem = os.path.splitext(os.path.basename(str(input_tsv)))[0]
 
-    # Extract read paths and metadata from TSV
-    species_id = current_series["SPECIES_ID"]
-    search_id = current_series["INATRUALIST_ID"]
-    species_dir = os.path.join(output_dir, species_id)
+    # ---- SRA: one row per read library EGAP processed from local files ----
+    sra_path = None
+    missing = [c for c in ("SAMPLE_TISSUE", "SEQUENCING_METHODOLOGY") if not cell(row, c)]
+    libraries = [] if missing else sra_rows(row, sample_id, species_id, read_sets)
+    if missing:
+        print(f"SKIP:\tNo SRA rows for {sample_id}: {' and '.join(missing)} blank in the sample metadata.")
+    elif not libraries:
+        print(f"SKIP:\tNo SRA rows for {sample_id}: its reads were downloaded from SRA.")
+    else:
+        sra_path = upsert_rows(
+            os.path.join(ctx.output_dir, f"{table_stem}_EGAP_SRA_metadata.tsv"),
+            template_columns("SRA_metadata_acc.xlsx", "SRA_data"), "library_ID",
+            [f"{sample_id}_{read_set['technology']}" for read_set in READ_SETS], libraries)
+        print(f"PASS:\tWrote {len(libraries)} SRA row(s) for {sample_id}: {sra_path}")
 
-    print(f"DEBUG - species_id - {species_id}")
-    print(f"DEBUG - species_dir - {species_dir}")
-    print(f"DEBUG - search_id - {search_id}")
-
-    templates_dir = resolve_templates_dir()
-    print(f"DEBUG - templates_dir - {templates_dir}")
-
-    # Generate SRA metadata TSV
-    sra_output_path = gen_sra_metadata_xlsx(input_tsv, sample_id, output_dir, templates_dir)
-
-    print("PASS:\tSuccessfully generated NCBI SRA Metadata TSV: {sra_output_path}.")
-    
-    # Generate assembly metadata TSV
-    assembly_metadata_path = gen_assembly_metadata_tsv(input_tsv, sample_id, output_dir, templates_dir, cpu_threads)
-
-    print("PASS:\tSuccessfully generated NCBI Assembly Metadata TSV: {assembly_metadata_path}.")
-        
-    return sra_output_path, assembly_metadata_path
+    # ---- GenBank: one row for the assembly ----
+    reference = cell(row, "REF_SEQ_GCA") or os.path.basename(cell(row, "REF_SEQ") or "") or None
+    assembly_path = upsert_rows(
+        os.path.join(ctx.output_dir, f"{table_stem}_EGAP_Assembly_metadata.tsv"),
+        template_columns("GCA_metadata_acc.xlsx", "Genome_data"), "sample_name", [sample_id],
+        [{"biosample_accession": cell(row, "BIOSAMPLE_ACCESSION"),
+          "sample_name": sample_id,
+          "assembly_date": datetime.now().strftime("%Y-%m-%d"),
+          "assembly_name": assembly_stem,
+          "assembly_method": "EGAP",
+          "assembly_method_version": VERSION,
+          "genome_coverage": genome_coverage(stats, read_sets, species_dir, species_id),
+          "sequencing_technology": ", ".join(r["technology"] for r in read_sets) or None,
+          "reference_genome": reference,
+          "filename": f"{assembly_stem}.fasta"}])
+    print(f"PASS:\tWrote the assembly row for {sample_id}: {assembly_path}")
+    return sra_path, assembly_path
 
 
 if __name__ == "__main__":

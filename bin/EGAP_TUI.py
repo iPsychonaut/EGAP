@@ -601,7 +601,11 @@ class ENTHEOME_GENOME_ASSEMBLY_PIPELINE(App):
             # Launched via `EGAP.py --tui`: EGAP.py attaches its already-parsed
             # argparse.Namespace as self._preloaded_args. Standalone launch
             # (`python EGAP_TUI.py -tsv ...`): parse sys.argv with the same parser.
-            self.args = getattr(self, "_preloaded_args", None) or egap.build_parser().parse_args()
+            self.args = getattr(self, "_preloaded_args", None) or egap.parse_args()
+            if self.args.new_workbook:
+                self.log_line(f"PASS:\tSample workbook written: {egap.new_workbook(self.args)}")
+                return
+            egap.resolve_sample_table(self.args)
             egap.apply_run_flags(self.args)
             input_tsv = self.args.input_tsv
             output_dir = self.args.output_dir

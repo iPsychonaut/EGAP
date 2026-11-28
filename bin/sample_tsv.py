@@ -26,7 +26,7 @@ import shutil
 import sys
 import zipfile
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, NamedTuple
 
 import pandas as pd
 
@@ -217,22 +217,120 @@ class SampleContext:
     sample_stats_dict: Dict[str, Any] = field(default_factory=dict)
 
 
-# Columns every per-stage accessor expects to read off a row. The collapsed
-# TSV combines some of these into comma-separated cells; ``read_sample_table``
-# re-expands them so the ~12 modules that read ``current_series["BUSCO_1"]``,
-# ``["ILLUMINA_RAW_F_READS"]`` etc. keep working unchanged. The trailing
-# annotation-pipeline (ANOQI) columns are listed so QC-only dispatch and the
-# accessors can read them without ``KeyError`` on a sparse or older table.
-_LEGACY_COLUMNS = (
-    "ONT_SRA", "ONT_RAW_DIR", "ONT_RAW_READS",
-    "ILLUMINA_SRA", "ILLUMINA_RAW_DIR",
-    "ILLUMINA_RAW_F_READS", "ILLUMINA_RAW_R_READS",
-    "PACBIO_SRA", "PACBIO_RAW_DIR", "PACBIO_RAW_READS",
-    "SPECIES_ID", "SAMPLE_ID", "ORGANISM_KINGDOM", "ORGANISM_KARYOTE",
-    "PLOIDY", "BUSCO_1", "BUSCO_2", "EST_SIZE",
-    "REF_SEQ_GCA", "REF_SEQ",
-    "NT_ASSEMBLY_GCA", "NT_ASSEMBLY_PATH",
+# --------------------------------------------------------------
+# The sample table's columns: one specification for every use
+# --------------------------------------------------------------
+SAMPLE_SHEET = "Sample Information"
+METADATA_SHEET = "Sample Metadata"
+SETTINGS_SHEET = "Sample Settings"   # reserved; see bin/sample_workbook.py
+
+
+class Column(NamedTuple):
+    """One column of the sample input: what it is called, where it lives, how to fill it."""
+    name: str
+    sheet: str               # SAMPLE_SHEET or METADATA_SHEET (a TSV holds both side by side)
+    required: str            # "yes", "no", or the condition in words
+    format: str              # expected cell format, shown in the workbook tooltip
+    help: str                # what the value is for, shown in the workbook tooltip
+    choices: tuple = ()      # allowed values, when the column is an enumeration
+    expands_to: tuple = ()   # per-stage column names a comma-joined cell is split into
+
+
+_ONE_OF_READS = "one of the SRA, RAW_DIR or RAW_READS columns per read type you have"
+_KEYED = "yes; must match a SAMPLE_ID on the Sample Information sheet"
+
+SAMPLE_COLUMNS = (
+    # ---- Sample Information: the ground truth for which samples run ----
+    Column("SPECIES_ID", SAMPLE_SHEET, "yes", "Genus_species, underscores, no spaces",
+           "Species name. Names the output folder that samples of one species share."),
+    Column("SAMPLE_ID", SAMPLE_SHEET, "yes", "<SPECIES_ID>-<identifier>, unique in the table",
+           "Sample name. Names the sample's output folder, log and report."),
+    Column("ORGANISM_KINGDOM", SAMPLE_SHEET, "yes", "one of the listed values",
+           "Kingdom of the organism. Sets what Kraken2 and Tiara decontamination keep.",
+           choices=("Bacteria", "Archaea", "Flora", "Funga", "Fauna")),
+    Column("ORGANISM_KARYOTE", SAMPLE_SHEET, "yes", "one of the listed values",
+           "Cell type of the organism. Sets QUAST and decontamination behaviour.",
+           choices=("prokaryote", "eukaryote")),
+    Column("PLOIDY", SAMPLE_SHEET, "no", "integer (1, 2, ...) or haploid / diploid",
+           "Ploidy of the individual. Haploid samples skip the purge_dups haplotig removal."),
+    Column("EST_SIZE", SAMPLE_SHEET, "yes, unless the sample is QC-only",
+           "number followed by k, m or g (5m, 55m, 1.2g)",
+           "Estimated genome size. Leave blank only to run QC on an existing assembly."),
+    Column("BUSCO", SAMPLE_SHEET, "yes", "lineage1,lineage2 (agaricales,basidiomycota)",
+           "The two Compleasm/BUSCO lineages completeness is measured against.",
+           expands_to=("BUSCO_1", "BUSCO_2")),
+    Column("ONT_SRA", SAMPLE_SHEET, _ONE_OF_READS, "SRA run accession (SRR...)",
+           "Oxford Nanopore reads to download from SRA."),
+    Column("ONT_RAW_DIR", SAMPLE_SHEET, _ONE_OF_READS, "folder path",
+           "Folder of raw ONT FASTQ files to merge. Leave ONT_RAW_READS blank when set."),
+    Column("ONT_RAW_READS", SAMPLE_SHEET, _ONE_OF_READS, "path to one .fastq or .fastq.gz",
+           "Combined raw ONT reads."),
+    Column("ILLUMINA_SRA", SAMPLE_SHEET, _ONE_OF_READS, "SRA run accession (SRR...)",
+           "Paired-end Illumina reads to download from SRA."),
+    Column("ILLUMINA_RAW_DIR", SAMPLE_SHEET, _ONE_OF_READS, "folder path",
+           "Folder of raw paired-end Illumina FASTQ files. Leave ILLUMINA_RAW_READS blank when set."),
+    Column("ILLUMINA_RAW_READS", SAMPLE_SHEET, _ONE_OF_READS,
+           "forward_1.fastq,reverse_2.fastq (file names end _1 and _2; folder names must not)",
+           "Raw forward and reverse Illumina reads.",
+           expands_to=("ILLUMINA_RAW_F_READS", "ILLUMINA_RAW_R_READS")),
+    Column("PACBIO_SRA", SAMPLE_SHEET, _ONE_OF_READS, "SRA run accession (SRR...)",
+           "PacBio reads to download from SRA."),
+    Column("PACBIO_RAW_DIR", SAMPLE_SHEET, _ONE_OF_READS, "folder path",
+           "Folder of raw PacBio FASTQ files to merge. Leave PACBIO_RAW_READS blank when set."),
+    Column("PACBIO_RAW_READS", SAMPLE_SHEET, _ONE_OF_READS, "path to one .fastq or .fastq.gz",
+           "Combined raw PacBio reads."),
+    Column("REF_SEQ_GCA", SAMPLE_SHEET, "no", "assembly accession (GCA_... or GCF_...)",
+           "Reference genome to download: used for scaffolding and QC, or as the QC-only target."),
+    Column("REF_SEQ", SAMPLE_SHEET, "no", "path to a FASTA file",
+           "Local reference genome, with the same role as REF_SEQ_GCA."),
+    Column("NT_ASSEMBLY_GCA", SAMPLE_SHEET, "no", "assembly accession (GCA_... or GCF_...)",
+           "An existing assembly to carry into annotation, or to run QC on when no reads are given."),
+    Column("NT_ASSEMBLY_PATH", SAMPLE_SHEET, "no", "path to a FASTA file",
+           "Local existing assembly, with the same role as NT_ASSEMBLY_GCA."),
+    Column("TX_EVI_GCA", SAMPLE_SHEET, "no", "accession, or a comma-separated list",
+           "Transcript evidence for the annotation pipeline. EGAP carries it through unread."),
+    Column("TX_EVI_PATH", SAMPLE_SHEET, "no", "path, or a comma-separated list",
+           "Local transcript evidence for the annotation pipeline. EGAP carries it through unread."),
+    Column("PT_EVI_GCA", SAMPLE_SHEET, "no", "accession, or a comma-separated list",
+           "Protein evidence for the annotation pipeline. EGAP carries it through unread."),
+    Column("PT_EVI_PATH", SAMPLE_SHEET, "no", "path, or a comma-separated list",
+           "Local protein evidence for the annotation pipeline. EGAP carries it through unread."),
+    Column("KRAKEN2_DB", SAMPLE_SHEET, "no", "folder path",
+           "Kraken2 database for read decontamination. The KRAKEN2_DB environment variable "
+           "wins when set; with neither, decontamination is skipped with a warning."),
+    # ---- Sample Metadata: what the NCBI submission sheets need ----
+    Column("SAMPLE_ID", METADATA_SHEET, _KEYED, "copy of a SAMPLE_ID from the first sheet",
+           "Links this row to its sample. A row with no matching sample stops the run."),
+    Column("BIOSAMPLE_ACCESSION", METADATA_SHEET, "no", "BioSample accession (SAMN...)",
+           "BioSample the reads and the assembly belong to. Left blank in the sheets when empty."),
+    Column("SAMPLE_TISSUE", METADATA_SHEET, "yes, for the SRA sheet", "free text (mycelium, fruiting body)",
+           "Tissue or material sequenced. Goes into the SRA library title."),
+    Column("SEQUENCING_METHODOLOGY", METADATA_SHEET, "yes, for the SRA sheet",
+           "an SRA library strategy (WGS, WGA, RNA-Seq, ...)",
+           "SRA library_strategy for this sample's libraries."),
+    Column("LIBRARY_SOURCE", METADATA_SHEET, "no", "one of the listed values",
+           "SRA library_source.",
+           choices=("GENOMIC", "GENOMIC SINGLE CELL", "TRANSCRIPTOMIC", "TRANSCRIPTOMIC SINGLE CELL",
+                    "METAGENOMIC", "METATRANSCRIPTOMIC", "SYNTHETIC", "VIRAL RNA", "OTHER")),
+    Column("LIBRARY_SELECTION", METADATA_SHEET, "no", "an SRA library selection (RANDOM, PCR, ...)",
+           "SRA library_selection: how the fragments were selected or enriched."),
+    Column("INSTRUMENT_ILLUMINA", METADATA_SHEET, "no", "SRA instrument model (Illumina NovaSeq 6000)",
+           "Sequencer that produced the Illumina reads."),
+    Column("INSTRUMENT_ONT", METADATA_SHEET, "no", "SRA instrument model (MinION, PromethION)",
+           "Sequencer that produced the ONT reads."),
+    Column("INSTRUMENT_PACBIO", METADATA_SHEET, "no", "SRA instrument model (Sequel II, Revio)",
+           "Sequencer that produced the PacBio reads."),
+    Column("INATURALIST_ID", METADATA_SHEET, "no", "observation number from an iNaturalist URL",
+           "iNaturalist observation of the specimen. Adds collector, date, place and photo to the report."),
 )
+
+# Columns every per-stage accessor expects to read off a row, derived from the
+# specification: a collapsed cell contributes the names it expands to.
+# ``read_sample_table`` adds any that are missing as NA, so stages can read
+# ``current_series["BUSCO_1"]`` or ``["SAMPLE_TISSUE"]`` without ``KeyError``
+# on a sparse or older table.
+_LEGACY_COLUMNS = tuple(dict.fromkeys(
+    name for column in SAMPLE_COLUMNS for name in (column.expands_to or (column.name,))))
 
 
 def _split_collapsed_cell(value):
@@ -294,9 +392,9 @@ def read_sample_table(input_path):
         Normalized table with the legacy per-stage column names present.
     """
     df = pd.read_csv(input_path, sep="\t")
-    df = _expand_collapsed_pair(df, "ILLUMINA_RAW_READS",
-                                "ILLUMINA_RAW_F_READS", "ILLUMINA_RAW_R_READS")
-    df = _expand_collapsed_pair(df, "BUSCO", "BUSCO_1", "BUSCO_2")
+    for column in SAMPLE_COLUMNS:
+        if column.expands_to:
+            df = _expand_collapsed_pair(df, column.name, *column.expands_to)
     for col in _LEGACY_COLUMNS:
         if col not in df.columns:
             df[col] = pd.NA

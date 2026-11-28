@@ -105,7 +105,14 @@ PROCESSES = ["preprocess_refseq", "preprocess_illumina", "preprocess_ont",
              "polish_assembly", "curate_assembly", "decontaminate_assembly"]
 ASSEMBLERS = {"masurca": "MaSuRCA", "flye": "Flye", "spades": "SPAdes", "hifiasm": "hifiasm"}
 # Run for every sample after its PROCESSES, even when one of those failed.
-FINAL_STEPS = ["qc_assessment", "html_reporter"]
+# process_metadata writes the NCBI submission sheets; it skips, without
+# failing, for samples that have no final assembly or no metadata.
+FINAL_STEPS = ["qc_assessment", "html_reporter", "process_metadata"]
+
+# The settings below are display text for the start-up print. Several no longer
+# match the commands in bin/ (the stages hard-code their parameters). A settings
+# registry that the stages read replaces this block; its scope is written up in
+# bin/sample_workbook.py. Do not add to these dicts.
 
 TRIMMOMATIC_SETTINGS = {
     "mode": "-PE",
@@ -252,8 +259,9 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output
 
     EGAP.py prints it once at start-up, which puts it in the session log, and
     the TUI renders the same dict. Anything a user can change belongs in here
-    (command-line flags today; per-sample sub-process overrides when the
-    sample table grows them) so the printed record always matches what ran.
+    so the printed record always matches what ran. Run-level only today: it
+    gains a per-sample level, listing each sample's overrides, when the
+    workbook's "Sample Settings" sheet is read (scope in bin/sample_workbook.py).
     """
     skipped = [a for a in ASSEMBLERS if getattr(args, f"no_{a}", False)]
     return {
@@ -267,6 +275,7 @@ def get_pipeline_settings(current_moment, ram_gb, cpu_threads, input_tsv, output
             "assemblers skipped": ", ".join(skipped) or "none",
             "completeness tool": ("BUSCO only" if os.environ.get("EGAP_BUSCO_ONLY", "0").strip() == "1"
                                   else "Compleasm, BUSCO as fallback"),
+            "input workbook": str(getattr(args, "input_workbook", None) or "none (plain TSV)"),
             "input tsv": str(input_tsv),
             "output to": str(output_dir),
         },
@@ -444,14 +453,19 @@ def sample_is_qc_only(row):
 def build_parser():
     """Return the EGAP command-line parser."""
     parser = argparse.ArgumentParser(prog="EGAP", description=f"Run Entheome Genome Assembly Pipeline (EGAP)\nVersion:{VERSION}")
-    parser.add_argument("--input_tsv", "-tsv",
+    parser.add_argument("--input_tsv", "--input_workbook", "-tsv",
                         type=str,
-                        required=True,
-                        help="Path to a TSV containing multiple sample data")
+                        help="Sample table: a TSV, or a workbook (.xlsx) with the samples on "
+                             "its first sheet and optional 'Sample Metadata' on its second. "
+                             "Required, except with --new_workbook.")
     parser.add_argument("--output_dir", "-o",
                         type=str,
-                        required=True,
-                        help="Directory for pipeline output files")
+                        help="Directory for pipeline output files. Required, except with "
+                             "--new_workbook.")
+    parser.add_argument("--new_workbook", metavar="PATH", type=str,
+                        help="Write a sample workbook to PATH and exit: both sheets, with a "
+                             "tooltip on every column header saying what is required and in "
+                             "what format. With --input_tsv, its samples are copied in.")
     parser.add_argument("--cpu_threads", "-t",
                         type=int,
                         default=1,
@@ -491,6 +505,46 @@ def build_parser():
         parser.add_argument(f"--no-{name}", f"-no_{name[0]}", dest=f"no_{name}", action="store_true",
                             default=False, help=f"Skip the {label} assembler.")
     return parser
+
+
+def parse_args(argv=None):
+    """Parse the command line; both runners use this, so they enforce the same rules."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not args.new_workbook and not (args.input_tsv and args.output_dir):
+        parser.error("--input_tsv and --output_dir are required")
+    return args
+
+
+def new_workbook(args):
+    """Write the workbook asked for by ``--new_workbook`` and return its path."""
+    from sample_workbook import is_workbook, write_workbook
+    rows = None
+    if args.input_tsv:
+        if is_workbook(args.input_tsv):
+            sys.exit("ERROR:\t--new_workbook copies samples from a TSV; --input_tsv is already a workbook.")
+        rows = pd.read_csv(args.input_tsv, sep="\t", dtype=str)
+    return write_workbook(args.new_workbook, rows)
+
+
+def resolve_sample_table(args):
+    """Turn a workbook input into the TSV the stages read; a TSV input is left alone.
+
+    Sets ``args.input_workbook`` and repoints ``args.input_tsv`` at
+    ``<output_dir>/<workbook stem>_samples.tsv``. Safe to call twice (the TUI
+    may be handed arguments EGAP.py already resolved). A workbook that breaks
+    the SAMPLE_ID rule stops the run here, before anything else starts.
+    """
+    from sample_workbook import is_workbook, workbook_to_tsv
+    if not is_workbook(args.input_tsv):
+        args.input_workbook = getattr(args, "input_workbook", None)
+        return args
+    try:
+        args.input_workbook, args.input_tsv = args.input_tsv, workbook_to_tsv(args.input_tsv, args.output_dir)
+    except ValueError as problem:
+        sys.exit(f"ERROR:\tSample workbook {args.input_tsv}: {problem}")
+    print(f"NOTE:\tSample workbook {args.input_workbook} read; stages use {args.input_tsv}")
+    return args
 
 
 def apply_run_flags(args):
@@ -552,7 +606,11 @@ def stage_cmd(bin_dir, proc, sample_id, input_tsv, output_dir, cpu_threads, ram_
 
 if __name__ == "__main__":
     # Parse command-line arguments for pipeline configuration
-    args = build_parser().parse_args()
+    args = parse_args()
+    if args.new_workbook:
+        print(f"PASS:\tSample workbook written: {new_workbook(args)}")
+        sys.exit(0)
+    resolve_sample_table(args)
     input_tsv   = args.input_tsv
     output_dir  = args.output_dir
     cpu_threads = args.cpu_threads

@@ -52,6 +52,7 @@ STAGE_LABELS = {
     "decontaminate_assembly": "Assembly decontamination (Tiara)",
     "qc_assessment": "Quality assessment (QUAST / BUSCO)",
     "html_reporter": "Report generation",
+    "process_metadata": "NCBI submission metadata",
 }
 
 
